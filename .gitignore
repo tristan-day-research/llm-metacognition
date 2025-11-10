@@ -15,6 +15,10 @@ dist/
 build/
 .eggs/
 
+# Data
+.data/
+data/
+
 # Jupyter
 .ipynb_checkpoints/
 

@@ -464,18 +464,36 @@ def main(model_dataset_dict, temp):
             temp = temp
             seed = 42
             
-            N_QUESTIONS = 5 if IS_HUMAN else 447 if DATASET_NAME.startswith("GP") else 500 
-            SUBJECT_ID = f"{subject_name.replace('/', '-')}_{DATASET_NAME}_{N_QUESTIONS}"
+            # Set question count: use all available for large datasets, or sample for smaller ones
+            if IS_HUMAN:
+                N_QUESTIONS = 5
+            elif DATASET_NAME.startswith("GP"):
+                N_QUESTIONS = 447
+            elif DATASET_NAME == "PopMC":
+                N_QUESTIONS = 500  # Use all questions (14k+)
+            else:
+                N_QUESTIONS = 500  # Default sample size 
+            # Load questions first to get actual count
+            formatted_questions = load_and_format_dataset(DATASET_NAME, N_QUESTIONS)
+            if formatted_questions:
+                actual_count = len(formatted_questions)
+                SUBJECT_ID = f"{subject_name.replace('/', '-')}_{DATASET_NAME}_{actual_count}"
+            else:
+                print(f"Error: Failed to load dataset {DATASET_NAME}")
+                continue
+            
             try:
-                # Load questions for capabilities measurement
-                print(f"Loading {N_QUESTIONS} questions for capabilities measurement...")
-                formatted_questions = load_and_format_dataset(DATASET_NAME, N_QUESTIONS)
+                # Questions already loaded above
+                print(f"Using {actual_count} questions for capabilities measurement...")
 
                 random.seed(seed)
                 random.shuffle(formatted_questions)
                     
-                if not formatted_questions or len(formatted_questions) < N_QUESTIONS:
-                    print(f"Error: Not enough questions available ({len(formatted_questions) if formatted_questions else 0}). Needed: {N_QUESTIONS}")
+                # Use actual count if N_QUESTIONS was None, otherwise use the requested count
+                questions_to_use = actual_count if N_QUESTIONS is None else min(N_QUESTIONS, actual_count)
+                
+                if not formatted_questions or len(formatted_questions) < questions_to_use:
+                    print(f"Error: Not enough questions available ({len(formatted_questions) if formatted_questions else 0}). Needed: {questions_to_use}")
                     return
                 
                 # Create game instance for capabilities measurement
@@ -483,7 +501,7 @@ def main(model_dataset_dict, temp):
                     subject_id=SUBJECT_ID,
                     subject_name=subject_name,
                     questions=formatted_questions,
-                    n_questions=N_QUESTIONS,
+                    n_questions=questions_to_use,
                     is_human_player=IS_HUMAN,
                     resume_from=resume_from,
                     temperature=temp,
@@ -517,6 +535,6 @@ def main(model_dataset_dict, temp):
 
 if __name__ == "__main__":
     model_dataset_dict = {
-        "llama-3.1-8b-instruct": ["GPQA"],
+        "llama-3.3-70b-instruct": ["SimpleMC"], 
         }
     main(model_dataset_dict, temp=1.0)

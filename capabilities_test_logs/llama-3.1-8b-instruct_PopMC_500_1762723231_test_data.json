@@ -1,0 +1,2427 @@
+{
+  "subject_id": "llama-3.1-8b-instruct_PopMC_500",
+  "timestamp": 1762723254.4493172,
+  "accuracy": null,
+  "results": {
+    "popmc_test_1345361": {
+      "question": {
+        "id": "popmc_test_1345361",
+        "question": "Who was the producer of Temper?",
+        "options": {
+          "A": "S. Radha Krishna",
+          "B": "Allu Aravind",
+          "C": "Bandla Ganesh",
+          "D": "Dil Raju"
+        },
+        "correct_answer": "C",
+        "prop": "producer",
+        "s_pop": 14499,
+        "o_pop": 4697
+      },
+      "subject_answer": "A",
+      "is_correct": false,
+      "probs": {
+        "A": 0.9730266807254848,
+        "C": 0.02360979171077691,
+        "B": 0.0018492617936226342,
+        "D": 0.0015093234876058213
+      }
+    },
+    "popmc_test_2988351": {
+      "question": {
+        "id": "popmc_test_2988351",
+        "question": "Who is the author of Trucks?",
+        "options": {
+          "A": "Peter Straub",
+          "B": "Stephen King",
+          "C": "Clive Barker",
+          "D": "Dean Koontz"
+        },
+        "correct_answer": "B",
+        "prop": "author",
+        "s_pop": 3871,
+        "o_pop": 290220
+      },
+      "subject_answer": "B",
+      "is_correct": true,
+      "probs": {
+        "B": 0.9919309168182149,
+        "A": 0.005991119795588087,
+        "D": 0.0011982993446748025,
+        "C": 0.0008766945287206043
+      }
+    },
+    "popmc_test_5113194": {
+      "question": {
+        "id": "popmc_test_5113194",
+        "question": "Who was the producer of Master?",
+        "options": {
+          "A": "Karan Johar",
+          "B": "Dil Raju",
+          "C": "Allu Aravind",
+          "D": "S. S. Rajamouli"
+        },
+        "correct_answer": "C",
+        "prop": "producer",
+        "s_pop": 4776,
+        "o_pop": 45018
+      },
+      "subject_answer": "A",
+      "is_correct": false,
+      "probs": {
+        "A": 0.9016333230609951,
+        "C": 0.05499998674932711,
+        "B": 0.03663788976184074,
+        "D": 0.006672253813286008
+      }
+    },
+    "popmc_test_4270722": {
+      "question": {
+        "id": "popmc_test_4270722",
+        "question": "Who is the author of Gowie Corby Plays Chicken?",
+        "options": {
+          "A": "Beverly Cleary",
+          "B": "Gene Kemp",
+          "C": "Roald Dahl",
+          "D": "Judy Blume"
+        },
+        "correct_answer": "B",
+        "prop": "author",
+        "s_pop": 74,
+        "o_pop": 196
+      },
+      "subject_answer": "B",
+      "is_correct": true,
+      "probs": {
+        "B": 0.9467608633750133,
+        "A": 0.027280483590117227,
+        "C": 0.02192048438581318,
+        "D": 0.003992015819771661
+      }
+    },
+    "popmc_test_3714873": {
+      "question": {
+        "id": "popmc_test_3714873",
+        "question": "Who is the mother of Lucy DeVito?",
+        "options": {
+          "A": "Bonnie Hunt",
+          "B": "Patricia Heaton",
+          "C": "Rhea Perlman",
+          "D": "Sally Field"
+        },
+        "correct_answer": "C",
+        "prop": "mother",
+        "s_pop": 38381,
+        "o_pop": 82056
+      },
+      "subject_answer": "C",
+      "is_correct": true,
+      "probs": {
+        "C": 0.9985784264061924,
+        "A": 0.0013457586064759674,
+        "B": 5.8211776281999255e-05,
+        "D": 1.747834482125025e-05
+      }
+    },
+    "popmc_test_3941941": {
+      "question": {
+        "id": "popmc_test_3941941",
+        "question": "Who was the screenwriter for Doore Doore Oru Koodu Koottam?",
+        "options": {
+          "A": "Padmarajan",
+          "B": "John Paul",
+          "C": "M. T. Vasudevan Nair",
+          "D": "Sreenivasan"
+        },
+        "correct_answer": "D",
+        "prop": "screenwriter",
+        "s_pop": 912,
+        "o_pop": 22038
+      },
+      "subject_answer": "A",
+      "is_correct": false,
+      "probs": {
+        "A": 0.8852315259016341,
+        "B": 0.093302717778067,
+        "D": 0.01672825152975689,
+        "C": 0.004718420003159813
+      }
+    },
+    "popmc_test_3885333": {
+      "question": {
+        "id": "popmc_test_3885333",
+        "question": "What is Debra Weeks's occupation?",
+        "options": {
+          "A": "film director",
+          "B": "news anchor",
+          "C": "journalist",
+          "D": "radio host"
+        },
+        "correct_answer": "C",
+        "prop": "occupation",
+        "s_pop": 63,
+        "o_pop": 24952
+      },
+      "subject_answer": "C",
+      "is_correct": true,
+      "probs": {
+        "C": 0.8982975580968957,
+        "B": 0.046143275960146043,
+        "D": 0.028428047636759227,
+        "A": 0.027126232555485286
+      }
+    },
+    "popmc_test_5187250": {
+      "question": {
+        "id": "popmc_test_5187250",
+        "question": "Who is the father of Mira Burt-Wintonick?",
+        "options": {
+          "A": "David Kenneth Morrison",
+          "B": "Robert Anthony Chambers",
+          "C": "Michael Burt-Davidson",
+          "D": "Peter Wintonick"
+        },
+        "correct_answer": "D",
+        "prop": "father",
+        "s_pop": 118,
+        "o_pop": 265
+      },
+      "subject_answer": "D",
+      "is_correct": true,
+      "probs": {
+        "D": 0.42175506715206923,
+        "A": 0.3037787609223018,
+        "C": 0.17581365862334553,
+        "B": 0.09862252426448753
+      }
+    },
+    "popmc_test_2216758": {
+      "question": {
+        "id": "popmc_test_2216758",
+        "question": "Who was the director of On My Way?",
+        "options": {
+          "A": "Catherine Breillat",
+          "B": "Emmanuelle Bercot",
+          "C": "Céline Sciamma",
+          "D": "Mia Hansen-Løve"
+        },
+        "correct_answer": "B",
+        "prop": "director",
+        "s_pop": 423,
+        "o_pop": 1752
+      },
+      "subject_answer": "B",
+      "is_correct": true,
+      "probs": {
+        "B": 0.9965016866988735,
+        "A": 0.0024317860872896473,
+        "C": 0.0006859167616688722,
+        "D": 0.00037879921223951923
+      }
+    },
+    "popmc_test_4506049": {
+      "question": {
+        "id": "popmc_test_4506049",
+        "question": "Who was the director of Che?",
+        "options": {
+          "A": "Ebrahim Hatamikia",
+          "B": "Abbas Kiarostami",
+          "C": "Asghar Farhadi",
+          "D": "Majid Majidi"
+        },
+        "correct_answer": "A",
+        "prop": "director",
+        "s_pop": 384,
+        "o_pop": 582
+      },
+      "subject_answer": "A",
+      "is_correct": true,
+      "probs": {
+        "A": 0.5936549171031844,
+        "C": 0.18680180769377294,
+        "B": 0.17276343015222762,
+        "D": 0.04649864087633118
+      }
+    },
+    "popmc_test_6118725": {
+      "question": {
+        "id": "popmc_test_6118725",
+        "question": "Who is the author of Voyage d'Egypte et de Nubie?",
+        "options": {
+          "A": "Dominique Vivant Denon",
+          "B": "Claude Sicard",
+          "C": "Johann Ludwig Burckhardt",
+          "D": "Frederic Louis Norden"
+        },
+        "correct_answer": "D",
+        "prop": "author",
+        "s_pop": 284,
+        "o_pop": 465
+      },
+      "subject_answer": "A",
+      "is_correct": false,
+      "probs": {
+        "A": 0.9998021517262233,
+        "D": 8.219242523422294e-05,
+        "B": 7.483705480271377e-05,
+        "C": 4.005738885985453e-05
+      }
+    },
+    "popmc_test_5965570": {
+      "question": {
+        "id": "popmc_test_5965570",
+        "question": "Who was the screenwriter for The Woods?",
+        "options": {
+          "A": "David Richardson",
+          "B": "Matthew Lessner",
+          "C": "Jonathan Hayes",
+          "D": "Sarah Mitchell"
+        },
+        "correct_answer": "B",
+        "prop": "screenwriter",
+        "s_pop": 124,
+        "o_pop": 234
+      },
+      "subject_answer": "A",
+      "is_correct": false,
+      "probs": {
+        "A": 0.6738333993548409,
+        "B": 0.1757799394355171,
+        "C": 0.10661593533968008,
+        "D": 0.043755091702300755
+      }
+    },
+    "popmc_test_76438": {
+      "question": {
+        "id": "popmc_test_76438",
+        "question": "What genre is In Their Skin?",
+        "options": {
+          "A": "thriller",
+          "B": "comedy",
+          "C": "horror",
+          "D": "drama"
+        },
+        "correct_answer": "A",
+        "prop": "genre",
+        "s_pop": 1590,
+        "o_pop": 144161
+      },
+      "subject_answer": "C",
+      "is_correct": false,
+      "probs": {
+        "C": 0.9799475759588102,
+        "A": 0.02002284753089331,
+        "B": 2.6984281113341004e-05,
+        "D": 2.39499110168365e-06
+      }
+    },
+    "popmc_test_4849803": {
+      "question": {
+        "id": "popmc_test_4849803",
+        "question": "Who was the screenwriter for Toni?",
+        "options": {
+          "A": "Jean Renoir",
+          "B": "Marcel Carné",
+          "C": "Henri-Georges Clouzot",
+          "D": "Jacques Prévert"
+        },
+        "correct_answer": "A",
+        "prop": "screenwriter",
+        "s_pop": 429,
+        "o_pop": 12338
+      },
+      "subject_answer": "D",
+      "is_correct": false,
+      "probs": {
+        "D": 0.9797837877108019,
+        "A": 0.016596749561799184,
+        "B": 0.0018914275599034153,
+        "C": 0.0017221643910918147
+      }
+    },
+    "popmc_test_6294648": {
+      "question": {
+        "id": "popmc_test_6294648",
+        "question": "Who was the composer of Crash?",
+        "options": {
+          "A": "Howard Shore",
+          "B": "Hans Zimmer",
+          "C": "Danny Elfman",
+          "D": "James Newton Howard"
+        },
+        "correct_answer": "A",
+        "prop": "composer",
+        "s_pop": 42821,
+        "o_pop": 27549
+      },
+      "subject_answer": "D",
+      "is_correct": false,
+      "probs": {
+        "D": 0.8352671436045568,
+        "A": 0.10956320922936963,
+        "B": 0.04224038001590717,
+        "C": 0.012882588048658668
+      }
+    },
+    "popmc_test_1763729": {
+      "question": {
+        "id": "popmc_test_1763729",
+        "question": "What is the capital of Azerbaijan?",
+        "options": {
+          "A": "Tbilisi",
+          "B": "Baku",
+          "C": "Yerevan",
+          "D": "Astana"
+        },
+        "correct_answer": "B",
+        "prop": "capital",
+        "s_pop": 232019,
+        "o_pop": 52364
+      },
+      "subject_answer": "B",
+      "is_correct": true,
+      "probs": {
+        "B": 0.9999957084838798,
+        "A": 2.4824767299728357e-06,
+        "C": 1.6028074425984934e-06,
+        "D": 1.8553842848731202e-07
+      }
+    },
+    "popmc_test_996280": {
+      "question": {
+        "id": "popmc_test_996280",
+        "question": "What is Hugo Becker's occupation?",
+        "options": {
+          "A": "director",
+          "B": "writer",
+          "C": "musician",
+          "D": "actor"
+        },
+        "correct_answer": "D",
+        "prop": "occupation",
+        "s_pop": 3471,
+        "o_pop": 81374
+      },
+      "subject_answer": "C",
+      "is_correct": false,
+      "probs": {
+        "C": 0.7404200299167483,
+        "D": 0.1758651824628911,
+        "A": 0.04446568165004537,
+        "B": 0.039240826327477725
+      }
+    },
+    "popmc_test_6036433": {
+      "question": {
+        "id": "popmc_test_6036433",
+        "question": "What is the religion of Trocaire College?",
+        "options": {
+          "A": "Methodist Church",
+          "B": "Protestant Church",
+          "C": "Lutheran Church",
+          "D": "Catholic Church"
+        },
+        "correct_answer": "D",
+        "prop": "religion",
+        "s_pop": 320,
+        "o_pop": 195995
+      },
+      "subject_answer": "D",
+      "is_correct": true,
+      "probs": {
+        "D": 0.9975093801978074,
+        "A": 0.00239650498718684,
+        "C": 5.636039523131847e-05,
+        "B": 3.754411718006612e-05
+      }
+    },
+    "popmc_test_4562959": {
+      "question": {
+        "id": "popmc_test_4562959",
+        "question": "What genre is Inside?",
+        "options": {
+          "A": "horror",
+          "B": "thriller",
+          "C": "drama",
+          "D": "comedy"
+        },
+        "correct_answer": "B",
+        "prop": "genre",
+        "s_pop": 1289,
+        "o_pop": 144161
+      },
+      "subject_answer": "A",
+      "is_correct": false,
+      "probs": {
+        "A": 0.9984682455498871,
+        "B": 0.0012444855697241058,
+        "C": 0.00023383202210803552,
+        "D": 5.217497654079715e-05
+      }
+    },
+    "popmc_test_4645092": {
+      "question": {
+        "id": "popmc_test_4645092",
+        "question": "What sport does HSV Hamburg play?",
+        "options": {
+          "A": "handball",
+          "B": "football",
+          "C": "volleyball",
+          "D": "basketball"
+        },
+        "correct_answer": "A",
+        "prop": "sport",
+        "s_pop": 975,
+        "o_pop": 34706
+      },
+      "subject_answer": "B",
+      "is_correct": false,
+      "probs": {
+        "B": 0.9634036513623253,
+        "A": 0.036205917548944096,
+        "C": 0.0002721497902699909,
+        "D": 0.00011705016624644005
+      }
+    },
+    "popmc_test_5909714": {
+      "question": {
+        "id": "popmc_test_5909714",
+        "question": "Who was the producer of The Bait?",
+        "options": {
+          "A": "Mary Pickford",
+          "B": "Lillian Gish",
+          "C": "Gloria Swanson",
+          "D": "Hope Hampton"
+        },
+        "correct_answer": "D",
+        "prop": "producer",
+        "s_pop": 114,
+        "o_pop": 518
+      },
+      "subject_answer": "D",
+      "is_correct": true,
+      "probs": {
+        "D": 0.9623554494430145,
+        "A": 0.03142202105015621,
+        "B": 0.0042525071048128745,
+        "C": 0.0019469396237541527
+      }
+    },
+    "popmc_test_1114507": {
+      "question": {
+        "id": "popmc_test_1114507",
+        "question": "Who was the screenwriter for Tandra Paparayudu?",
+        "options": {
+          "A": "Dasari Narayana Rao",
+          "B": "Bapu Ramana",
+          "C": "Jandhyala Subramanya Sastry",
+          "D": "K. Viswanath"
+        },
+        "correct_answer": "A",
+        "prop": "screenwriter",
+        "s_pop": 1680,
+        "o_pop": 16319
+      },
+      "subject_answer": "A",
+      "is_correct": true,
+      "probs": {
+        "A": 0.9216303001996811,
+        "C": 0.03573548320645416,
+        "B": 0.03253752772839872,
+        "D": 0.010079655873417234
+      }
+    },
+    "popmc_test_2836334": {
+      "question": {
+        "id": "popmc_test_2836334",
+        "question": "Who is the author of The Book?",
+        "options": {
+          "A": "H. P. Lovecraft",
+          "B": "Arthur Conan Doyle",
+          "C": "Bram Stoker",
+          "D": "Edgar Allan Poe"
+        },
+        "correct_answer": "A",
+        "prop": "author",
+        "s_pop": 539,
+        "o_pop": 192238
+      },
+      "subject_answer": "A",
+      "is_correct": true,
+      "probs": {
+        "A": 0.5488749238414244,
+        "D": 0.24356175650817724,
+        "C": 0.1500540451979929,
+        "B": 0.054345973735702456
+      }
+    },
+    "popmc_test_4126946": {
+      "question": {
+        "id": "popmc_test_4126946",
+        "question": "Who was the screenwriter for Forever Young?",
+        "options": {
+          "A": "William Goldman",
+          "B": "Robert Towne",
+          "C": "Ray Connolly",
+          "D": "Paul Schrader"
+        },
+        "correct_answer": "C",
+        "prop": "screenwriter",
+        "s_pop": 313,
+        "o_pop": 643
+      },
+      "subject_answer": "C",
+      "is_correct": true,
+      "probs": {
+        "C": 0.46702137325354065,
+        "A": 0.3260334825706017,
+        "B": 0.16139827747230995,
+        "D": 0.045524474542137185
+      }
+    },
+    "popmc_test_3463617": {
+      "question": {
+        "id": "popmc_test_3463617",
+        "question": "Who was the screenwriter for Beautiful?",
+        "options": {
+          "A": "Anjali Menon",
+          "B": "Anoop Menon",
+          "C": "Ranjith Sankar",
+          "D": "Shyam Pushkaran"
+        },
+        "correct_answer": "B",
+        "prop": "screenwriter",
+        "s_pop": 2375,
+        "o_pop": 7200
+      },
+      "subject_answer": "A",
+      "is_correct": false,
+      "probs": {
+        "A": 0.9962026386595852,
+        "C": 0.001723876605763538,
+        "B": 0.0014069870798098893,
+        "D": 0.0006646136366409444
+      }
+    },
+    "popmc_test_197030": {
+      "question": {
+        "id": "popmc_test_197030",
+        "question": "What genre is Madman at War?",
+        "options": {
+          "A": "comedy film",
+          "B": "drama film",
+          "C": "horror film",
+          "D": "action film"
+        },
+        "correct_answer": "A",
+        "prop": "genre",
+        "s_pop": 172,
+        "o_pop": 36816
+      },
+      "subject_answer": "C",
+      "is_correct": false,
+      "probs": {
+        "C": 0.8827073444795995,
+        "B": 0.06006898775088794,
+        "A": 0.033695648269835315,
+        "D": 0.023523353592027434
+      }
+    },
+    "popmc_test_5864218": {
+      "question": {
+        "id": "popmc_test_5864218",
+        "question": "What is the capital of Jamaica?",
+        "options": {
+          "A": "Spanish Town",
+          "B": "Kingston",
+          "C": "Port Antonio",
+          "D": "Montego Bay"
+        },
+        "correct_answer": "B",
+        "prop": "capital",
+        "s_pop": 166081,
+        "o_pop": 33699
+      },
+      "subject_answer": "B",
+      "is_correct": true,
+      "probs": {
+        "B": 0.9999785427891018,
+        "A": 1.8342844943554558e-05,
+        "C": 2.684151269187928e-06,
+        "D": 3.3075233282647123e-07
+      }
+    },
+    "popmc_test_5962059": {
+      "question": {
+        "id": "popmc_test_5962059",
+        "question": "Who is the author of The Valley?",
+        "options": {
+          "A": "Susan Mitchell",
+          "B": "Barry Pilton",
+          "C": "David Harrison",
+          "D": "Martin Fletcher"
+        },
+        "correct_answer": "B",
+        "prop": "author",
+        "s_pop": 65,
+        "o_pop": 107
+      },
+      "subject_answer": "A",
+      "is_correct": false,
+      "probs": {
+        "A": 0.7146176569324245,
+        "B": 0.25881737157365825,
+        "C": 0.021579584029868995,
+        "D": 0.004967902326546448
+      }
+    },
+    "popmc_test_6214547": {
+      "question": {
+        "id": "popmc_test_6214547",
+        "question": "In what country is Wright?",
+        "options": {
+          "A": "United States of America",
+          "B": "United Kingdom",
+          "C": "Australia",
+          "D": "Canada"
+        },
+        "correct_answer": "A",
+        "prop": "country",
+        "s_pop": 130,
+        "o_pop": 1629691
+      },
+      "subject_answer": "A",
+      "is_correct": true,
+      "probs": {
+        "A": 0.9987113414718011,
+        "C": 0.0005788805719809375,
+        "D": 0.0004041237691352847,
+        "B": 0.0003050486250483758
+      }
+    },
+    "popmc_test_4177778": {
+      "question": {
+        "id": "popmc_test_4177778",
+        "question": "What is G. Karunakara Reddy's occupation?",
+        "options": {
+          "A": "lawyer",
+          "B": "journalist",
+          "C": "politician",
+          "D": "businessman"
+        },
+        "correct_answer": "C",
+        "prop": "occupation",
+        "s_pop": 671,
+        "o_pop": 25692
+      },
+      "subject_answer": "C",
+      "is_correct": true,
+      "probs": {
+        "C": 0.965816067222837,
+        "A": 0.01768953719991362,
+        "D": 0.014896083799420812,
+        "B": 0.0015947601458499523
+      }
+    },
+    "popmc_test_4236950": {
+      "question": {
+        "id": "popmc_test_4236950",
+        "question": "Who is the author of Getting Married?",
+        "options": {
+          "A": "H.G. Wells",
+          "B": "George Bernard Shaw",
+          "C": "Oscar Wilde",
+          "D": "Virginia Woolf"
+        },
+        "correct_answer": "B",
+        "prop": "author",
+        "s_pop": 510,
+        "o_pop": 89658
+      },
+      "subject_answer": "B",
+      "is_correct": true,
+      "probs": {
+        "B": 0.9312550890724348,
+        "A": 0.025207919527316488,
+        "D": 0.022952071918455753,
+        "C": 0.02057410429797706
+      }
+    },
+    "popmc_test_2460962": {
+      "question": {
+        "id": "popmc_test_2460962",
+        "question": "Who is the author of Reading Capital (work level)?",
+        "options": {
+          "A": "Michel Foucault",
+          "B": "Roland Barthes",
+          "C": "Louis Althusser",
+          "D": "Jacques Lacan"
+        },
+        "correct_answer": "C",
+        "prop": "author",
+        "s_pop": 1163,
+        "o_pop": 160
+      },
+      "subject_answer": "C",
+      "is_correct": true,
+      "probs": {
+        "C": 0.9999706753740273,
+        "A": 1.2029428156400418e-05,
+        "D": 1.0952918977879303e-05,
+        "B": 6.144030709110286e-06
+      }
+    },
+    "popmc_test_2413490": {
+      "question": {
+        "id": "popmc_test_2413490",
+        "question": "What genre is Jimmy Wayne?",
+        "options": {
+          "A": "folk music",
+          "B": "country music",
+          "C": "blues music",
+          "D": "rock music"
+        },
+        "correct_answer": "B",
+        "prop": "genre",
+        "s_pop": 2949,
+        "o_pop": 91093
+      },
+      "subject_answer": "B",
+      "is_correct": true,
+      "probs": {
+        "B": 0.9998852146345244,
+        "A": 0.00010720802619395996,
+        "C": 6.8535798187725425e-06,
+        "D": 8.18543381008891e-07
+      }
+    },
+    "popmc_test_6133467": {
+      "question": {
+        "id": "popmc_test_6133467",
+        "question": "Who was the director of Wait and See?",
+        "options": {
+          "A": "Walter Forde",
+          "B": "Michael Powell",
+          "C": "Alfred Hitchcock",
+          "D": "Carol Reed"
+        },
+        "correct_answer": "A",
+        "prop": "director",
+        "s_pop": 100,
+        "o_pop": 306
+      },
+      "subject_answer": "A",
+      "is_correct": true,
+      "probs": {
+        "A": 0.9749758076983411,
+        "B": 0.017580455719555348,
+        "D": 0.0037430950195548587,
+        "C": 0.0036850637101244477
+      }
+    },
+    "popmc_test_6529863": {
+      "question": {
+        "id": "popmc_test_6529863",
+        "question": "Who was the director of Laura?",
+        "options": {
+          "A": "Alfred Hitchcock",
+          "B": "John Huston",
+          "C": "Billy Wilder",
+          "D": "Otto Preminger"
+        },
+        "correct_answer": "D",
+        "prop": "director",
+        "s_pop": 16615,
+        "o_pop": 18580
+      },
+      "subject_answer": "D",
+      "is_correct": true,
+      "probs": {
+        "D": 0.9763579729235539,
+        "B": 0.010189211839051884,
+        "C": 0.008447153305882478,
+        "A": 0.004965825252743481
+      }
+    },
+    "popmc_test_2949085": {
+      "question": {
+        "id": "popmc_test_2949085",
+        "question": "What genre is Either Way?",
+        "options": {
+          "A": "action film",
+          "B": "comedy film",
+          "C": "horror film",
+          "D": "drama film"
+        },
+        "correct_answer": "B",
+        "prop": "genre",
+        "s_pop": 324,
+        "o_pop": 36816
+      },
+      "subject_answer": "B",
+      "is_correct": true,
+      "probs": {
+        "B": 0.8748378037350782,
+        "D": 0.08662066884108849,
+        "A": 0.02224602758821086,
+        "C": 0.016275545345905168
+      }
+    },
+    "popmc_test_4126024": {
+      "question": {
+        "id": "popmc_test_4126024",
+        "question": "What genre is Foreign Legion?",
+        "options": {
+          "A": "indie rock",
+          "B": "alternative rock",
+          "C": "punk rock",
+          "D": "heavy metal"
+        },
+        "correct_answer": "C",
+        "prop": "genre",
+        "s_pop": 380,
+        "o_pop": 83910
+      },
+      "subject_answer": "B",
+      "is_correct": false,
+      "probs": {
+        "B": 0.6941890929333245,
+        "A": 0.15981140822044626,
+        "C": 0.13669394127177772,
+        "D": 0.009302140552490562
+      }
+    },
+    "popmc_test_5304362": {
+      "question": {
+        "id": "popmc_test_5304362",
+        "question": "What is Norman Crowther Hunt, Baron Crowther-Hunt's occupation?",
+        "options": {
+          "A": "economist",
+          "B": "journalist",
+          "C": "politician",
+          "D": "diplomat"
+        },
+        "correct_answer": "C",
+        "prop": "occupation",
+        "s_pop": 123,
+        "o_pop": 25692
+      },
+      "subject_answer": "C",
+      "is_correct": true,
+      "probs": {
+        "C": 0.9995940188343171,
+        "A": 0.00031997065635721997,
+        "B": 8.34693328138383e-05,
+        "D": 2.443006108557838e-06
+      }
+    },
+    "popmc_test_5952436": {
+      "question": {
+        "id": "popmc_test_5952436",
+        "question": "Who is the author of The Romantic?",
+        "options": {
+          "A": "Margaret Atwood",
+          "B": "Alice Munro",
+          "C": "Carol Shields",
+          "D": "Barbara Gowdy"
+        },
+        "correct_answer": "D",
+        "prop": "author",
+        "s_pop": 72,
+        "o_pop": 507
+      },
+      "subject_answer": "C",
+      "is_correct": false,
+      "probs": {
+        "C": 0.6354863105059845,
+        "D": 0.23378234878104326,
+        "A": 0.08467034564374404,
+        "B": 0.04603446844390979
+      }
+    },
+    "popmc_test_4712637": {
+      "question": {
+        "id": "popmc_test_4712637",
+        "question": "Who is the author of King James Version?",
+        "options": {
+          "A": "Lancelot Andrewes",
+          "B": "Miles Smith",
+          "C": "John Reynolds",
+          "D": "Richard Bancroft"
+        },
+        "correct_answer": "A",
+        "prop": "author",
+        "s_pop": 71185,
+        "o_pop": 1911
+      },
+      "subject_answer": "B",
+      "is_correct": false,
+      "probs": {
+        "B": 0.5341857167195494,
+        "D": 0.26860543085749733,
+        "A": 0.1789297915659793,
+        "C": 0.01799544198927284
+      }
+    },
+    "popmc_test_4979826": {
+      "question": {
+        "id": "popmc_test_4979826",
+        "question": "Who is the father of Vimolnaka Nabisi?",
+        "options": {
+          "A": "Mongkut",
+          "B": "Vajiravudh",
+          "C": "Chulalongkorn",
+          "D": "Rama IV"
+        },
+        "correct_answer": "C",
+        "prop": "father",
+        "s_pop": 189,
+        "o_pop": 19964
+      },
+      "subject_answer": "C",
+      "is_correct": true,
+      "probs": {
+        "C": 0.7453445713541521,
+        "A": 0.1357373383910694,
+        "D": 0.09776793721415548,
+        "B": 0.02114379925223328
+      }
+    },
+    "popmc_test_1777015": {
+      "question": {
+        "id": "popmc_test_1777015",
+        "question": "What genre is Organisation?",
+        "options": {
+          "A": "Post-punk",
+          "B": "Progressive rock",
+          "C": "Ambient techno",
+          "D": "Krautrock"
+        },
+        "correct_answer": "D",
+        "prop": "genre",
+        "s_pop": 754,
+        "o_pop": 20752
+      },
+      "subject_answer": "A",
+      "is_correct": false,
+      "probs": {
+        "A": 0.6767717905996409,
+        "D": 0.29107592007328403,
+        "B": 0.024269225972358026,
+        "C": 0.007879065971318867
+      }
+    },
+    "popmc_test_2708650": {
+      "question": {
+        "id": "popmc_test_2708650",
+        "question": "What genre is What About Me?",
+        "options": {
+          "A": "psychedelic rock",
+          "B": "progressive rock",
+          "C": "alternative rock",
+          "D": "indie rock"
+        },
+        "correct_answer": "A",
+        "prop": "genre",
+        "s_pop": 1185,
+        "o_pop": 43484
+      },
+      "subject_answer": "B",
+      "is_correct": false,
+      "probs": {
+        "B": 0.9735146168449329,
+        "D": 0.008965758271848593,
+        "A": 0.008826757073686707,
+        "C": 0.008689910889356849
+      }
+    },
+    "popmc_test_4391507": {
+      "question": {
+        "id": "popmc_test_4391507",
+        "question": "Who is the father of Princess Senate Seeiso?",
+        "options": {
+          "A": "Letsie III of Lesotho",
+          "B": "Moshoeshoe II of Lesotho",
+          "C": "Mohato Seeiso of Lesotho",
+          "D": "Bereng Seeiso of Lesotho"
+        },
+        "correct_answer": "A",
+        "prop": "father",
+        "s_pop": 2084,
+        "o_pop": 4513
+      },
+      "subject_answer": "A",
+      "is_correct": true,
+      "probs": {
+        "A": 0.7857829643377409,
+        "C": 0.19867704117237261,
+        "B": 0.009148186993881606,
+        "D": 0.006386463784871271
+      }
+    },
+    "popmc_test_5960642": {
+      "question": {
+        "id": "popmc_test_5960642",
+        "question": "Who is the author of The Treatment?",
+        "options": {
+          "A": "Tana French",
+          "B": "Gillian Flynn",
+          "C": "Ruth Rendell",
+          "D": "Mo Hayder"
+        },
+        "correct_answer": "D",
+        "prop": "author",
+        "s_pop": 1004,
+        "o_pop": 5673
+      },
+      "subject_answer": "A",
+      "is_correct": false,
+      "probs": {
+        "A": 0.6679365076799549,
+        "D": 0.13359571804705606,
+        "C": 0.11975442768864407,
+        "B": 0.07853687109886802
+      }
+    },
+    "popmc_test_5516019": {
+      "question": {
+        "id": "popmc_test_5516019",
+        "question": "What genre is Regeneration?",
+        "options": {
+          "A": "crime film",
+          "B": "science fiction",
+          "C": "romantic drama",
+          "D": "historical thriller"
+        },
+        "correct_answer": "A",
+        "prop": "genre",
+        "s_pop": 583,
+        "o_pop": 28275
+      },
+      "subject_answer": "B",
+      "is_correct": false,
+      "probs": {
+        "B": 0.9706386877855722,
+        "A": 0.023186712722108864,
+        "D": 0.0036117932245216967,
+        "C": 0.0025611449051938418
+      }
+    },
+    "popmc_test_5407037": {
+      "question": {
+        "id": "popmc_test_5407037",
+        "question": "What sport does Paulo Grilo play?",
+        "options": {
+          "A": "tennis",
+          "B": "basketball",
+          "C": "association football",
+          "D": "rugby"
+        },
+        "correct_answer": "C",
+        "prop": "sport",
+        "s_pop": 287,
+        "o_pop": 197767
+      },
+      "subject_answer": "C",
+      "is_correct": true,
+      "probs": {
+        "C": 0.9973588788985763,
+        "A": 0.0018955058459745678,
+        "B": 0.0005872003181359879,
+        "D": 0.00015804282159891632
+      }
+    },
+    "popmc_test_5960647": {
+      "question": {
+        "id": "popmc_test_5960647",
+        "question": "Who is the author of The Tree?",
+        "options": {
+          "A": "Kazuo Ishiguro",
+          "B": "John Fowles",
+          "C": "Ian McEwan",
+          "D": "Margaret Atwood"
+        },
+        "correct_answer": "B",
+        "prop": "author",
+        "s_pop": 259,
+        "o_pop": 9366
+      },
+      "subject_answer": "B",
+      "is_correct": true,
+      "probs": {
+        "B": 0.5070514340246575,
+        "A": 0.23580081542677184,
+        "C": 0.16461549913369453,
+        "D": 0.09234091508820565
+      }
+    },
+    "popmc_test_3748749": {
+      "question": {
+        "id": "popmc_test_3748749",
+        "question": "Who is the author of Classic?",
+        "options": {
+          "A": "Penelope Whitmore",
+          "B": "Amanda McKenzie",
+          "C": "Cecily von Ziegesar",
+          "D": "Victoria Ashford"
+        },
+        "correct_answer": "C",
+        "prop": "author",
+        "s_pop": 129,
+        "o_pop": 5041
+      },
+      "subject_answer": "C",
+      "is_correct": true,
+      "probs": {
+        "C": 0.9643248638847104,
+        "A": 0.02490772896083742,
+        "B": 0.006297661624351668,
+        "D": 0.004465710792726517
+      }
+    },
+    "popmc_test_6036329": {
+      "question": {
+        "id": "popmc_test_6036329",
+        "question": "Who was the screenwriter for Trivandrum Lodge?",
+        "options": {
+          "A": "Anoop Menon",
+          "B": "Vineeth Sreenivasan",
+          "C": "Ranjith Sankar",
+          "D": "Syam Pushkaran"
+        },
+        "correct_answer": "A",
+        "prop": "screenwriter",
+        "s_pop": 1930,
+        "o_pop": 7200
+      },
+      "subject_answer": "A",
+      "is_correct": true,
+      "probs": {
+        "A": 0.6118894221626574,
+        "C": 0.21479339513345486,
+        "D": 0.15231132443585185,
+        "B": 0.020937702769242186
+      }
+    },
+    "popmc_test_997059": {
+      "question": {
+        "id": "popmc_test_997059",
+        "question": "Who was the screenwriter for Black Book?",
+        "options": {
+          "A": "Paul Verhoeven",
+          "B": "Ronald Harwood",
+          "C": "Christopher Hampton",
+          "D": "Gerard Soeteman"
+        },
+        "correct_answer": "A",
+        "prop": "screenwriter",
+        "s_pop": 21134,
+        "o_pop": 79803
+      },
+      "subject_answer": "D",
+      "is_correct": false,
+      "probs": {
+        "D": 0.4714108339596345,
+        "A": 0.4225699405064612,
+        "C": 0.06898264237392995,
+        "B": 0.03692374770008437
+      }
+    },
+    "popmc_test_293476": {
+      "question": {
+        "id": "popmc_test_293476",
+        "question": "In what city was Derek Lamb born?",
+        "options": {
+          "A": "Birmingham, England",
+          "B": "London, England",
+          "C": "Liverpool, England",
+          "D": "Manchester, England"
+        },
+        "correct_answer": "B",
+        "prop": "place of birth",
+        "s_pop": 270,
+        "o_pop": 523018
+      },
+      "subject_answer": "A",
+      "is_correct": false,
+      "probs": {
+        "A": 0.5344971703497815,
+        "B": 0.4098131960317732,
+        "C": 0.048945206436945714,
+        "D": 0.006728328012699738
+      }
+    },
+    "popmc_test_1492692": {
+      "question": {
+        "id": "popmc_test_1492692",
+        "question": "Who was the composer of Love You To?",
+        "options": {
+          "A": "John Lennon",
+          "B": "George Harrison",
+          "C": "Ringo Starr",
+          "D": "Paul McCartney"
+        },
+        "correct_answer": "B",
+        "prop": "composer",
+        "s_pop": 3181,
+        "o_pop": 321230
+      },
+      "subject_answer": "B",
+      "is_correct": true,
+      "probs": {
+        "B": 0.9996189139669129,
+        "A": 0.0003740930506784863,
+        "C": 3.904009446468952e-06,
+        "D": 3.1369597181331375e-06
+      }
+    },
+    "popmc_test_2310878": {
+      "question": {
+        "id": "popmc_test_2310878",
+        "question": "Who was the director of Eros Plus Massacre?",
+        "options": {
+          "A": "Seijun Suzuki",
+          "B": "Nagisa Oshima",
+          "C": "Yoshishige Yoshida",
+          "D": "Shohei Imamura"
+        },
+        "correct_answer": "C",
+        "prop": "director",
+        "s_pop": 927,
+        "o_pop": 824
+      },
+      "subject_answer": "C",
+      "is_correct": true,
+      "probs": {
+        "C": 0.5139732960110238,
+        "A": 0.4396246571038239,
+        "B": 0.03552711442662659,
+        "D": 0.010835157722147194
+      }
+    },
+    "popmc_test_6147346": {
+      "question": {
+        "id": "popmc_test_6147346",
+        "question": "Who was the producer of Ray?",
+        "options": {
+          "A": "Taylor Hackford",
+          "B": "Ridley Scott",
+          "C": "Martin Scorsese",
+          "D": "Steven Spielberg"
+        },
+        "correct_answer": "A",
+        "prop": "producer",
+        "s_pop": 21304,
+        "o_pop": 27046
+      },
+      "subject_answer": "A",
+      "is_correct": true,
+      "probs": {
+        "A": 0.9999295522725348,
+        "C": 3.9441358981084595e-05,
+        "B": 2.7534506118782983e-05,
+        "D": 2.8128268836223793e-06
+      }
+    },
+    "popmc_test_817986": {
+      "question": {
+        "id": "popmc_test_817986",
+        "question": "Who is the father of John Sigismund, Crown Prince of Poland?",
+        "options": {
+          "A": "Sigismund III Vasa",
+          "B": "John II Casimir Vasa",
+          "C": "Michael I Korybut Wiśniowiecki",
+          "D": "Władysław IV Vasa"
+        },
+        "correct_answer": "B",
+        "prop": "father",
+        "s_pop": 625,
+        "o_pop": 4170
+      },
+      "subject_answer": "A",
+      "is_correct": false,
+      "probs": {
+        "A": 0.6672062950302237,
+        "D": 0.17957614886008358,
+        "B": 0.12150730028210951,
+        "C": 0.03169707310671501
+      }
+    },
+    "popmc_test_1885066": {
+      "question": {
+        "id": "popmc_test_1885066",
+        "question": "Who was the composer of There Will Be Blood?",
+        "options": {
+          "A": "Jonny Greenwood",
+          "B": "Thomas Newman",
+          "C": "Trent Reznor",
+          "D": "Hans Zimmer"
+        },
+        "correct_answer": "A",
+        "prop": "composer",
+        "s_pop": 109027,
+        "o_pop": 35028
+      },
+      "subject_answer": "A",
+      "is_correct": true,
+      "probs": {
+        "A": 0.5922229341263293,
+        "C": 0.26693578981986654,
+        "B": 0.13009411394001047,
+        "D": 0.010678772617724996
+      }
+    },
+    "popmc_test_3708093": {
+      "question": {
+        "id": "popmc_test_3708093",
+        "question": "What sport does Chertsey Town F.C. play?",
+        "options": {
+          "A": "cricket",
+          "B": "rugby",
+          "C": "football",
+          "D": "tennis"
+        },
+        "correct_answer": "C",
+        "prop": "sport",
+        "s_pop": 3769,
+        "o_pop": 197767
+      },
+      "subject_answer": "C",
+      "is_correct": true,
+      "probs": {
+        "C": 0.9999750858798929,
+        "A": 2.0145597182975445e-05,
+        "B": 4.565877698243385e-06,
+        "D": 1.8845627957918356e-07
+      }
+    },
+    "popmc_test_6039115": {
+      "question": {
+        "id": "popmc_test_6039115",
+        "question": "Who was the director of Trust?",
+        "options": {
+          "A": "Phillip Noyce",
+          "B": "Ridley Scott",
+          "C": "David Fincher",
+          "D": "Michael Bay"
+        },
+        "correct_answer": "A",
+        "prop": "director",
+        "s_pop": 210,
+        "o_pop": 7382
+      },
+      "subject_answer": "A",
+      "is_correct": true,
+      "probs": {
+        "A": 0.7808180602455955,
+        "C": 0.19134768634252283,
+        "B": 0.02285322215085675,
+        "D": 0.00494235590105551
+      }
+    },
+    "popmc_test_1346774": {
+      "question": {
+        "id": "popmc_test_1346774",
+        "question": "What genre is Beautiful Garbage?",
+        "options": {
+          "A": "indie pop",
+          "B": "electronic rock",
+          "C": "grunge",
+          "D": "alternative rock"
+        },
+        "correct_answer": "D",
+        "prop": "genre",
+        "s_pop": 4773,
+        "o_pop": 138822
+      },
+      "subject_answer": "D",
+      "is_correct": true,
+      "probs": {
+        "D": 0.7264830818743325,
+        "B": 0.23956870763294594,
+        "A": 0.033451286799560644,
+        "C": 0.0004923035679061808
+      }
+    },
+    "popmc_test_3285260": {
+      "question": {
+        "id": "popmc_test_3285260",
+        "question": "In what city was Alfred Frank Hardiman born?",
+        "options": {
+          "A": "Manchester, England",
+          "B": "Liverpool, England",
+          "C": "Birmingham, England",
+          "D": "London, England"
+        },
+        "correct_answer": "D",
+        "prop": "place of birth",
+        "s_pop": 136,
+        "o_pop": 523018
+      },
+      "subject_answer": "A",
+      "is_correct": false,
+      "probs": {
+        "A": 0.8805202337755135,
+        "B": 0.0745718397160455,
+        "D": 0.026589408299067852,
+        "C": 0.018274610896337754
+      }
+    },
+    "popmc_test_3955183": {
+      "question": {
+        "id": "popmc_test_3955183",
+        "question": "What genre is Drill?",
+        "options": {
+          "A": "ambient techno",
+          "B": "gothic folk",
+          "C": "industrial rock",
+          "D": "progressive metal"
+        },
+        "correct_answer": "C",
+        "prop": "genre",
+        "s_pop": 47,
+        "o_pop": 11267
+      },
+      "subject_answer": "A",
+      "is_correct": false,
+      "probs": {
+        "A": 0.6382941558744902,
+        "C": 0.2538958811522557,
+        "D": 0.06221986154738974,
+        "B": 0.04552102313896651
+      }
+    },
+    "popmc_test_564506": {
+      "question": {
+        "id": "popmc_test_564506",
+        "question": "In what city was Robert Crannell Minor born?",
+        "options": {
+          "A": "New York City",
+          "B": "Boston",
+          "C": "Philadelphia",
+          "D": "Chicago"
+        },
+        "correct_answer": "A",
+        "prop": "place of birth",
+        "s_pop": 95,
+        "o_pop": 718380
+      },
+      "subject_answer": "B",
+      "is_correct": false,
+      "probs": {
+        "B": 0.9817215023517432,
+        "A": 0.014906656823261257,
+        "C": 0.0028008778330291598,
+        "D": 0.000569032846301481
+      }
+    },
+    "popmc_test_1706966": {
+      "question": {
+        "id": "popmc_test_1706966",
+        "question": "Who was the screenwriter for Thor?",
+        "options": {
+          "A": "Ashley Miller",
+          "B": "David S. Goyer",
+          "C": "Stephen McFeely",
+          "D": "Christopher Markus"
+        },
+        "correct_answer": "A",
+        "prop": "screenwriter",
+        "s_pop": 112482,
+        "o_pop": 2727
+      },
+      "subject_answer": "A",
+      "is_correct": true,
+      "probs": {
+        "A": 0.9971262783655367,
+        "C": 0.0022504440824796298,
+        "D": 0.00038500558693982975,
+        "B": 0.00023351758128977817
+      }
+    },
+    "popmc_test_6374945": {
+      "question": {
+        "id": "popmc_test_6374945",
+        "question": "What is Boulsa the capital of?",
+        "options": {
+          "A": "Sanmatenga Province",
+          "B": "Boulgou Province",
+          "C": "Yatenga Province",
+          "D": "Namentenga Province"
+        },
+        "correct_answer": "D",
+        "prop": "capital of",
+        "s_pop": 113,
+        "o_pop": 150
+      },
+      "subject_answer": "A",
+      "is_correct": false,
+      "probs": {
+        "A": 0.8331024787662072,
+        "C": 0.16150428715008017,
+        "B": 0.0027357529185403967,
+        "D": 0.0026515826499650067
+      }
+    },
+    "popmc_test_992567": {
+      "question": {
+        "id": "popmc_test_992567",
+        "question": "Who was the screenwriter for The Search?",
+        "options": {
+          "A": "Michel Hazanavicius",
+          "B": "Luc Besson",
+          "C": "Jean-Pierre Jeunet",
+          "D": "François Truffaut"
+        },
+        "correct_answer": "A",
+        "prop": "screenwriter",
+        "s_pop": 1310,
+        "o_pop": 5479
+      },
+      "subject_answer": "D",
+      "is_correct": false,
+      "probs": {
+        "D": 0.7793584189145094,
+        "A": 0.1970526617527438,
+        "B": 0.011833932159447478,
+        "C": 0.01165046404673976
+      }
+    },
+    "popmc_test_787981": {
+      "question": {
+        "id": "popmc_test_787981",
+        "question": "In what city was Kazuhiro Suzuki born?",
+        "options": {
+          "A": "Kyoto",
+          "B": "Osaka",
+          "C": "Tokyo",
+          "D": "Yokohama"
+        },
+        "correct_answer": "C",
+        "prop": "place of birth",
+        "s_pop": 78,
+        "o_pop": 205487
+      },
+      "subject_answer": "C",
+      "is_correct": true,
+      "probs": {
+        "C": 0.9610114023148184,
+        "A": 0.026013388420408852,
+        "B": 0.010186986845593975,
+        "D": 0.002784967228915205
+      }
+    },
+    "popmc_test_2607576": {
+      "question": {
+        "id": "popmc_test_2607576",
+        "question": "What genre is Risen?",
+        "options": {
+          "A": "action role-playing game",
+          "B": "turn-based strategy game",
+          "C": "real-time strategy game",
+          "D": "first-person shooter game"
+        },
+        "correct_answer": "A",
+        "prop": "genre",
+        "s_pop": 955,
+        "o_pop": 40299
+      },
+      "subject_answer": "A",
+      "is_correct": true,
+      "probs": {
+        "A": 0.999942425229556,
+        "B": 4.26468467277305e-05,
+        "C": 1.3845404015211069e-05,
+        "D": 7.570721932710639e-07
+      }
+    },
+    "popmc_test_4552394": {
+      "question": {
+        "id": "popmc_test_4552394",
+        "question": "What is the capital of Ashfield?",
+        "options": {
+          "A": "Kirkby-in-Ashfield",
+          "B": "Sutton-in-Ashfield",
+          "C": "Mansfield-in-Ashfield",
+          "D": "Hucknall-in-Ashfield"
+        },
+        "correct_answer": "A",
+        "prop": "capital",
+        "s_pop": 917,
+        "o_pop": 1112
+      },
+      "subject_answer": "B",
+      "is_correct": false,
+      "probs": {
+        "B": 0.9687557356361947,
+        "A": 0.025022175902373878,
+        "C": 0.005083564588639783,
+        "D": 0.0011342965807880816
+      }
+    },
+    "popmc_test_1176214": {
+      "question": {
+        "id": "popmc_test_1176214",
+        "question": "What is the capital of Othón P. Blanco Municipality?",
+        "options": {
+          "A": "Felipe Carrillo Puerto",
+          "B": "Chetumal",
+          "C": "José María Morelos",
+          "D": "Bacalar"
+        },
+        "correct_answer": "B",
+        "prop": "capital",
+        "s_pop": 503,
+        "o_pop": 2887
+      },
+      "subject_answer": "A",
+      "is_correct": false,
+      "probs": {
+        "A": 0.9988866341214071,
+        "C": 0.00076702674191769,
+        "B": 0.00018505381346282053,
+        "D": 0.0001607775393553541
+      }
+    },
+    "popmc_test_178789": {
+      "question": {
+        "id": "popmc_test_178789",
+        "question": "In what city was György Kárpáti born?",
+        "options": {
+          "A": "Budapest",
+          "B": "Prague",
+          "C": "Vienna",
+          "D": "Warsaw"
+        },
+        "correct_answer": "A",
+        "prop": "place of birth",
+        "s_pop": 72,
+        "o_pop": 134197
+      },
+      "subject_answer": "A",
+      "is_correct": true,
+      "probs": {
+        "A": 0.9995432794880681,
+        "C": 0.0002304545695923103,
+        "B": 0.00020337544385167993,
+        "D": 2.2464330675283932e-05
+      }
+    },
+    "popmc_test_665961": {
+      "question": {
+        "id": "popmc_test_665961",
+        "question": "Who was the producer of Kes?",
+        "options": {
+          "A": "David Puttnam",
+          "B": "Michael Peacock",
+          "C": "Tony Garnett",
+          "D": "Ken Loach"
+        },
+        "correct_answer": "C",
+        "prop": "producer",
+        "s_pop": 12646,
+        "o_pop": 2348
+      },
+      "subject_answer": "C",
+      "is_correct": true,
+      "probs": {
+        "C": 0.9339776406471556,
+        "A": 0.05269140815717955,
+        "D": 0.010214697837969768,
+        "B": 0.0031153068281708912
+      }
+    },
+    "popmc_test_4859463": {
+      "question": {
+        "id": "popmc_test_4859463",
+        "question": "Who was the screenwriter for New World?",
+        "options": {
+          "A": "Lee Chang-dong",
+          "B": "Park Hoon-jung",
+          "C": "Bong Joon-ho",
+          "D": "Kim Eun-hee"
+        },
+        "correct_answer": "B",
+        "prop": "screenwriter",
+        "s_pop": 32485,
+        "o_pop": 7535
+      },
+      "subject_answer": "B",
+      "is_correct": true,
+      "probs": {
+        "B": 0.9268683385424085,
+        "A": 0.06018580761172206,
+        "D": 0.011308575504913043,
+        "C": 0.0016291547664628377
+      }
+    },
+    "popmc_test_3520653": {
+      "question": {
+        "id": "popmc_test_3520653",
+        "question": "What genre is Black President?",
+        "options": {
+          "A": "punk rock",
+          "B": "alternative rock",
+          "C": "indie rock",
+          "D": "heavy metal"
+        },
+        "correct_answer": "A",
+        "prop": "genre",
+        "s_pop": 475,
+        "o_pop": 83910
+      },
+      "subject_answer": "C",
+      "is_correct": false,
+      "probs": {
+        "C": 0.7522029653846201,
+        "B": 0.18433527530647692,
+        "A": 0.06271691875956861,
+        "D": 0.0007416567439488636
+      }
+    },
+    "popmc_test_5360069": {
+      "question": {
+        "id": "popmc_test_5360069",
+        "question": "Who was the director of Out?",
+        "options": {
+          "A": "Lionel Rogosin",
+          "B": "Morris Engel",
+          "C": "Robert Altman",
+          "D": "John Cassavetes"
+        },
+        "correct_answer": "A",
+        "prop": "director",
+        "s_pop": 68,
+        "o_pop": 496
+      },
+      "subject_answer": "A",
+      "is_correct": true,
+      "probs": {
+        "A": 0.9686074105258912,
+        "D": 0.021736315846530654,
+        "B": 0.0071678744819652805,
+        "C": 0.0024771511365996725
+      }
+    },
+    "popmc_test_509667": {
+      "question": {
+        "id": "popmc_test_509667",
+        "question": "What is Charlottenlund the capital of?",
+        "options": {
+          "A": "Gladsaxe Municipality",
+          "B": "Herlev Municipality",
+          "C": "Gentofte Municipality",
+          "D": "Lyngby-Taarbæk Municipality"
+        },
+        "correct_answer": "C",
+        "prop": "capital of",
+        "s_pop": 866,
+        "o_pop": 1881
+      },
+      "subject_answer": "C",
+      "is_correct": true,
+      "probs": {
+        "C": 0.9488153067566354,
+        "D": 0.04437668688796769,
+        "A": 0.0051369731415024196,
+        "B": 0.0016677310051423336
+      }
+    },
+    "popmc_test_29729": {
+      "question": {
+        "id": "popmc_test_29729",
+        "question": "Who was the screenwriter for Fighting?",
+        "options": {
+          "A": "Dito Montiel",
+          "B": "David Ayer",
+          "C": "Robert Mark Kamen",
+          "D": "Scott Silver"
+        },
+        "correct_answer": "A",
+        "prop": "screenwriter",
+        "s_pop": 4631,
+        "o_pop": 2165
+      },
+      "subject_answer": "A",
+      "is_correct": true,
+      "probs": {
+        "A": 0.9999918938339075,
+        "B": 4.425476377376665e-06,
+        "D": 2.5215604310816483e-06,
+        "C": 1.0676958641307217e-06
+      }
+    },
+    "popmc_test_2948822": {
+      "question": {
+        "id": "popmc_test_2948822",
+        "question": "Who was the composer of Ziegfeld Follies of 1936?",
+        "options": {
+          "A": "Irving Berlin",
+          "B": "Vernon Duke",
+          "C": "George Gershwin",
+          "D": "Cole Porter"
+        },
+        "correct_answer": "B",
+        "prop": "composer",
+        "s_pop": 361,
+        "o_pop": 2100
+      },
+      "subject_answer": "B",
+      "is_correct": true,
+      "probs": {
+        "B": 0.8246435320983445,
+        "A": 0.09108800989617782,
+        "C": 0.0698395997705616,
+        "D": 0.01441221944433989
+      }
+    },
+    "popmc_test_5853443": {
+      "question": {
+        "id": "popmc_test_5853443",
+        "question": "Who is the mother of Pierre Napoleon Bonaparte?",
+        "options": {
+          "A": "Hortense de Beauharnais Bonaparte",
+          "B": "Pauline Borghese Bonaparte",
+          "C": "Caroline Murat Bonaparte",
+          "D": "Alexandrine de Bleschamp"
+        },
+        "correct_answer": "D",
+        "prop": "mother",
+        "s_pop": 1886,
+        "o_pop": 627
+      },
+      "subject_answer": "A",
+      "is_correct": false,
+      "probs": {
+        "A": 0.48751822799883576,
+        "D": 0.43023332616250315,
+        "C": 0.06701742236600038,
+        "B": 0.015189093249281591
+      }
+    },
+    "popmc_test_6491072": {
+      "question": {
+        "id": "popmc_test_6491072",
+        "question": "What is Beijing the capital of?",
+        "options": {
+          "A": "South Korea",
+          "B": "China",
+          "C": "Japan",
+          "D": "India"
+        },
+        "correct_answer": "B",
+        "prop": "capital of",
+        "s_pop": 125585,
+        "o_pop": 13743
+      },
+      "subject_answer": "B",
+      "is_correct": true,
+      "probs": {
+        "B": 0.9999957084838798,
+        "A": 3.3931433826079293e-06,
+        "C": 5.714985935483917e-07,
+        "D": 3.1561149855181945e-07
+      }
+    },
+    "popmc_test_1480898": {
+      "question": {
+        "id": "popmc_test_1480898",
+        "question": "Who was the composer of I Bet?",
+        "options": {
+          "A": "Ciara",
+          "B": "Rihanna",
+          "C": "Alicia Keys",
+          "D": "Beyoncé"
+        },
+        "correct_answer": "A",
+        "prop": "composer",
+        "s_pop": 1248,
+        "o_pop": 101543
+      },
+      "subject_answer": "A",
+      "is_correct": true,
+      "probs": {
+        "A": 0.9239434242108165,
+        "C": 0.043893921823912815,
+        "D": 0.016147671431404022,
+        "B": 0.015897324990151285
+      }
+    },
+    "popmc_test_2102242": {
+      "question": {
+        "id": "popmc_test_2102242",
+        "question": "Who was the composer of Messa?",
+        "options": {
+          "A": "Giacomo Puccini",
+          "B": "Giuseppe Verdi",
+          "C": "Pietro Mascagni",
+          "D": "Ruggero Leoncavallo"
+        },
+        "correct_answer": "A",
+        "prop": "composer",
+        "s_pop": 603,
+        "o_pop": 24313
+      },
+      "subject_answer": "B",
+      "is_correct": false,
+      "probs": {
+        "B": 0.4425431451379497,
+        "C": 0.40294011900581145,
+        "A": 0.12679074145693478,
+        "D": 0.027420420853669105
+      }
+    },
+    "popmc_test_5762836": {
+      "question": {
+        "id": "popmc_test_5762836",
+        "question": "What genre is Simón Bolívar?",
+        "options": {
+          "A": "historical drama",
+          "B": "biographical film",
+          "C": "political thriller",
+          "D": "war film"
+        },
+        "correct_answer": "B",
+        "prop": "genre",
+        "s_pop": 124,
+        "o_pop": 19455
+      },
+      "subject_answer": "B",
+      "is_correct": true,
+      "probs": {
+        "B": 0.9722662271393872,
+        "A": 0.026732492001973716,
+        "D": 0.0006797735955599622,
+        "C": 0.0003211023099790241
+      }
+    },
+    "popmc_test_6469744": {
+      "question": {
+        "id": "popmc_test_6469744",
+        "question": "Who is the author of Buddha?",
+        "options": {
+          "A": "Naoki Urasawa",
+          "B": "Akira Toriyama",
+          "C": "Takehiko Inoue",
+          "D": "Osamu Tezuka"
+        },
+        "correct_answer": "D",
+        "prop": "author",
+        "s_pop": 3311,
+        "o_pop": 32230
+      },
+      "subject_answer": "D",
+      "is_correct": true,
+      "probs": {
+        "D": 0.898843598577364,
+        "C": 0.04914912184611118,
+        "A": 0.04138771011438283,
+        "B": 0.010464454391524623
+      }
+    },
+    "popmc_test_2493472": {
+      "question": {
+        "id": "popmc_test_2493472",
+        "question": "Who was the director of The Black Book?",
+        "options": {
+          "A": "William Beaudine Clark",
+          "B": "George Sherman Hayes",
+          "C": "Spencer Gordon Bennet",
+          "D": "Robert Gordon Douglas"
+        },
+        "correct_answer": "C",
+        "prop": "director",
+        "s_pop": 129,
+        "o_pop": 525
+      },
+      "subject_answer": "C",
+      "is_correct": true,
+      "probs": {
+        "C": 0.44594868752548417,
+        "A": 0.3874469340427946,
+        "B": 0.1042799276239351,
+        "D": 0.06226838885468502
+      }
+    },
+    "popmc_test_1126309": {
+      "question": {
+        "id": "popmc_test_1126309",
+        "question": "Who was the director of The Fog?",
+        "options": {
+          "A": "Rob Zombie",
+          "B": "Rupert Wainwright",
+          "C": "Sam Raimi",
+          "D": "David Fincher"
+        },
+        "correct_answer": "B",
+        "prop": "director",
+        "s_pop": 28646,
+        "o_pop": 3517
+      },
+      "subject_answer": "B",
+      "is_correct": true,
+      "probs": {
+        "B": 0.999653221266674,
+        "A": 0.0002959419796791145,
+        "C": 3.0232376525758232e-05,
+        "D": 2.045624920723336e-05
+      }
+    },
+    "popmc_test_2596451": {
+      "question": {
+        "id": "popmc_test_2596451",
+        "question": "Who was the director of Imagine?",
+        "options": {
+          "A": "John Lennon",
+          "B": "George Harrison",
+          "C": "Ringo Starr",
+          "D": "Paul McCartney"
+        },
+        "correct_answer": "A",
+        "prop": "director",
+        "s_pop": 1388,
+        "o_pop": 453988
+      },
+      "subject_answer": "A",
+      "is_correct": true,
+      "probs": {
+        "A": 0.6858298730744982,
+        "B": 0.23334184841833458,
+        "D": 0.06581709051856632,
+        "C": 0.014917045299403891
+      }
+    },
+    "popmc_test_1000828": {
+      "question": {
+        "id": "popmc_test_1000828",
+        "question": "Who is the author of It!?",
+        "options": {
+          "A": "Isaac Asimov",
+          "B": "Theodore Sturgeon",
+          "C": "Philip K. Dick",
+          "D": "Ray Bradbury"
+        },
+        "correct_answer": "B",
+        "prop": "author",
+        "s_pop": 712,
+        "o_pop": 5626
+      },
+      "subject_answer": "B",
+      "is_correct": true,
+      "probs": {
+        "B": 0.5835080657396542,
+        "D": 0.2980267580724926,
+        "C": 0.06150129765455291,
+        "A": 0.05687940214706982
+      }
+    },
+    "popmc_test_1605310": {
+      "question": {
+        "id": "popmc_test_1605310",
+        "question": "Who was the director of The Challenge?",
+        "options": {
+          "A": "John Frankenheimer",
+          "B": "William Friedkin",
+          "C": "Robert Altman",
+          "D": "Sidney Lumet"
+        },
+        "correct_answer": "A",
+        "prop": "director",
+        "s_pop": 1328,
+        "o_pop": 16216
+      },
+      "subject_answer": "A",
+      "is_correct": true,
+      "probs": {
+        "A": 0.49552260868957515,
+        "B": 0.27796300807690044,
+        "C": 0.11587222094285027,
+        "D": 0.1105660456243223
+      }
+    },
+    "popmc_test_2789480": {
+      "question": {
+        "id": "popmc_test_2789480",
+        "question": "Who was the screenwriter for Eddie Presley?",
+        "options": {
+          "A": "Tony Gilroy",
+          "B": "Michael Blake",
+          "C": "Scott Frank",
+          "D": "Duane Whitaker"
+        },
+        "correct_answer": "D",
+        "prop": "screenwriter",
+        "s_pop": 661,
+        "o_pop": 2449
+      },
+      "subject_answer": "D",
+      "is_correct": true,
+      "probs": {
+        "D": 0.8919062082021701,
+        "A": 0.04303918978829268,
+        "B": 0.03681336987651348,
+        "C": 0.028225789775315247
+      }
+    },
+    "popmc_test_4903153": {
+      "question": {
+        "id": "popmc_test_4903153",
+        "question": "Who was the screenwriter for Kids?",
+        "options": {
+          "A": "Harmony Korine",
+          "B": "Quentin Tarantino",
+          "C": "Paul Thomas Anderson",
+          "D": "Charlie Kaufman"
+        },
+        "correct_answer": "A",
+        "prop": "screenwriter",
+        "s_pop": 71906,
+        "o_pop": 12390
+      },
+      "subject_answer": "A",
+      "is_correct": true,
+      "probs": {
+        "A": 0.9999980926550052,
+        "B": 1.2098648396679127e-06,
+        "C": 4.1811810045725457e-07,
+        "D": 2.3454299757283753e-07
+      }
+    },
+    "popmc_test_1646788": {
+      "question": {
+        "id": "popmc_test_1646788",
+        "question": "Who was the composer of Crazy?",
+        "options": {
+          "A": "Brian Burton",
+          "B": "Rick Rubin",
+          "C": "Timbaland",
+          "D": "Pharrell Williams"
+        },
+        "correct_answer": "A",
+        "prop": "composer",
+        "s_pop": 12947,
+        "o_pop": 24723
+      },
+      "subject_answer": "A",
+      "is_correct": true,
+      "probs": {
+        "A": 0.9763460411064732,
+        "D": 0.010031118387209367,
+        "C": 0.008852430906171648,
+        "B": 0.004738364812703096
+      }
+    },
+    "popmc_test_5363800": {
+      "question": {
+        "id": "popmc_test_5363800",
+        "question": "What sport does Oyanaisis Gelis play?",
+        "options": {
+          "A": "Basketball",
+          "B": "Soccer",
+          "C": "Tennis",
+          "D": "Volleyball"
+        },
+        "correct_answer": "A",
+        "prop": "sport",
+        "s_pop": 39,
+        "o_pop": 149310
+      },
+      "subject_answer": "D",
+      "is_correct": false,
+      "probs": {
+        "D": 0.4783390920089024,
+        "A": 0.20897088543049816,
+        "B": 0.1873202910553163,
+        "C": 0.12284764611011427
+      }
+    },
+    "popmc_test_2289300": {
+      "question": {
+        "id": "popmc_test_2289300",
+        "question": "What genre is Dirk Gently?",
+        "options": {
+          "A": "romantic comedy",
+          "B": "detective fiction",
+          "C": "science fiction",
+          "D": "historical fiction"
+        },
+        "correct_answer": "B",
+        "prop": "genre",
+        "s_pop": 6504,
+        "o_pop": 18174
+      },
+      "subject_answer": "C",
+      "is_correct": false,
+      "probs": {
+        "C": 0.5845718699156506,
+        "B": 0.41452352703617845,
+        "A": 0.0008002185142404558,
+        "D": 0.00010333848197886977
+      }
+    },
+    "popmc_test_2533507": {
+      "question": {
+        "id": "popmc_test_2533507",
+        "question": "Who was the producer of Imagine?",
+        "options": {
+          "A": "Phil Spector",
+          "B": "George Martin",
+          "C": "Paul McCartney",
+          "D": "John Lennon"
+        },
+        "correct_answer": "D",
+        "prop": "producer",
+        "s_pop": 22569,
+        "o_pop": 453988
+      },
+      "subject_answer": "D",
+      "is_correct": true,
+      "probs": {
+        "D": 0.4229961704599155,
+        "A": 0.4164382226847192,
+        "C": 0.10047040287038365,
+        "B": 0.05999361772556464
+      }
+    },
+    "popmc_test_5883008": {
+      "question": {
+        "id": "popmc_test_5883008",
+        "question": "Who is the father of Tanya?",
+        "options": {
+          "A": "Busybody",
+          "B": "Troubler",
+          "C": "Schemer",
+          "D": "Meddler"
+        },
+        "correct_answer": "D",
+        "prop": "father",
+        "s_pop": 117,
+        "o_pop": 108
+      },
+      "subject_answer": "A",
+      "is_correct": false,
+      "probs": {
+        "A": 0.5148776144655404,
+        "B": 0.25093132351833736,
+        "C": 0.13431385868658616,
+        "D": 0.09981358439258349
+      }
+    },
+    "popmc_test_800535": {
+      "question": {
+        "id": "popmc_test_800535",
+        "question": "In what country is Sinaloa Cartel?",
+        "options": {
+          "A": "Colombia",
+          "B": "Honduras",
+          "C": "Mexico",
+          "D": "Guatemala"
+        },
+        "correct_answer": "C",
+        "prop": "country",
+        "s_pop": 126977,
+        "o_pop": 367408
+      },
+      "subject_answer": "C",
+      "is_correct": true,
+      "probs": {
+        "C": 0.9999926090786457,
+        "A": 5.093692087258008e-06,
+        "B": 1.760332881830875e-06,
+        "D": 5.285477797443445e-07
+      }
+    },
+    "popmc_test_6151931": {
+      "question": {
+        "id": "popmc_test_6151931",
+        "question": "Who was the producer of We Were Young?",
+        "options": {
+          "A": "Georgi Stoyanov",
+          "B": "Binka Zhelyazkova",
+          "C": "Rangel Vulchanov",
+          "D": "Nevena Kokanova"
+        },
+        "correct_answer": "B",
+        "prop": "producer",
+        "s_pop": 166,
+        "o_pop": 263
+      },
+      "subject_answer": "A",
+      "is_correct": false,
+      "probs": {
+        "A": 0.5556652998354396,
+        "B": 0.2882753599456453,
+        "C": 0.11114003858940914,
+        "D": 0.04490463483147456
+      }
+    },
+    "popmc_test_4110579": {
+      "question": {
+        "id": "popmc_test_4110579",
+        "question": "Who was the producer of First?",
+        "options": {
+          "A": "Robert Collins",
+          "B": "Steven Martinez",
+          "C": "David Gates",
+          "D": "Michael Thompson"
+        },
+        "correct_answer": "C",
+        "prop": "producer",
+        "s_pop": 449,
+        "o_pop": 19435
+      },
+      "subject_answer": "A",
+      "is_correct": false,
+      "probs": {
+        "A": 0.6621985909744509,
+        "C": 0.22180875728152175,
+        "B": 0.06159406736680202,
+        "D": 0.054356573668789696
+      }
+    },
+    "popmc_test_785341": {
+      "question": {
+        "id": "popmc_test_785341",
+        "question": "Who was the screenwriter for Head?",
+        "options": {
+          "A": "David S. Goyer",
+          "B": "Tim Minear",
+          "C": "Aaron Sorkin",
+          "D": "Charlie Kaufman"
+        },
+        "correct_answer": "B",
+        "prop": "screenwriter",
+        "s_pop": 971,
+        "o_pop": 2672
+      },
+      "subject_answer": "C",
+      "is_correct": false,
+      "probs": {
+        "C": 0.5381322986608611,
+        "A": 0.2971848804473188,
+        "B": 0.10596453241079383,
+        "D": 0.05851917265423968
+      }
+    }
+  },
+  "run_parameters": {
+    "n_questions": 500,
+    "temperature": 1.0,
+    "resample_for_probs": false,
+    "is_human_player": false,
+    "nested": null,
+    "present_question_args": {
+      "include_question_num": false,
+      "include_total_questions": false
+    },
+    "seed": 42,
+    "setup_prompt": "I'm going to ask you a series of multiple-choice questions. For each one, select the answer you think is best. Respond only with the letter of your choice; do NOT output any other text.",
+    "get_llm_answer_static_args": {
+      "keep_appending": false,
+      "message_history": [],
+      "MAX_TOKENS": 1,
+      "temp": 1.0,
+      "accept_any": true
+    }
+  }
+}

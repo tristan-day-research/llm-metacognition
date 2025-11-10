@@ -48,32 +48,39 @@ def wilson_ci(successes: int, n: int, z: float = 1.96) -> Tuple[float, float]:
 class BaseGameClass:
     """Base class for all games with common functionality."""
 
-    def __init__(self, subject_id, subject_name, is_human_player=False, log_dir="game_logs"):
-        """Initialize with common parameters."""
+    def __init__(self, subject_id, subject_name, is_human_player=False, log_dir="game_logs", provider=None):
+        """Initialize with common parameters.
+        
+        Args:
+            subject_id: Identifier for the subject
+            subject_name: Name of the model/subject
+            is_human_player: Whether this is a human player
+            log_dir: Directory for logging
+            provider: Optional explicit provider override. If None, defaults to OpenRouter
+                      unless model name matches specific patterns (gemini->Google, grok->xAI).
+        """
         self.subject_id = subject_id
         self.subject_name = subject_name
         self.is_human_player = is_human_player
+        self._explicit_provider = provider
 
         self._setup_logging(log_dir)
         self._setup_provider()
 
     def _setup_provider(self):
-        """Determine provider based on model name."""
+        """Determine provider based on model name. Defaults to OpenRouter unless explicitly overridden."""
         if not self.is_human_player:
-            if self.subject_name.startswith("claude"):
-                self.provider = "OpenRouter"#"Anthropic"
-            #elif "gpt" in self.subject_name or self.subject_name.startswith("o3") or self.subject_name.startswith("o1"):
-            #    self.provider = "OpenAI"
+            # If provider was explicitly set, use it
+            if self._explicit_provider:
+                self.provider = self._explicit_provider
+            # Otherwise, only use non-OpenRouter providers for specific model patterns
             elif self.subject_name.startswith("gemini"):
                 self.provider = "Google"
             elif self.subject_name.startswith("grok"):
                 self.provider = "xAI"
-            #elif re.match(r"meta-llama/Meta-Llama-3\.1-\d+B", self.subject_name):
-            #    self.provider = "NDIF"###"Hyperbolic"###
-            #elif "deepseek" in self.subject_name:
-            #    self.provider = "DeepSeek"
+            # Everything else (including claude, llama, gpt, etc.) defaults to OpenRouter
             else:
-                self.provider = "OpenRouter"#"Hyperbolic"
+                self.provider = "OpenRouter"
 
             if self.provider == "Anthropic": 
                 self.client = anthropic.Anthropic(api_key=anthropic_api_key)
@@ -233,8 +240,8 @@ class BaseGameClass:
                             'seed': 42,
                             'provider': {
                                 **({"only": ["Chutes"]} if 'v3.1' in self.subject_name else {"only": ["DeepInfra"]} if '-r1' in self.subject_name else {}),
-                                'require_parameters': False if 'claude' in self.subject_name or 'gpt-5' in self.subject_name else True,
-                                "allow_fallbacks": False,
+                                'require_parameters': False if 'claude' in self.subject_name or 'gpt-5' in self.subject_name or 'llama' in self.subject_name else True,
+                                "allow_fallbacks": True if 'llama' in self.subject_name else False,
 #                                'quantizations': ['fp8'],
                             },
                         }} if self.provider == "OpenRouter" else {}
@@ -243,9 +250,20 @@ class BaseGameClass:
                     
                     #print(f"completion={completion}")
                     #exit()
+                    if not completion.choices or len(completion.choices) == 0:
+                        raise ValueError("No choices in response")
+                    if not hasattr(completion.choices[0], 'message') or completion.choices[0].message is None:
+                        raise ValueError("No message in response")
+                    if completion.choices[0].message.content is None:
+                        raise ValueError("Response content is None - provider may not support this request")
                     resp = completion.choices[0].message.content.strip()
                     if 'o3' in self.subject_name or 'gpt-5' in self.subject_name or self.subject_name=='deepseek-v3.1-base' or self.subject_name=='deepseek-r1' or no_logprobs(model_name): return resp, None
+                    # If logprobs were requested but not returned, return None for token_probs instead of raising error
+                    if not hasattr(completion.choices[0], 'logprobs') or completion.choices[0].logprobs is None:
+                        return resp, None
                     if len(options) == 1: #short answer, just average
+                        if not hasattr(completion.choices[0].logprobs, 'content') or completion.choices[0].logprobs.content is None:
+                            return resp, None
                         token_logprobs = completion.choices[0].logprobs.content    
                         top_probs = []
                         for token_logprob in token_logprobs:
@@ -258,6 +276,8 @@ class BaseGameClass:
                         token_probs = {resp: math.exp(sum(top_probs))}# / len(top_probs))}
                     else:
                         #entry = completion.choices[0].logprobs.content[0]
+                        if not hasattr(completion.choices[0].logprobs, 'content') or completion.choices[0].logprobs.content is None or len(completion.choices[0].logprobs.content) == 0:
+                            return resp, None
                         first_token = completion.choices[0].logprobs.content[0].token
                         if first_token.strip() == '':
                             # Skip to the actual answer token
@@ -464,6 +484,10 @@ class BaseGameClass:
             except Exception as e:
                 attempt += 1
                 self._log(f"Error in llm processing: {e}")
+                # 404 errors mean the model endpoint doesn't exist - fail fast
+                if "404" in str(e) or "NotFoundError" in str(e) or "No endpoints found" in str(e):
+                    self._log(f"Fatal error: Model endpoint not found. Stopping retries.")
+                    raise  # Re-raise to stop retrying
                 if "429" in str(e) or "503" in str(e) or "not returned" in str(e) or "[Errno 8]" in str(e):
                     # Rate limit error, wait and retry
                     time.sleep(delay)

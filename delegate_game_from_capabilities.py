@@ -1075,12 +1075,21 @@ def real_main(SUBJECT_NAME, DATASET):
     print("\nExecution completed.")
 
 
+# def main():
+#     DATASETS = ["SimpleMC"]
+#     models = ["llama-3.3-70b-instruct"]
+#     for model in models:
+#         for d in DATASETS:
+#             real_main(model, d)
+
+
 def main():
-    DATASETS = ["SimpleMC"]
-    models = ["llama-3.3-70b-instruct"]
+    DATASETS = ["GPQA"]
+    models = ["llama-3.1-8b-instruct"]
     for model in models:
         for d in DATASETS:
             real_main(model, d)
+
 
 
 if __name__ == "__main__":

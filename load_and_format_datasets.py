@@ -41,8 +41,10 @@ def load_and_format_dataset(dataset_name, num_questions_needed=None, split=None,
         return load_and_format_simplemc(num_questions_needed, skip_questions=skip_questions)
     elif dataset_name=="PopMC":
         return load_and_format_popmc(num_questions_needed, skip_questions=skip_questions)
+    elif dataset_name=="TriviaMC":
+        return load_and_format_triviamc(num_questions_needed, skip_questions=skip_questions)
     else:
-        raise ValueError(f"Unknown dataset name: {dataset_name}. Supported datasets are: GPQA, MMLU, TruthfulQA, SimpleMC, PopMC.")
+        raise ValueError(f"Unknown dataset name: {dataset_name}. Supported datasets are: GPQA, GPSA, MMLU, TruthfulQA, SimpleQA, SimpleMC, PopMC, TriviaMC.")
 
 ## GPQA logic
 difficulty_rubric = {
@@ -676,4 +678,85 @@ def load_and_format_popmc(num_questions_needed=None, split="test", skip_question
         print(f"Warning: Only able to format {len(formatted_questions)} unique questions, but {num_questions_needed} were requested.")
 
     print(f"Successfully formatted {len(formatted_questions)} unique questions from PopMC.")
+    return formatted_questions
+
+def load_and_format_triviamc(num_questions_needed=None, split="test", skip_questions=None):
+    """
+    Loads the TriviaMC dataset from a local JSONL file and formats questions into the A-D multiple-choice format.
+    """
+    import json
+    print(f"Attempting to load TriviaMC...")
+    try:
+        filename = "./data/TriviaMC.jsonl"
+        with open(filename, 'r') as f:
+            dataset = [json.loads(line) for line in f]
+        print("TriviaMC Dataset loaded successfully.")
+    except Exception as e:
+        print(f"Error loading TriviaMC dataset: {e}")
+        return None
+
+    formatted_questions = []
+
+    dataset_indices = list(range(len(dataset)))
+    random.shuffle(dataset_indices)
+
+    question_ids_added = set()  # Keep track of IDs to ensure uniqueness
+
+    if not num_questions_needed: num_questions_needed = len(dataset)
+    print(f"Formatting {num_questions_needed} questions from TriviaMC...")
+    for idx in dataset_indices:
+        if len(formatted_questions) >= num_questions_needed:
+            break
+
+        item = dataset[idx]
+        question_text = item.get('question')
+        qid = item.get('qid')
+        
+        if qid in question_ids_added:
+            continue
+
+        if skip_questions is not None and question_text in skip_questions:
+            continue
+
+        # Gather options
+        correct_answer_text = item.get('correct_answer', '').strip()
+        incorrect_answers_text = item.get('distractors', [])
+        
+        # Basic validation
+        if not correct_answer_text or not incorrect_answers_text:
+            continue
+        if len(incorrect_answers_text) < 3:
+            continue
+        if any(len(ans.strip()) == 0 for ans in incorrect_answers_text):
+            continue
+
+        # Create the pool of 4 options and shuffle
+        options_list = [correct_answer_text] + incorrect_answers_text[:3]  # Take first 3 distractors
+        random.shuffle(options_list)
+
+        # Assign labels (A-D) and find the correct one
+        options_dict = {}
+        correct_label = None
+        labels = ["A", "B", "C", "D"]
+        
+        for i, option_text in enumerate(options_list):
+            label = labels[i]
+            options_dict[label] = option_text
+            if option_text == correct_answer_text:
+                correct_label = label
+
+        # Create the formatted dictionary
+        formatted_q = {
+            "id": qid if qid else f"triviamc_{split}_{text_to_id(question_text)}",
+            "question": question_text,
+            "options": options_dict,
+            "correct_answer": correct_label
+        }
+        formatted_questions.append(formatted_q)
+        question_ids_added.add(qid if qid else formatted_q["id"])
+
+    if len(formatted_questions) < num_questions_needed:
+        print(f"Warning: Only able to format {len(formatted_questions)} unique questions, but {num_questions_needed} were requested.")
+
+    print(f"Successfully formatted {len(formatted_questions)} unique questions from TriviaMC.")
     return formatted_questions

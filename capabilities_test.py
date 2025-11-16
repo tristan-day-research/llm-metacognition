@@ -392,10 +392,12 @@ class CapabilitiesTest(BaseGameClass):
             self.run_parameters["human_sa_input_prompt"] = self.human_sa_input_prompt
         else:
             self.run_parameters["sa_setup_prompt"] = self.sa_setup_prompt
+            # Use a reasonable limit for short answers instead of None (which defaults to 32000)
+            max_tokens_sa = 1024  # Reasonable limit for short answers
             self.run_parameters["get_llm_answer_static_args"] = {
                 "keep_appending": False,
                 "message_history": [],
-                "MAX_TOKENS": None,
+                "MAX_TOKENS": max_tokens_sa,
                 "temp": self.temperature
             }
         
@@ -469,8 +471,6 @@ def main(model_dataset_dict, temp):
                 N_QUESTIONS = 5
             elif DATASET_NAME.startswith("GP"):
                 N_QUESTIONS = 447
-            elif DATASET_NAME == "PopMC":
-                N_QUESTIONS = 500  # Use all questions (14k+)
             else:
                 N_QUESTIONS = 500  # Default sample size 
             # Load questions first to get actual count
@@ -535,6 +535,6 @@ def main(model_dataset_dict, temp):
 
 if __name__ == "__main__":
     model_dataset_dict = {
-        "llama-3.3-70b-instruct": ["SimpleMC"], 
+        "llama-3.3-70b-instruct": ["PopMC"], 
         }
     main(model_dataset_dict, temp=1.0)

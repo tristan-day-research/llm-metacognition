@@ -1,0 +1,107 @@
+{
+  "subject_id": "llama-3.1-70b-instruct_TriviaMC_5",
+  "timestamp": 1763145697.585844,
+  "accuracy": 1.0,
+  "results": {
+    "triviamc_2440": {
+      "question": {
+        "id": "triviamc_2440",
+        "question": "The musical ‘Half a Sixpence’ was based on which 1905 novel?",
+        "options": {
+          "A": "Kipps",
+          "B": "The History of Mr Polly",
+          "C": "Ann Veronica",
+          "D": "Tono-Bungay"
+        },
+        "correct_answer": "A"
+      },
+      "subject_answer": "A",
+      "is_correct": true,
+      "probs": null
+    },
+    "triviamc_1564": {
+      "question": {
+        "id": "triviamc_1564",
+        "question": "Which American band had a 1970’s UK hit with ‘Let’s Work Together’?",
+        "options": {
+          "A": "Creedence Clearwater Revival",
+          "B": "Grand Funk Railroad",
+          "C": "The Allman Brothers Band",
+          "D": "Canned Heat"
+        },
+        "correct_answer": "D"
+      },
+      "subject_answer": "D",
+      "is_correct": true,
+      "probs": null
+    },
+    "triviamc_831": {
+      "question": {
+        "id": "triviamc_831",
+        "question": "Which Asian country hosted its first Formula One Grand Prix motor race in October 2010?",
+        "options": {
+          "A": "South Korea",
+          "B": "Malaysia",
+          "C": "Singapore",
+          "D": "India"
+        },
+        "correct_answer": "A"
+      },
+      "subject_answer": "A",
+      "is_correct": true,
+      "probs": null
+    },
+    "triviamc_835": {
+      "question": {
+        "id": "triviamc_835",
+        "question": "Cristina Fernandez de Kirchner became President of which South American country in December 2007?",
+        "options": {
+          "A": "Colombia",
+          "B": "Chile",
+          "C": "Argentina",
+          "D": "Brazil"
+        },
+        "correct_answer": "C"
+      },
+      "subject_answer": "C",
+      "is_correct": true,
+      "probs": null
+    },
+    "triviamc_614": {
+      "question": {
+        "id": "triviamc_614",
+        "question": "What story introduced the Cybermen?",
+        "options": {
+          "A": "The Tenth Planet",
+          "B": "The Moonbase",
+          "C": "The Tomb of the Cybermen",
+          "D": "The Wheel in Space"
+        },
+        "correct_answer": "A"
+      },
+      "subject_answer": "A",
+      "is_correct": true,
+      "probs": null
+    }
+  },
+  "run_parameters": {
+    "n_questions": 5,
+    "temperature": 1.0,
+    "resample_for_probs": false,
+    "is_human_player": false,
+    "nested": null,
+    "present_question_args": {
+      "include_question_num": false,
+      "include_total_questions": false
+    },
+    "seed": 42,
+    "setup_prompt": "I'm going to ask you a series of multiple-choice questions. For each one, select the answer you think is best. Respond only with the letter of your choice; do NOT output any other text.",
+    "get_llm_answer_static_args": {
+      "keep_appending": false,
+      "message_history": [],
+      "MAX_TOKENS": 1,
+      "temp": 1.0,
+      "accept_any": true
+    }
+  }
+}

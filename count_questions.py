@@ -46,8 +46,12 @@ def count_questions(file_path):
                     count = len(data['questions'])
                     print(f"\nTotal number of questions: {count}")
                     return count
+                elif 'results' in data:
+                    count = len(data['results'])
+                    print(f"\nTotal number of questions: {count}")
+                    return count
                 else:
-                    print("Error: File contains a dictionary but no 'Data' or 'questions' key found.")
+                    print("Error: File contains a dictionary but no 'Data', 'questions', or 'results' key found.")
                     print(f"Available keys: {list(data.keys())}")
                     return 0
             else:
@@ -98,4 +102,7 @@ if __name__ == "__main__":
     
     print("\n" + "="*50)
     count_questions("data/TriviaQA_fact_checked_rejections.jsonl")
+    
+    print("\n" + "="*50)
+    count_questions("capabilities_test_logs/llama-3.3-70b-instruct_TriviaMC_500_1762809440_test_data.json")
 

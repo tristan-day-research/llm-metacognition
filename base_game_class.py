@@ -16,6 +16,9 @@ import requests
 from dotenv import load_dotenv
 load_dotenv()
 
+# Control whether to request logprobs from LLM APIs
+REQUEST_LOGPROBS = True
+
 # Load API keys
 anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY")##os.environ.get("ANTHROPIC_SPAR_API_KEY")##
 hyperbolic_api_key = os.environ.get("HYPERBOLIC_API_KEY")
@@ -225,13 +228,21 @@ class BaseGameClass:
                         prompt += "Assistant: "
                         formatted_messages=[{'role': 'user', 'content': prompt}]
                     #print(f"formatted_messages={formatted_messages}")
+                    # Build max_tokens parameter: always set a reasonable value to avoid API defaults
+                    # If MAX_TOKENS is None, use a reasonable default (2048) instead of letting API default to 32000
+                    effective_max_tokens = MAX_TOKENS if MAX_TOKENS is not None else 2048
+                    if self.subject_name.startswith("o3"):
+                        max_tokens_param = {"max_completion_tokens": effective_max_tokens}
+                    else:
+                        max_tokens_param = {"max_tokens": effective_max_tokens}
+                    
                     completion = self.client.chat.completions.create(
                         model=model_name,
-                        **({"max_completion_tokens": MAX_TOKENS} if self.subject_name.startswith("o3") else {"max_tokens": (None if 'gpt-5' in self.subject_name or 'gpt-4.1' in self.subject_name or 'glm-' in self.subject_name or '-r1' in self.subject_name else MAX_TOKENS)}),
+                        **max_tokens_param,
                         **({"temperature": min(temp + attempt * temp_inc, max(temp,1.0))} if not self.subject_name.startswith("o3") else {}),
                         messages=formatted_messages,
-                        **({"logprobs": True} if not no_logprobs(model_name) else {}),
-                        **({"top_logprobs": len(options)} if not no_logprobs(model_name) else {}),
+                        **({"logprobs": True} if REQUEST_LOGPROBS and not no_logprobs(model_name) else {}),
+                        **({"top_logprobs": len(options)} if REQUEST_LOGPROBS and not no_logprobs(model_name) else {}),
                         **({"reasoning_effort": "low"} if 'gpt-5' in self.subject_name else {}),
                         **({"top_p": 1.0} if temp > 0.0 else {}),
                         seed=42,
@@ -240,7 +251,7 @@ class BaseGameClass:
                             'seed': 42,
                             'provider': {
                                 **({"only": ["Chutes"]} if 'v3.1' in self.subject_name else {"only": ["DeepInfra"]} if '-r1' in self.subject_name else {}),
-                                'require_parameters': False if 'claude' in self.subject_name or 'gpt-5' in self.subject_name or 'llama' in self.subject_name else True,
+                                'require_parameters': REQUEST_LOGPROBS,  # Only require parameters if requesting logprobs
                                 "allow_fallbacks": True if 'llama' in self.subject_name else False,
 #                                'quantizations': ['fp8'],
                             },
@@ -257,8 +268,40 @@ class BaseGameClass:
                     if completion.choices[0].message.content is None:
                         raise ValueError("Response content is None - provider may not support this request")
                     resp = completion.choices[0].message.content.strip()
-                    if 'o3' in self.subject_name or 'gpt-5' in self.subject_name or self.subject_name=='deepseek-v3.1-base' or self.subject_name=='deepseek-r1' or no_logprobs(model_name): return resp, None
                     # If logprobs were requested but not returned, return None for token_probs instead of raising error
+                    # Note: Some models (o3, gpt-5, etc.) don't support logprobs, so they will return None below
+                    logprobs_requested = REQUEST_LOGPROBS and not no_logprobs(model_name)
+                    # Check if logprobs exist in the response
+                    has_logprobs_attr = hasattr(completion.choices[0], 'logprobs')
+                    logprobs_value = getattr(completion.choices[0], 'logprobs', None)
+                    
+                    # Debug: Inspect the response structure
+                    if logprobs_requested and (not has_logprobs_attr or logprobs_value is None):
+                        # Try checking if logprobs are in message instead (some API structures differ)
+                        has_msg_logprobs = hasattr(completion.choices[0].message, 'logprobs')
+                        msg_logprobs = getattr(completion.choices[0].message, 'logprobs', None)
+                        if has_msg_logprobs and msg_logprobs is not None:
+                            # Logprobs are in message, use them
+                            completion.choices[0].logprobs = msg_logprobs
+                        else:
+                            # Try to inspect the actual response structure
+                            choice_attrs = [attr for attr in dir(completion.choices[0]) if not attr.startswith('_')]
+                            msg_attrs = [attr for attr in dir(completion.choices[0].message) if not attr.startswith('_')]
+                            self._log(f"DEBUG: choice attributes: {choice_attrs}")
+                            self._log(f"DEBUG: message attributes: {msg_attrs}")
+                            # Check if there's a usage object with logprobs
+                            if hasattr(completion, 'usage'):
+                                self._log(f"DEBUG: usage object: {completion.usage}")
+                            
+                            # Logprobs were requested but not returned - this can happen when:
+                            # 1. Provider doesn't support logprobs with temperature > 0
+                            # 2. Provider doesn't support logprobs for this model
+                            # 3. API structure is different than expected
+                            provider_info = ""
+                            if self.provider == "OpenRouter" and hasattr(completion, 'provider'):
+                                provider_info = f" (OpenRouter provider: {completion.provider})"
+                            self._log(f"WARNING: Logprobs were requested but not returned for model {model_name}{provider_info}. temp={temp}. This may be a provider limitation.")
+                            return resp, None
                     if not hasattr(completion.choices[0], 'logprobs') or completion.choices[0].logprobs is None:
                         return resp, None
                     if len(options) == 1: #short answer, just average

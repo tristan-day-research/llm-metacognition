@@ -56,14 +56,40 @@ class MCQDataset(Dataset):
 # Entropy → scalar confidence → soft labels
 # ============================================================
 
-def compute_soft_labels(logits4, sigma=0.15):
+def compute_soft_labels(logits4, sigma=10.0):
+    """
+    Convert the model's 4-way answer logits into a soft 8-bin confidence
+    distribution using the percentage-based Gaussian kernel from your colleague.
+
+    logits4: tensor of shape [4]
+    sigma: Gaussian width in percentage space (default: 10)
+    """
+    # 1. Softmax over the 4 MCQ options
     ps = torch.softmax(logits4, dim=0)
+
+    # 2. Entropy (natural logs)
     H = -(ps * torch.log(ps + 1e-12)).sum()
-    c = 1 - (H / math.log(4))
-    # Ensure centers is on the same device as logits4
-    centers = torch.linspace(1/16, 15/16, 8, device=logits4.device)
-    soft = torch.exp(-(centers - c)**2 / (2*sigma*sigma))
-    return soft / soft.sum()
+
+    # 3. Convert entropy to "confidence percentage"
+    #    confidence = (1 - H/log(4)) * 100
+    confidence_percent = (1 - H / math.log(4)) * 100.0
+
+    # 4. Bin midpoints + widths (exact values from your colleague)
+    bin_edges = torch.tensor([0, 5, 10, 20, 40, 60, 80, 90, 100],
+                             dtype=torch.float32,
+                             device=logits4.device)
+    bin_midpoints = torch.tensor([2.5, 7.5, 15, 30, 50, 70, 85, 95],
+                                 dtype=torch.float32,
+                                 device=logits4.device)
+    bin_widths = bin_edges[1:] - bin_edges[:-1]   # shape [8]
+
+    # 5. Gaussian kernel in percentage space
+    distances = (bin_midpoints - confidence_percent)**2
+    weights = torch.exp(-distances / (2 * sigma * sigma)) * bin_widths
+
+    return weights / weights.sum()
+
+
 def get_single_token_id(tokenizer, letter: str) -> int:
     """
     Find a single-token representation for a letter.
@@ -79,6 +105,10 @@ def get_single_token_id(tokenizer, letter: str) -> int:
         return ids[0]
     raise ValueError(f"Could not find a single-token encoding for {letter}: got {ids}")
 
+
+# ------------------------------------------------------------------
+# Training Step
+# ------------------------------------------------------------------
 
 def train_step(model, tokenizer, batch, sigma=0.15, device="cuda"):
     B = len(batch)
@@ -126,7 +156,7 @@ def train_step(model, tokenizer, batch, sigma=0.15, device="cuda"):
     # ------------------------------------------------------------------
     # 2. Second pass: explicit confidence, independent prompt
     # ------------------------------------------------------------------
-    
+
     conf_prompts = []
     for row in batch:
         q = row["question"]

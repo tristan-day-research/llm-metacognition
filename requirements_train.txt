@@ -1,0 +1,7 @@
+torch==2.7.0
+transformers==4.40.2
+peft==0.11.1
+accelerate
+sentencepiece
+wandb
+huggingface_hub

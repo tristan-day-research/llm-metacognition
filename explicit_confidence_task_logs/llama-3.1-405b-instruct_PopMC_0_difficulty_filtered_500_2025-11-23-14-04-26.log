@@ -1,0 +1,11 @@
+Provider: OpenRouter
+Using 500 provided questions
+
+Starting Capabilities Measurement for Subject: llama-3.1-405b-instruct_PopMC_0_difficulty_filtered_500
+Configuration: Questions=500, is_human_player=False, temperature=1.0, resample_for_probs=False, nested=All, explicit_confidence_task=True
+
+========== Starting Capability Measuring ==========
+In model_call, provider=OpenRouter, attempt=1
+Thread execution error: NotFoundError: Error code: 404 - {'error': {'message': 'No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/provider-routing', 'code': 404}}
+Error in llm processing: Error code: 404 - {'error': {'message': 'No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/provider-routing', 'code': 404}}
+Fatal error: Model endpoint not found. Stopping retries.

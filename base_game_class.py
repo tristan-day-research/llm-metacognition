@@ -5,6 +5,7 @@ import time
 import re
 import math
 import copy
+from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, TimeoutError, as_completed
 from tqdm import tqdm
 import anthropic
@@ -106,7 +107,7 @@ class BaseGameClass:
         """Set up logging files and directories."""
         if log_dir:
             os.makedirs(f"./{log_dir}", exist_ok=True)
-            timestamp = int(time.time())
+            timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
             self.log_base_name = f"./{log_dir}/{self.subject_id}_{timestamp}"
             self.log_filename = f"{self.log_base_name}.log"
             self.game_data_filename = f"{self.log_base_name}_game_data.json"

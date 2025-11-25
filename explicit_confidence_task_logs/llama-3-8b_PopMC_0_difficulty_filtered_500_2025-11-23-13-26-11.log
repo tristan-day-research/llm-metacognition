@@ -1,0 +1,11 @@
+Provider: OpenRouter
+Using 500 provided questions
+
+Starting Capabilities Measurement for Subject: llama-3-8b_PopMC_0_difficulty_filtered_500
+Configuration: Questions=500, is_human_player=False, temperature=1.0, resample_for_probs=False, nested=All, explicit_confidence_task=True
+
+========== Starting Capability Measuring ==========
+In model_call, provider=OpenRouter, attempt=1
+Thread execution error: NotFoundError: Error code: 404 - {'error': {'message': 'No endpoints found for meta-llama/llama-3-8b.', 'code': 404}, 'user_id': 'user_2olc3UxrHvMROEYTU2RrqXohqvn'}
+Error in llm processing: Error code: 404 - {'error': {'message': 'No endpoints found for meta-llama/llama-3-8b.', 'code': 404}, 'user_id': 'user_2olc3UxrHvMROEYTU2RrqXohqvn'}
+Fatal error: Model endpoint not found. Stopping retries.

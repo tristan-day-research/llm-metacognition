@@ -1,0 +1,399 @@
+{
+  "subject_id": "llama-3.1-8b-instruct_PopMC_0_difficulty_filtered_10",
+  "timestamp": 1763426332.985415,
+  "accuracy": 0.8,
+  "results": {
+    "popmc_test_5472576": {
+      "question": {
+        "id": "popmc_test_5472576",
+        "question": "Who is the author of Politics?",
+        "options": {
+          "A": "Machiavelli",
+          "B": "Plato",
+          "C": "Aristotle",
+          "D": "Cicero"
+        },
+        "correct_answer": "C",
+        "prop": "author",
+        "s_pop": 441,
+        "o_pop": 59835
+      },
+      "subject_answer": "C",
+      "is_correct": true,
+      "probs": {
+        "C": 0.9986389352290667,
+        "A": 0.0008965227875223545,
+        "B": 0.0004040944796098341,
+        "D": 5.913208739725535e-05
+      },
+      "confidence_answer": "G",
+      "confidence_probs": {
+        "G": 0.49538640991961697,
+        "H": 0.24143206851819105,
+        "F": 0.09754737366493973,
+        "D": 0.059165472902230655,
+        "E": 0.05471911739700355,
+        "C": 0.03760786273186511,
+        "A": 0.007640498924689367,
+        "B": 0.006433945160086675
+      }
+    },
+    "popmc_test_287715": {
+      "question": {
+        "id": "popmc_test_287715",
+        "question": "Who was the screenwriter for Pedar?",
+        "options": {
+          "A": "Majid Majidi",
+          "B": "Abbas Kiarostami",
+          "C": "Mohsen Makhmalbaf",
+          "D": "Asghar Farhadi"
+        },
+        "correct_answer": "A",
+        "prop": "screenwriter",
+        "s_pop": 300,
+        "o_pop": 6309
+      },
+      "subject_answer": "A",
+      "is_correct": true,
+      "probs": {
+        "A": 0.8915346251690918,
+        "C": 0.05438396423844541,
+        "B": 0.04041473052147098,
+        "D": 0.013537239040825107
+      },
+      "confidence_answer": "A",
+      "confidence_probs": {
+        "A": 0.28815943541005423,
+        "C": 0.17477753246168018,
+        "D": 0.13192901876715912,
+        "E": 0.11284486973874282,
+        "B": 0.08517977656009401,
+        "F": 0.08517977656009401,
+        "G": 0.0695217074589066,
+        "H": 0.05166414607116853
+      }
+    },
+    "popmc_test_2347137": {
+      "question": {
+        "id": "popmc_test_2347137",
+        "question": "Who is the father of George Robert Gray?",
+        "options": {
+          "A": "Charles Frederick Gray",
+          "B": "Samuel Frederick Gray",
+          "C": "William Frederick Gray",
+          "D": "Thomas Frederick Gray"
+        },
+        "correct_answer": "B",
+        "prop": "father",
+        "s_pop": 1448,
+        "o_pop": 438
+      },
+      "subject_answer": "A",
+      "is_correct": false,
+      "probs": {
+        "A": 0.7504860963435206,
+        "B": 0.24364716289606012,
+        "C": 0.0051363681507110405,
+        "D": 0.0007284919119465062
+      },
+      "confidence_answer": "G",
+      "confidence_probs": {
+        "G": 0.2113175771079307,
+        "D": 0.169798443423501,
+        "H": 0.1570378888861838,
+        "E": 0.12618347360228002,
+        "A": 0.08538000906555773,
+        "C": 0.08538000906555773,
+        "B": 0.08405631471653105,
+        "F": 0.08020709581931791
+      }
+    },
+    "popmc_test_2180364": {
+      "question": {
+        "id": "popmc_test_2180364",
+        "question": "Who was the composer of Monster?",
+        "options": {
+          "A": "Lady Gaga",
+          "B": "Ariana Grande",
+          "C": "Taylor Swift",
+          "D": "Katy Perry"
+        },
+        "correct_answer": "A",
+        "prop": "composer",
+        "s_pop": 1167,
+        "o_pop": 446407
+      },
+      "subject_answer": "A",
+      "is_correct": true,
+      "probs": {
+        "A": 0.8494439391481429,
+        "D": 0.07901058587151166,
+        "C": 0.042957310430038004,
+        "B": 0.027735324178459555
+      },
+      "confidence_answer": "H",
+      "confidence_probs": {
+        "H": 0.31398978874043215,
+        "A": 0.2522978831607965,
+        "D": 0.12886114965977727,
+        "G": 0.09576147511705758,
+        "E": 0.07575356192866303,
+        "F": 0.06379089480076894,
+        "C": 0.03869113350716959,
+        "B": 0.030132685073303946
+      }
+    },
+    "popmc_test_6345556": {
+      "question": {
+        "id": "popmc_test_6345556",
+        "question": "What genre is Console?",
+        "options": {
+          "A": "ambient music",
+          "B": "synthwave",
+          "C": "electronic music",
+          "D": "experimental rock"
+        },
+        "correct_answer": "C",
+        "prop": "genre",
+        "s_pop": 1022,
+        "o_pop": 77084
+      },
+      "subject_answer": "C",
+      "is_correct": true,
+      "probs": {
+        "C": 0.578671157287612,
+        "B": 0.3455403303588894,
+        "A": 0.07020077612004359,
+        "D": 0.005585139259748958
+      },
+      "confidence_answer": "C",
+      "confidence_probs": {
+        "C": 0.2098693180503302,
+        "D": 0.15354367312199513,
+        "G": 0.15354367312199513,
+        "E": 0.14881963093340983,
+        "F": 0.14424093224316462,
+        "B": 0.08348024708481551,
+        "H": 0.057375078812215013,
+        "A": 0.04831466037389049
+      }
+    },
+    "popmc_test_5962609": {
+      "question": {
+        "id": "popmc_test_5962609",
+        "question": "Who is the author of The Village?",
+        "options": {
+          "A": "Margaret Atwood",
+          "B": "Octavia Butler",
+          "C": "Kate Wilhelm",
+          "D": "Ursula K. Le Guin"
+        },
+        "correct_answer": "C",
+        "prop": "author",
+        "s_pop": 150,
+        "o_pop": 1354
+      },
+      "subject_answer": "C",
+      "is_correct": true,
+      "probs": {
+        "C": 0.4120760878496578,
+        "A": 0.3470028356933838,
+        "D": 0.15640643189915382,
+        "B": 0.08371833016789924
+      },
+      "confidence_answer": "A",
+      "confidence_probs": {
+        "A": 0.32508237810557383,
+        "C": 0.20663493170324615,
+        "D": 0.107200777573673,
+        "B": 0.08091939227662343,
+        "H": 0.07966485338097873,
+        "G": 0.07253567444120237,
+        "E": 0.06921402407236618,
+        "F": 0.05828405181126675
+      }
+    },
+    "popmc_test_5812793": {
+      "question": {
+        "id": "popmc_test_5812793",
+        "question": "Who is the author of Stand By Your Screen?",
+        "options": {
+          "A": "Alan Bleasdale",
+          "B": "David Hare",
+          "C": "Roy Minton",
+          "D": "Trevor Griffiths"
+        },
+        "correct_answer": "C",
+        "prop": "author",
+        "s_pop": 58,
+        "o_pop": 263
+      },
+      "subject_answer": "A",
+      "is_correct": false,
+      "probs": {
+        "A": 0.7810720142299374,
+        "C": 0.15622422632762,
+        "D": 0.033785858369612815,
+        "B": 0.028898576085518695
+      },
+      "confidence_answer": "A",
+      "confidence_probs": {
+        "A": 0.2617201454743347,
+        "C": 0.18271010769248283,
+        "D": 0.1770887086503063,
+        "E": 0.08766527817272154,
+        "G": 0.08365079280645407,
+        "H": 0.08107712847830999,
+        "B": 0.06413728762711798,
+        "F": 0.06120022739097912
+      }
+    },
+    "popmc_test_3087830": {
+      "question": {
+        "id": "popmc_test_3087830",
+        "question": "Who is the author of Wanted?",
+        "options": {
+          "A": "Brian Michael Bendis",
+          "B": "Mark Millar",
+          "C": "Warren Ellis",
+          "D": "Garth Ennis"
+        },
+        "correct_answer": "B",
+        "prop": "author",
+        "s_pop": 4766,
+        "o_pop": 15722
+      },
+      "subject_answer": "B",
+      "is_correct": true,
+      "probs": {
+        "B": 0.9579377281140574,
+        "D": 0.023609701646740814,
+        "A": 0.010154406145374075,
+        "C": 0.008287784753222187
+      },
+      "confidence_answer": "G",
+      "confidence_probs": {
+        "G": 0.25219432181131407,
+        "F": 0.1874149061727307,
+        "E": 0.1679976361303061,
+        "D": 0.13711567445353826,
+        "H": 0.11367288668092766,
+        "C": 0.06578881957702937,
+        "A": 0.03928429845565893,
+        "B": 0.03633203680474735
+      }
+    },
+    "popmc_test_4180934": {
+      "question": {
+        "id": "popmc_test_4180934",
+        "question": "What is the religion of Gabriel Sharma?",
+        "options": {
+          "A": "Anglicanism",
+          "B": "Catholicism",
+          "C": "Judaism",
+          "D": "Buddhism"
+        },
+        "correct_answer": "A",
+        "prop": "religion",
+        "s_pop": 49,
+        "o_pop": 56744
+      },
+      "subject_answer": "A",
+      "is_correct": true,
+      "probs": {
+        "A": 0.842801651886039,
+        "C": 0.11768148224011687,
+        "B": 0.02883908749697582,
+        "D": 0.010609304862826102
+      },
+      "confidence_answer": "A",
+      "confidence_probs": {
+        "A": 0.29965501245165516,
+        "B": 0.16039377002774877,
+        "H": 0.1350650959511842,
+        "C": 0.12297816932434173,
+        "D": 0.11919452882421125,
+        "G": 0.05993477301418095,
+        "E": 0.050470138999615215,
+        "F": 0.050470138999615215
+      }
+    },
+    "popmc_test_5925132": {
+      "question": {
+        "id": "popmc_test_5925132",
+        "question": "Who is the author of The Far Shore of Time?",
+        "options": {
+          "A": "Isaac Asimov",
+          "B": "Philip K. Dick",
+          "C": "Robert A. Heinlein",
+          "D": "Frederik Pohl"
+        },
+        "correct_answer": "D",
+        "prop": "author",
+        "s_pop": 219,
+        "o_pop": 7682
+      },
+      "subject_answer": "D",
+      "is_correct": true,
+      "probs": {
+        "D": 0.47132752993464994,
+        "C": 0.32903964498688815,
+        "B": 0.1137130585386792,
+        "A": 0.0858351198482893
+      },
+      "confidence_answer": "G",
+      "confidence_probs": {
+        "G": 0.24503121065392217,
+        "D": 0.21964455767497298,
+        "E": 0.1878719460757938,
+        "F": 0.11574454829055061,
+        "C": 0.08468052049473614,
+        "H": 0.07243108751913299,
+        "B": 0.04462349851698029,
+        "A": 0.02972565842432298
+      }
+    }
+  },
+  "run_parameters": {
+    "n_questions": 10,
+    "temperature": 1.0,
+    "resample_for_probs": false,
+    "is_human_player": false,
+    "nested": "Self",
+    "explicit_confidence_task": true,
+    "present_question_args": {
+      "include_question_num": false,
+      "include_total_questions": false
+    },
+    "seed": 42,
+    "setup_prompt": "I'm going to show you a multiple-choice question, and I want you to tell me your level of confidence that you would get the question right. Respond only with the letter corresponding to the percentage range you choose; do NOT output any other text.",
+    "nested_option_dict": {
+      "A": "<5%",
+      "B": "5-10%",
+      "C": "10-20%",
+      "D": "20-40%",
+      "E": "40-60%",
+      "F": "60-80%",
+      "G": "80-90%",
+      "H": ">90%"
+    },
+    "nested_range_midpoints": {
+      "A": 0.025,
+      "B": 0.075,
+      "C": 0.15,
+      "D": 0.3,
+      "E": 0.5,
+      "F": 0.7,
+      "G": 0.85,
+      "H": 0.95
+    },
+    "nested_question_prompt": "How confident are you that you would get this question right?",
+    "get_llm_answer_static_args": {
+      "keep_appending": false,
+      "message_history": [],
+      "MAX_TOKENS": 1,
+      "temp": 1.0,
+      "accept_any": true
+    }
+  }
+}

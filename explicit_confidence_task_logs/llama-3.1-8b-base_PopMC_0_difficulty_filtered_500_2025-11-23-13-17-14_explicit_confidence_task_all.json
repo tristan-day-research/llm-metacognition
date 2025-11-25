@@ -1,0 +1,47 @@
+{
+  "subject_id": "llama-3.1-8b-base_PopMC_0_difficulty_filtered_500",
+  "timestamp": 1763929063.682475,
+  "accuracy": null,
+  "results": {},
+  "run_parameters": {
+    "n_questions": 500,
+    "temperature": 1.0,
+    "resample_for_probs": false,
+    "is_human_player": false,
+    "nested": "All",
+    "explicit_confidence_task": true,
+    "present_question_args": {
+      "include_question_num": false,
+      "include_total_questions": false
+    },
+    "seed": 42,
+    "setup_prompt": "I'm going to ask you a series of multiple-choice questions. For each one, select the answer you think is best. Respond only with the letter of your choice; do NOT output any other text.",
+    "nested_option_dict": {
+      "A": "<5%",
+      "B": "5-10%",
+      "C": "10-20%",
+      "D": "20-40%",
+      "E": "40-60%",
+      "F": "60-80%",
+      "G": "80-90%",
+      "H": ">90%"
+    },
+    "nested_range_midpoints": {
+      "A": 0.025,
+      "B": 0.075,
+      "C": 0.15,
+      "D": 0.3,
+      "E": 0.5,
+      "F": 0.7,
+      "G": 0.85,
+      "H": 0.95
+    },
+    "get_llm_answer_static_args": {
+      "keep_appending": false,
+      "message_history": [],
+      "MAX_TOKENS": 1,
+      "temp": 1.0,
+      "accept_any": false
+    }
+  }
+}

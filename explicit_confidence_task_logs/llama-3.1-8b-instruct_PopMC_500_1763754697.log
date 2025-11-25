@@ -1,0 +1,7 @@
+Provider: OpenRouter
+Using 500 provided questions
+
+Starting Capabilities Measurement for Subject: llama-3.1-8b-instruct_PopMC_500
+Configuration: Questions=500, is_human_player=False, temperature=1.0, resample_for_probs=False, nested=All, explicit_confidence_task=True
+
+========== Starting Capability Measuring ==========

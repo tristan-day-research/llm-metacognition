@@ -105,4 +105,7 @@ if __name__ == "__main__":
     
     print("\n" + "="*50)
     count_questions("capabilities_test_logs/llama-3.3-70b-instruct_TriviaMC_500_1762809440_test_data.json")
+    
+    print("\n" + "="*50)
+    count_questions("data/PopMC_0_difficulty_filtered.jsonl")
 

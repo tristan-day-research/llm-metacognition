@@ -45,7 +45,7 @@ class CapabilitiesTest(BaseGameClass):
         self.total_count = 0
         self.accuracy = None
         self.temperature = temperature
-        self.log_suffix = "_test_data"
+        self.log_suffix = ""  # Will be set in main() based on nested parameter
         self.resample_for_probs = resample_for_probs
         self.nested = nested
 
@@ -462,7 +462,7 @@ def main(model_dataset_dict, temp):
             INCLUDE_TOTAL = False
             resume_from = None#"capabilities_1p_test_logs/llama-3.3-70b-instruct_SimpleMC_500_1759847064_test_data.json"#
             RESAMPLE = False
-            NESTED = None #values: None, "Self", "Other"
+            NESTED = "Self" #values: None, "Self", "Other"
             temp = temp
             seed = 42
             
@@ -506,13 +506,21 @@ def main(model_dataset_dict, temp):
                     resume_from=resume_from,
                     temperature=temp,
                     resample_for_probs=RESAMPLE,
-                    nested=NESTED,
+                    nested="Self",
                     include_question_num=INCLUDE_QNUM,
                     include_total_questions=INCLUDE_TOTAL
                 )
 
                 # Store the seed used (run-level, for reproducibility)
                 game.run_parameters["seed"] = seed
+                
+                # Set log suffix based on nested parameter
+                if NESTED == "Self":
+                    game.log_suffix = "_explicit_confidence_task"
+                elif NESTED == "Other":
+                    game.log_suffix = "_explicit_confidence_task"  # or another suffix if different
+                else:
+                    game.log_suffix = "_test_data"
                             
                 # Run capabilities measurement
                 if (DATASET_NAME == "SimpleQA" or DATASET_NAME == "GPSA") and not NESTED:
@@ -535,6 +543,6 @@ def main(model_dataset_dict, temp):
 
 if __name__ == "__main__":
     model_dataset_dict = {
-        "llama-3.3-70b-instruct": ["PopMC"], 
+        "llama-3.1-8b-instruct": ["TriviaMC"], 
         }
     main(model_dataset_dict, temp=1.0)

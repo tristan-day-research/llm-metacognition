@@ -64,19 +64,28 @@ def compute_soft_labels(logits4, sigma=0.15):
     centers = torch.linspace(1/16, 15/16, 8, device=logits4.device)
     soft = torch.exp(-(centers - c)**2 / (2*sigma*sigma))
     return soft / soft.sum()
+def get_single_token_id(tokenizer, letter: str) -> int:
+    """
+    Find a single-token representation for a letter.
+    Try ' A' first (common for LLaMA), then 'A'.
+    """
+    # Try with leading space (common SPM pattern)
+    ids = tokenizer.encode(" " + letter, add_special_tokens=False)
+    if len(ids) == 1:
+        return ids[0]
+    # Fallback: bare letter
+    ids = tokenizer.encode(letter, add_special_tokens=False)
+    if len(ids) == 1:
+        return ids[0]
+    raise ValueError(f"Could not find a single-token encoding for {letter}: got {ids}")
 
-# ============================================================
-# Training step with two forward passes
-# ============================================================
 
-def train_step(model, tokenizer, batch, device="cuda", sigma=0.15):
-
+def train_step(model, tokenizer, batch, sigma=0.15, device="cuda"):
     B = len(batch)
 
-    # ---------------------------
-    # 1. First pass: answer MCQ
-    # ---------------------------
-
+    # ------------------------------------------------------------------
+    # 1. First pass: answer MCQ (teacher signal) — NO GRAD, no leakage
+    # ------------------------------------------------------------------
     answer_prompts = []
     for row in batch:
         q = row["question"]
@@ -88,59 +97,70 @@ def train_step(model, tokenizer, batch, device="cuda", sigma=0.15):
             f"B. {opts['B']}\n"
             f"C. {opts['C']}\n"
             f"D. {opts['D']}\n\n"
-            "Answer with one letter: A/B/C/D\n"
+            "Answer with one letter: A, B, C, or D.\n"
+            "Answer: "
         )
         answer_prompts.append(p)
 
     enc = tokenizer(answer_prompts, return_tensors="pt", padding=True).to(device)
-    out = model(**enc)
-    final_logits = out.logits[:, -1, :]  # [B, vocab]
 
-    # Extract logits for A/B/C/D tokens
-    abcd_ids = torch.tensor(
-        [tokenizer.encode(c, add_special_tokens=False)[0] for c in "ABCD"],
-        device=device
-    )
-    answer_logits4 = final_logits[:, abcd_ids]  # [B, 4]
+    with torch.no_grad():
+        out = model(**enc)
+        # logits for *next* token after the prompt
+        final_logits = out.logits[:, -1, :]  # [B, vocab]
 
-    # Soft labels from current logits
-    soft_targets = torch.stack([compute_soft_labels(ans, sigma=sigma) for ans in answer_logits4]).to(device)
+        # Extract logits for A/B/C/D tokens (robustly)
+        abcd_ids = torch.tensor(
+            [get_single_token_id(tokenizer, c) for c in "ABCD"],
+            device=device,
+            dtype=torch.long
+        )  # [4]
 
-    # Predicted letter (for pass 2 prompt)
-    pred_idx = answer_logits4.argmax(dim=1)  # 0..3
-    pred_letter = [ "ABCD"[i] for i in pred_idx ]
+        answer_logits4 = final_logits[:, abcd_ids]  # [B, 4]
 
-    # ---------------------------
-    # 2. Second pass: confidence
-    # ---------------------------
+        # Soft labels from current logits (teacher entropy)
+        soft_targets = torch.stack(
+            [compute_soft_labels(ans, sigma=sigma) for ans in answer_logits4]
+        ).to(device)  # [B, 8]
 
+    # ------------------------------------------------------------------
+    # 2. Second pass: explicit confidence, independent prompt
+    # ------------------------------------------------------------------
+    
     conf_prompts = []
-    for i, row in enumerate(batch):
+    for row in batch:
+        q = row["question"]
         opts = row["options"]
         p = (
-            f"Question: {row['question']}\n"
+            "I'm going to show you a multiple-choice question, and I want you to tell me "
+            "your level of confidence that you would get the question right.\n"
+            "Respond only with a single letter from A to H; do NOT output any other text.\n\n"
+            f"Question: {q}\n"
             "Options:\n"
             f"A. {opts['A']}\n"
             f"B. {opts['B']}\n"
             f"C. {opts['C']}\n"
             f"D. {opts['D']}\n\n"
-            f"You answered: {pred_letter[i]}\n"
-            "How certain are you?\nRespond with a letter A–H.\n"
+            "How confident are you that you would get this question right?\n"
+            "Confidence: "
         )
         conf_prompts.append(p)
 
     enc2 = tokenizer(conf_prompts, return_tensors="pt", padding=True).to(device)
     out2 = model(**enc2)
-
     final_logits2 = out2.logits[:, -1, :]  # [B, vocab]
+
+    # Extract logits for confidence tokens A–H (again robustly)
     conf_ids = torch.tensor(
-        [tokenizer.encode(c, add_special_tokens=False)[0] for c in "ABCDEFGH"],
-        device=device
-    )
+        [get_single_token_id(tokenizer, c) for c in "ABCDEFGH"],
+        device=device,
+        dtype=torch.long
+    )  # [8]
+
     conf_logits = final_logits2[:, conf_ids]  # [B, 8]
 
-    # Soft-label cross entropy
-    log_probs = torch.log_softmax(conf_logits, dim=-1)
+    # Soft-label cross entropy: only second pass gets gradients
+    log_probs = torch.log_softmax(conf_logits, dim=-1)  # [B, 8]
     loss = -(soft_targets * log_probs).sum(dim=1).mean()
 
     return loss

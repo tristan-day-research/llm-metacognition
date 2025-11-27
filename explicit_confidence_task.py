@@ -1,5 +1,6 @@
 import time
 import json
+import os
 from load_and_format_datasets import load_and_format_dataset
 from base_game_class import *
 import random
@@ -22,7 +23,8 @@ class CapabilitiesTest(BaseGameClass):
         nested=None,
         include_question_num=False,
         include_total_questions=False,
-        explicit_confidence_task=False
+        explicit_confidence_task=False,
+        output_file=None
     ):
         """
         Args:
@@ -37,6 +39,7 @@ class CapabilitiesTest(BaseGameClass):
             explicit_confidence_task (bool): If True, ask two separate prompts: first the question directly (for logprobs), 
                 then the confidence question. The LLM won't know it already answered the question.
                 Note: This parameter is ignored when nested="All" (which already does separate queries).
+            output_file (str): Path to output file. If None, uses default naming. If set and file exists, will update it.
         """
         if explicit_confidence_task:
             filepath = "explicit_confidence_task_logs"
@@ -60,6 +63,7 @@ class CapabilitiesTest(BaseGameClass):
         self.include_question_num = include_question_num
         self.include_total_questions = include_total_questions
         self.explicit_confidence_task = explicit_confidence_task
+        self.output_file = output_file
 
         self.mc_setup_prompt = "I'm going to ask you a series of multiple-choice questions. For each one, select the answer you think is best. Respond only with the letter of your choice; do NOT output any other text."
         self.sa_setup_prompt = "I'm going to ask you a series of short-answer questions. For each one, respond as succinctly as possible. Answer as best you can, even if you're not certain."
@@ -111,29 +115,56 @@ class CapabilitiesTest(BaseGameClass):
             # "seed": <int>  # set in main
         }
 
-        if len(questions) < self.n_questions:
-            raise ValueError(f"Not enough questions provided ({len(questions)}); ({self.n_questions} needed)")
-        
-        # Take the first n_questions
-        self.questions = questions[:self.n_questions]
-        self._log(f"Using {len(self.questions)} provided questions")
-
+        # Handle resume logic BEFORE taking subset of questions
+        # This ensures we check all questions in the dataset, not just the shuffled subset
         if resume_from and resume_from != "":
             try:
                 with open(resume_from, "r") as f:
                     prev_data = json.load(f)
             except Exception as e:
                 self._log(f"ERROR: Error opening resume file: {str(e)}")
-                return False
-            self.results = prev_data["results"]
-            self._log(f"Resuming from {resume_from} holding {len(self.results)} questions")
+                raise ValueError(f"Failed to load resume file: {str(e)}")
+            
+            # Load existing results
+            self.results = prev_data.get("results", {})
+            self._log(f"Resuming from {resume_from} - found {len(self.results)} already answered questions")
+            
+            # Count correct answers from existing results
             for rdict in self.results.values():
-                if rdict["is_correct"] == True: self.correct_count +=1
+                if rdict.get("is_correct") == True: 
+                    self.correct_count += 1
                 self.total_count += 1
-            self.questions = [q for q in self.questions if q["id"] not in self.results]
+            
+            # Filter out already answered questions from the full question set
+            # This ensures we check ALL questions, not just the ones that would be in the shuffled order
+            answered_ids = set(self.results.keys())
+            filtered_questions = []
+            matches_found = 0
+            for q in questions:
+                if q["id"] in answered_ids:
+                    matches_found += 1
+                    print(f"Match found: Question ID '{q['id']}' already answered, skipping.")
+                    self._log(f"Match found: Question ID '{q['id']}' already answered, skipping.")
+                else:
+                    filtered_questions.append(q)
+            self.questions = filtered_questions
+            self._log(f"Filtered out {matches_found} already answered questions. {len(self.questions)} questions remaining.")
+            print(f"Total matches found: {matches_found}. Remaining questions to answer: {len(self.questions)}")
+            
+            # Update n_questions to reflect remaining questions
+            if len(self.questions) < self.n_questions:
+                self._log(f"Warning: Only {len(self.questions)} questions remaining, adjusting n_questions from {self.n_questions}")
+                self.n_questions = len(self.questions)
+        else:
+            # Check if we have enough questions before taking subset
+            if len(questions) < self.n_questions:
+                raise ValueError(f"Not enough questions provided ({len(questions)}); ({self.n_questions} needed)")
+            # Take the first n_questions if not resuming
+            self.questions = questions[:self.n_questions]
+            self._log(f"Using {len(self.questions)} provided questions")
 
     def _save_data(self):
-        """Save data to file"""
+        """Save data to file. If output_file is set, updates that file. Otherwise uses default naming."""
         data = {
             "subject_id": self.subject_id,
             "timestamp": time.time(),
@@ -141,8 +172,28 @@ class CapabilitiesTest(BaseGameClass):
             "results": self.results,
             "run_parameters": self.run_parameters,
         }
-                    
-        filename = f"{self.log_base_name}{self.log_suffix}.json"
+        
+        if self.output_file:
+            # Update existing file
+            filename = self.output_file
+            # If file exists, merge results (in case of resume)
+            if os.path.exists(filename):
+                try:
+                    with open(filename, 'r', encoding='utf-8') as f:
+                        existing_data = json.load(f)
+                    # Merge results (new results overwrite old ones with same ID)
+                    existing_data["results"].update(self.results)
+                    data["results"] = existing_data["results"]
+                    # Preserve original subject_id and run_parameters from existing file
+                    data["subject_id"] = existing_data.get("subject_id", self.subject_id)
+                    data["run_parameters"] = existing_data.get("run_parameters", self.run_parameters)
+                    self._log(f"Updating existing file: {filename}")
+                except Exception as e:
+                    self._log(f"Warning: Could not read existing file for merge: {str(e)}. Overwriting.")
+        else:
+            # Use default naming
+            filename = f"{self.log_base_name}{self.log_suffix}.json"
+        
         with open(filename, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
         self._log(f"Data saved to: {filename}")
@@ -534,7 +585,7 @@ class CapabilitiesTest(BaseGameClass):
         
         self._save_data()
                     
-        capabilities_file_path = f"{self.log_base_name}{self.log_suffix}.json"
+        capabilities_file_path = self.output_file if self.output_file else f"{self.log_base_name}{self.log_suffix}.json"
         self._log(f"Capabilities measurement completed. Results saved to: {capabilities_file_path}")
         return True, capabilities_file_path
 
@@ -619,7 +670,7 @@ class CapabilitiesTest(BaseGameClass):
         self._save_data()
                     
         # Return the path to the capabilities data file
-        capabilities_file_path = f"{self.log_base_name}{self.log_suffix}.json"
+        capabilities_file_path = self.output_file if self.output_file else f"{self.log_base_name}{self.log_suffix}.json"
         self._log(f"Capabilities measurement completed. Results saved to: {capabilities_file_path}")
         return True, capabilities_file_path
 
@@ -629,20 +680,19 @@ def main(model_dataset_dict, temp):
             IS_HUMAN = False
             INCLUDE_QNUM = False
             INCLUDE_TOTAL = False
-            resume_from = None#"capabilities_1p_test_logs/llama-3.3-70b-instruct_SimpleMC_500_1759847064_test_data.json"#
+            # Set resume_from to the existing results file to continue from where it left off
+            resume_from = "explicit_confidence_task_logs/llama-3.1-8b-instruct_PopMC_0_difficulty_filtered_11412_2025-11-25-17-02-17_explicit_confidence_task_all.json"
             RESAMPLE = False
             NESTED = "All" #values: None, "Self", "Other", "All"
             EXPLICIT_CONFIDENCE_TASK = True  # If True, ask two separate prompts: direct question + confidence question
             temp = temp
             seed = 42
             
-            # Set question count: use all available for large datasets, or sample for smaller ones
+            # Set question count: use all available questions for non-human players
             if IS_HUMAN:
                 N_QUESTIONS = 5
-            elif DATASET_NAME.startswith("GP"):
-                N_QUESTIONS = 447
             else:
-                N_QUESTIONS = 500  # Default sample size 
+                N_QUESTIONS = None  # Load all questions in the dataset 
             # Load questions first to get actual count
             formatted_questions = load_and_format_dataset(DATASET_NAME, N_QUESTIONS)
             if formatted_questions:
@@ -656,6 +706,15 @@ def main(model_dataset_dict, temp):
                 # Questions already loaded above
                 print(f"Using {actual_count} questions for capabilities measurement...")
 
+                # Determine output file - use resume_from file if resuming, otherwise None (default naming)
+                output_file = None
+                if resume_from and resume_from != "":
+                    output_file = resume_from
+                    print(f"Resuming from: {resume_from}")
+                    print(f"Will update existing file: {output_file}")
+                
+                # Shuffle questions AFTER determining resume status
+                # The resume logic in __init__ will filter out already answered questions
                 random.seed(seed)
                 random.shuffle(formatted_questions)
                     
@@ -679,7 +738,8 @@ def main(model_dataset_dict, temp):
                     nested=NESTED,
                     include_question_num=INCLUDE_QNUM,
                     include_total_questions=INCLUDE_TOTAL,
-                    explicit_confidence_task=EXPLICIT_CONFIDENCE_TASK
+                    explicit_confidence_task=EXPLICIT_CONFIDENCE_TASK,
+                    output_file=output_file
                 )
 
                 # Store the seed used (run-level, for reproducibility)
@@ -719,7 +779,7 @@ def main(model_dataset_dict, temp):
 if __name__ == "__main__":
     model_dataset_dict = {
         # "llama-3.3-70b-instruct": ["PopMC_0_difficulty_filtered"], # Don't forget PopMC_0_difficulty_filtered vs PopMC
-        "llama-3.1-405b-instruct": ["PopMC_0_difficulty_filtered"], # Don't forget PopMC_0_difficulty_filtered vs PopMC
+        "llama-3.1-8b-instruct": ["PopMC_0_difficulty_filtered"], # Don't forget PopMC_0_difficulty_filtered vs PopMC
 
         }
     main(model_dataset_dict, temp=1.0)

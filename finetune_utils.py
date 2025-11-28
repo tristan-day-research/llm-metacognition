@@ -2,8 +2,9 @@ import json
 import os
 import re
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 from torch.utils.data import Dataset
+import torch
 
 
 def write_log(log_file_path, entry_dict):
@@ -24,45 +25,192 @@ def write_log(log_file_path, entry_dict):
 def _get_log_file_path(log_dir, model_name, suffix):
     """Helper function to create log file paths."""
     os.makedirs(log_dir, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d-%H-%M-%S")
     model_name_safe = model_name.replace("/", "-").replace("_", "-")
     return os.path.join(
         log_dir, f"{model_name_safe}_{timestamp}_{suffix}.jsonl"
     )
 
 
-def build_confidence_prompts(batch):
+def validate_file_exists_and_not_empty(file_path, file_description="file"):
     """
-    Build explicit confidence prompts for a batch of questions.
-
+    Validate that a file exists and is not empty.
+    
     Args:
-        batch: list of dictionaries with 'question' and 'options' keys
-
-    Returns:
-        list of prompt strings
+        file_path: Path to the file to validate
+        file_description: Description of the file for error messages
+        
+    Raises:
+        FileNotFoundError: If file doesn't exist
+        ValueError: If file is empty
     """
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(
+            f"{file_description.capitalize()} not found: {file_path}\n"
+            f"Please provide a valid path to your {file_description}."
+        )
+    
+    # Check if file is empty
+    file_size = os.path.getsize(file_path)
+    if file_size == 0:
+        raise ValueError(
+            f"{file_description.capitalize()} is empty: {file_path}\n"
+            f"The file exists but contains no data. Please check your {file_description} file."
+        )
+
+
+def build_multiple_choice_question_prompts(batch):
+    """
+    Builds direct MCQ prompts matching explicit_confidence_task.py exactly.
+    Includes dashed formatting and specific indentation.
+    """
+    setup_prompt = (
+        "I'm going to ask you a series of multiple-choice questions. For each one, "
+        "select the answer you think is best. Respond only with the letter of your choice; "
+        "do NOT output any other text."
+    )
+    
     prompts = []
     for row in batch:
         question = row["question"]
         options = row["options"]
-        prompt = (
-            "I'm going to show you a multiple-choice question, and I want "
-            "you to tell me your level of confidence that you would get the "
-            "question right.\n"
-            "Respond only with a single letter from A to H; do NOT output any "
-            "other text.\n\n"
-            f"Question: {question}\n"
-            "Options:\n"
-            f"A. {options['A']}\n"
-            f"B. {options['B']}\n"
-            f"C. {options['C']}\n"
-            f"D. {options['D']}\n\n"
-            "How confident are you that you would get this question right?\n"
-            "Confidence: "
+        
+        # Structure matches BaseGameClass._present_question logic seen in logs
+        # Header: Question + Text
+        # Separator: 10 dashes
+        # Body: Indented Options
+        q_text = (
+            "------------------------------\n"
+            "Question:\n"
+            f"{question}\n"
+            "----------\n"
         )
-        prompts.append(prompt)
+        
+        # Options are indented by 2 spaces
+        for key in ["A", "B", "C", "D"]:
+            if key in options:
+                q_text += f"  {key}: {options[key]}\n"
+        
+        q_text += "------------------------------"
+        
+        # Full prompt assembly
+        llm_prompt = q_text + "\nYour choice (A, B, C, or D): "
+        full_prompt = setup_prompt + "\n\n" + llm_prompt
+        prompts.append(full_prompt)
+        
     return prompts
 
+
+def build_self_confidence_prompts(batch):
+    """
+    Builds self-confidence prompts matching explicit_confidence_task.py exactly.
+    """
+    setup_prompt = (
+        "I'm going to show you a multiple-choice question, and I want you to tell me "
+        "your level of confidence that you would get the question right. Respond only "
+        "with the letter corresponding to the percentage range you choose; do NOT output "
+        "any other text."
+    )
+    
+    # Matching explicit_confidence_task.py (lines 88-90)
+    nested_option_dict = {
+        "A": "<5%", "B": "5-10%", "C": "10-20%", "D": "20-40%", 
+        "E": "40-60%", "F": "60-80%", "G": "80-90%", "H": ">90%"
+    }
+    nested_question_prompt = "How confident are you that you would get this question right?"
+    
+    prompts = []
+    for row in batch:
+        question = row["question"]
+        options = row["options"]
+        
+        # Structure matches BaseGameClass._present_nested_question logic
+        # Header: Nested Prompt
+        # Separator: 10 dashes
+        # Body: Question Text + Indented Options
+        # Separator: 10 dashes
+        # Nested Body: Indented Nested Options
+        q_text = (
+            "------------------------------\n"
+            f"{nested_question_prompt}\n"
+            "----------\n"
+            f"{question}\n"
+        )
+        
+        # Original Question Options
+        for key in ["A", "B", "C", "D"]:
+            if key in options:
+                q_text += f"  {key}: {options[key]}\n"
+        
+        q_text += "----------\n"
+        
+        # Confidence Options
+        for key in ["A", "B", "C", "D", "E", "F", "G", "H"]:
+            q_text += f"  {key}: {nested_option_dict[key]}\n"
+            
+        q_text += "------------------------------"
+        
+        # Full prompt assembly
+        options_str = "A, B, C, D, E, F, G, or H"
+        llm_prompt = q_text + f"\nYour choice ({options_str}): "
+        full_prompt = setup_prompt + "\n\n" + llm_prompt
+        prompts.append(full_prompt)
+        
+    return prompts
+
+
+def build_other_confidence_prompts(batch):
+    """
+    Builds other-confidence (college-educated) prompts matching explicit_confidence_task.py exactly.
+    """
+    setup_prompt = (
+        "I want your help calibrating question difficulty. I'm going to show you a "
+        "multiple-choice question, and I want you to tell me approximately what "
+        "percentage of college-educated people you think would get it right. Respond "
+        "only with the letter corresponding to the percentage range you choose; do NOT "
+        "output any other text."
+    )
+    
+    # Matching explicit_confidence_task.py (lines 83-85)
+    nested_option_dict = {
+        "A": "<5%", "B": "5-10%", "C": "10-20%", "D": "20-40%", 
+        "E": "40-60%", "F": "60-80%", "G": "80-90%", "H": ">90%"
+    }
+    nested_question_prompt = "What percentage of college-educated people would get this question right?"
+    
+    prompts = []
+    for row in batch:
+        question = row["question"]
+        options = row["options"]
+        
+        # Structure matches BaseGameClass._present_nested_question logic
+        q_text = (
+            "------------------------------\n"
+            f"{nested_question_prompt}\n"
+            "----------\n"
+            f"{question}\n"
+        )
+        
+        # Original Question Options
+        for key in ["A", "B", "C", "D"]:
+            if key in options:
+                q_text += f"  {key}: {options[key]}\n"
+        
+        q_text += "----------\n"
+        
+        # Confidence Options
+        for key in ["A", "B", "C", "D", "E", "F", "G", "H"]:
+            q_text += f"  {key}: {nested_option_dict[key]}\n"
+            
+        q_text += "------------------------------"
+        
+        # Full prompt assembly
+        options_str = "A, B, C, D, E, F, G, or H"
+        llm_prompt = q_text + f"\nYour choice ({options_str}): "
+        full_prompt = setup_prompt + "\n\n" + llm_prompt
+        prompts.append(full_prompt)
+        
+    return prompts
 
 # ============================================================
 # Dataset: no logprobs needed, only the raw MCQ fields
@@ -459,7 +607,7 @@ def verify_and_resolve_options(row, mcq_results_lookup, log_file_path=None):
                 "type": "verification_no_lookup_found",
                 "qid": qid,
                 "question_snippet": batch_question[:50],
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat()
             })
         return None, batch_opts
 
@@ -474,7 +622,7 @@ def verify_and_resolve_options(row, mcq_results_lookup, log_file_path=None):
             write_log(log_file_path, {
                 "type": "verification_missing_options_in_record",
                 "qid": qid,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat()
             })
         return None, batch_opts
 
@@ -488,7 +636,7 @@ def verify_and_resolve_options(row, mcq_results_lookup, log_file_path=None):
                     "qid": qid,
                     "batch": batch_question,
                     "recorded": rec_q_text,
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": datetime.now(timezone.utc).isoformat()
                 })
             return None, batch_opts
 
@@ -512,7 +660,7 @@ def verify_and_resolve_options(row, mcq_results_lookup, log_file_path=None):
             "type": "verification_passed",
             "qid": qid,
             "question_snippet": batch_question[:50],
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         })
     
     return result_data, rec_opts
@@ -551,7 +699,7 @@ def verify_model_answer_match(pred_probs, result_data, qid=None,
             "predicted_answer": pred_letter,
             "recorded_answer": rec_ans,
             "predicted_probs": pred_probs.tolist(),
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         })
 
 
@@ -602,11 +750,16 @@ def log_wandb_metrics(metrics, step=None):
         pass  # Silently fail if wandb not available
 
 
-def log_wandb_config(updates):
-    """Update W&B config with new values."""
+def log_wandb_config(updates, allow_val_change=False):
+    """Update W&B config with new values.
+    
+    Args:
+        updates: Dictionary of config values to update
+        allow_val_change: If True, allows changing existing config values
+    """
     try:
         import wandb
-        wandb.config.update(updates)
+        wandb.config.update(updates, allow_val_change=allow_val_change)
     except (ImportError, AttributeError):
         pass
 
@@ -723,4 +876,274 @@ def finish_wandb():
     except (ImportError, AttributeError):
         pass
 
+
+def check_and_clear_gpu_memory(device, min_free_gb=5.0):
+    """
+    Check GPU memory status and clear cache if needed.
+    
+    Args:
+        device: Device string ("cuda" or "cpu")
+        min_free_gb: Minimum free memory in GB to warn about
+        
+    Returns:
+        dict with memory info if CUDA, None otherwise
+    """
+    if device == "cuda":
+        try:
+            import torch
+            if not torch.cuda.is_available():
+                return None
+                
+            # Clear any cached memory from previous runs
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+            
+            # Get memory info
+            total_memory = torch.cuda.get_device_properties(0).total_memory
+            allocated = torch.cuda.memory_allocated(0)
+            reserved = torch.cuda.memory_reserved(0)
+            free_memory = total_memory - reserved
+            
+            total_memory_gb = total_memory / (1024**3)
+            allocated_gb = allocated / (1024**3)
+            reserved_gb = reserved / (1024**3)
+            free_memory_gb = free_memory / (1024**3)
+            
+            print(f"GPU Memory Status (after cache clear):")
+            print(f"  Total: {total_memory_gb:.2f} GB")
+            print(f"  Allocated: {allocated_gb:.2f} GB")
+            print(f"  Reserved: {reserved_gb:.2f} GB")
+            print(f"  Free: {free_memory_gb:.2f} GB")
+            
+            # Warn if memory is low
+            if free_memory_gb < min_free_gb:
+                print(f"\n⚠️  WARNING: Low GPU memory ({free_memory_gb:.2f} GB free)")
+                print("   Llama-3-8B needs ~16GB to load. This may cause out-of-memory errors.")
+                print("\n   Solutions:")
+                print("   1. Restart Python/Python process to clear reserved memory")
+                print("   2. Run: python -c 'import torch; torch.cuda.empty_cache()' in another terminal")
+                print("   3. Restart the vast.ai instance to fully clear GPU memory")
+                print("   4. Check for zombie processes: ps aux | grep python")
+            
+            return {
+                "total_gb": total_memory_gb,
+                "allocated_gb": allocated_gb,
+                "reserved_gb": reserved_gb,
+                "free_gb": free_memory_gb
+            }
+        except Exception:
+            return None
+    return None
+
+
+def load_model_with_error_handling(model_name, device):
+    """
+    Load model with memory-efficient settings and proper error handling.
+    
+    Args:
+        model_name: HuggingFace model name or path
+        device: Device to load model on ("cuda" or "cpu")
+        
+    Returns:
+        Loaded model
+        
+    Raises:
+        torch.cuda.OutOfMemoryError: If GPU out of memory with helpful message
+    """
+    import torch
+    from transformers import AutoModelForCausalLM
+    
+    try:
+        # Use low_cpu_mem_usage to reduce peak memory during loading
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            torch_dtype=torch.bfloat16 if device == "cuda" else torch.float32,
+            low_cpu_mem_usage=True,
+            device_map=None
+        )
+        
+        # Move to device after loading
+        if device == "cuda":
+            torch.cuda.empty_cache()
+            model = model.to(device)
+        else:
+            model = model.to(device)
+            
+        return model
+    except torch.cuda.OutOfMemoryError as e:
+        print("\n❌ CUDA Out of Memory Error!")
+        print("The GPU does not have enough free memory to load the model.")
+        print("\nCurrent GPU memory status:")
+        if torch.cuda.is_available():
+            total = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+            allocated = torch.cuda.memory_allocated(0) / (1024**3)
+            reserved = torch.cuda.memory_reserved(0) / (1024**3)
+            free = total - reserved
+            print(f"  Total: {total:.2f} GB")
+            print(f"  Allocated: {allocated:.2f} GB")
+            print(f"  Reserved: {reserved:.2f} GB")
+            print(f"  Free: {free:.2f} GB")
+        print("\n🔍 Check what's using GPU memory:")
+        print("   nvidia-smi")
+        print("\n💡 Solutions (try in order):")
+        print("1. Kill other processes using the GPU:")
+        print("   nvidia-smi  # Find PIDs")
+        print("   kill <PID>  # Kill processes")
+        print("\n2. Try setting expandable_segments to reduce fragmentation:")
+        print("   export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True")
+        print("   # Then re-run your script")
+        print("\n3. Restart the vast.ai instance to fully clear GPU memory")
+        print("\n4. Use a GPU with more memory or reduce model size")
+        raise
+
+
+def setup_tokenizer(model_name):
+    """
+    Load and configure tokenizer for causal LM.
+    
+    Args:
+        model_name: HuggingFace model name or path
+        
+    Returns:
+        Configured tokenizer
+    """
+    from transformers import AutoTokenizer
+    
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    # Set pad_token if it doesn't exist (common for Llama models)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = "right"  # Standard for causal LMs
+    return tokenizer
+
+
+def validate_and_load_dataset(data_path, dataset_type="training"):
+    """
+    Validate and load a dataset file.
+    
+    Args:
+        data_path: Path to JSONL dataset file
+        dataset_type: Type of dataset ("training" or "validation")
+        
+    Returns:
+        MCQDataset instance
+        
+    Raises:
+        FileNotFoundError: If file doesn't exist
+        ValueError: If dataset is empty
+    """
+    if not os.path.exists(data_path):
+        raise FileNotFoundError(
+            f"{dataset_type.capitalize()} data file not found: {data_path}\n"
+            f"Please provide a valid path to your {dataset_type} dataset."
+        )
+    
+    dataset = MCQDataset(data_path)
+    if len(dataset) == 0:
+        raise ValueError(
+            f"{dataset_type.capitalize()} dataset is empty: {data_path}\n"
+            f"The file exists but contains no data. Please check your dataset file."
+        )
+    
+    return dataset
+
+
+def log_prompts_and_responses(step, prompt_log_file_path, answer_logits4, conf_logits8,
+                               batch, answer_prompts, confidence_prompts, soft_targets):
+    """
+    Log prompts and responses for first 2 steps.
+    
+    Args:
+        step: Current training step
+        prompt_log_file_path: Path to log file for prompts
+        answer_logits4: Logits for MCQ answers [B, 4]
+        conf_logits8: Logits for confidence bins [B, 8]
+        batch: Batch of question data
+        answer_prompts: List of MCQ prompts
+        confidence_prompts: List of confidence prompts
+        soft_targets: Soft target distributions [B, 8]
+    """
+    # if step is not None and step < 3 and prompt_log_file_path:
+    #     # Compute probabilities and predictions for logging
+    #     with torch.no_grad():
+    #         # First forward pass: MCQ answer probabilities
+    #         mcq_probs = torch.softmax(answer_logits4, dim=-1)  # [B, 4]
+    #         mcq_predicted = mcq_probs.argmax(dim=-1)  # [B]
+            
+    #         # Second forward pass: Confidence bin probabilities
+    #         conf_probs = torch.softmax(conf_logits8, dim=-1)  # [B, 8]
+    #         conf_predicted = conf_probs.argmax(dim=-1)  # [B]
+        
+    #     for i in range(len(batch)):
+    #         # Convert predictions to letters
+    #         mcq_pred_letter = "ABCD"[mcq_predicted[i].item()]
+    #         conf_pred_letter = "ABCDEFGH"[conf_predicted[i].item()]
+            
+    #         log_entry = {
+    #             "type": "prompt_and_response_pair",
+    #             "step": step,
+    #             "batch_index": i,
+    #             "qid": batch[i].get("qid"),
+    #             "mcq_prompt": answer_prompts[i],
+    #             "mcq_response": {
+    #                 "logits": answer_logits4[i].cpu().tolist(),
+    #                 "probabilities": mcq_probs[i].cpu().tolist(),
+    #                 "predicted_answer": mcq_pred_letter,
+    #                 "probabilities_dict": {
+    #                     "A": float(mcq_probs[i][0].item()),
+    #                     "B": float(mcq_probs[i][1].item()),
+    #                     "C": float(mcq_probs[i][2].item()),
+    #                     "D": float(mcq_probs[i][3].item()),
+    #                 }
+    #             },
+    #             "confidence_prompt": confidence_prompts[i],
+    #             "confidence_response": {
+    #                 "logits": conf_logits8[i].cpu().tolist(),
+    #                 "probabilities": conf_probs[i].cpu().tolist(),
+    #                 "predicted_bin": conf_pred_letter,
+    #                 "probabilities_dict": {
+    #                     "A": float(conf_probs[i][0].item()),
+    #                     "B": float(conf_probs[i][1].item()),
+    #                     "C": float(conf_probs[i][2].item()),
+    #                     "D": float(conf_probs[i][3].item()),
+    #                     "E": float(conf_probs[i][4].item()),
+    #                     "F": float(conf_probs[i][5].item()),
+    #                     "G": float(conf_probs[i][6].item()),
+    #                     "H": float(conf_probs[i][7].item()),
+    #                 }
+    #             },
+    #             "soft_targets": soft_targets[i].cpu().tolist(),
+    #             "timestamp": datetime.now(timezone.utc).isoformat()
+    #         }
+    #         write_log(prompt_log_file_path, log_entry)
+            
+    #         # Also print to console
+    #         print(f"\n{'='*80}")
+    #         print(f"STEP {step} | BATCH INDEX {i} | QID: {batch[i].get('qid')}")
+    #         print(f"{'='*80}")
+    #         print(f"\nMCQ PROMPT (First forward pass):")
+    #         print(f"{'-'*80}")
+    #         print(answer_prompts[i])
+    #         print(f"\nMCQ RESPONSE:")
+    #         print(f"{'-'*80}")
+    #         print(f"  Predicted Answer: {mcq_pred_letter}")
+    #         print(f"  Probabilities: A={mcq_probs[i][0]:.4f}, B={mcq_probs[i][1]:.4f}, "
+    #               f"C={mcq_probs[i][2]:.4f}, D={mcq_probs[i][3]:.4f}")
+    #         print(f"  Logits: {answer_logits4[i].cpu().tolist()}")
+    #         print(f"\nCONFIDENCE PROMPT (Second forward pass - separate context):")
+    #         print(f"{'-'*80}")
+    #         print(confidence_prompts[i])
+    #         print(f"\nCONFIDENCE RESPONSE:")
+    #         print(f"{'-'*80}")
+    #         print(f"  Predicted Bin: {conf_pred_letter}")
+    #         conf_bin_labels = ["A: <5%", "B: 5-10%", "C: 10-20%", "D: 20-40%",
+    #                           "E: 40-60%", "F: 60-80%", "G: 80-90%", "H: >90%"]
+    #         print(f"  Probabilities:")
+    #         for j, label in enumerate(conf_bin_labels):
+    #             print(f"    {label}: {conf_probs[i][j]:.4f}")
+    #         print(f"  Logits: {conf_logits8[i].cpu().tolist()}")
+    #         print(f"\nSOFT TARGETS (Training target):")
+    #         print(f"{'-'*80}")
+    #         print(f"  {soft_targets[i].cpu().tolist()}")
+    #         print(f"{'='*80}\n")
 

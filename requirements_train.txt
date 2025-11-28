@@ -5,3 +5,5 @@ accelerate
 sentencepiece
 wandb
 huggingface_hub
+pandas
+scipy

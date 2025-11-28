@@ -24,7 +24,8 @@ class CapabilitiesTest(BaseGameClass):
         include_question_num=False,
         include_total_questions=False,
         explicit_confidence_task=False,
-        output_file=None
+        output_file=None,
+        print_llm_interactions=False
     ):
         """
         Args:
@@ -40,6 +41,7 @@ class CapabilitiesTest(BaseGameClass):
                 then the confidence question. The LLM won't know it already answered the question.
                 Note: This parameter is ignored when nested="All" (which already does separate queries).
             output_file (str): Path to output file. If None, uses default naming. If set and file exists, will update it.
+            print_llm_interactions (bool): If True, print each question sent to the LLM and the LLM's response.
         """
         if explicit_confidence_task:
             filepath = "explicit_confidence_task_logs"
@@ -64,6 +66,7 @@ class CapabilitiesTest(BaseGameClass):
         self.include_total_questions = include_total_questions
         self.explicit_confidence_task = explicit_confidence_task
         self.output_file = output_file
+        self.print_llm_interactions = print_llm_interactions
 
         self.mc_setup_prompt = "I'm going to ask you a series of multiple-choice questions. For each one, select the answer you think is best. Respond only with the letter of your choice; do NOT output any other text."
         self.sa_setup_prompt = "I'm going to ask you a series of short-answer questions. For each one, respond as succinctly as possible. Answer as best you can, even if you're not certain."
@@ -309,7 +312,7 @@ class CapabilitiesTest(BaseGameClass):
 
             # --- Phase 3: Process the results ---
             self._log("Processing results from parallel execution...")
-            for result_item in parallel_results:
+            for idx, result_item in enumerate(parallel_results, start=1):
                 if result_item.get('error'):
                     self._log(f"ERROR: Task for question '{result_item['task']['question_obj'].get('id')}' failed: {result_item['error']}")
                     continue
@@ -318,6 +321,18 @@ class CapabilitiesTest(BaseGameClass):
                 question = result_item['task']['question_obj']
                 options = result_item['task']['options']
                 RANGE_MIDPOINTS = result_item['task'].get('range_midpoints')
+                prompt = result_item['task']['prompt']
+                
+                if self.print_llm_interactions:
+                    print(f"\n{'='*80}")
+                    print(f"Question {idx}/{len(parallel_results)} (Parallel):")
+                    print(f"{'='*80}")
+                    print(prompt)
+                    print(f"{'='*80}\n")
+                    print(f"LLM Response: {subject_answer}")
+                    if probs:
+                        print(f"Probabilities: {probs}")
+                    print()
                 
                 subject_decision = self._parse_subject_decision(subject_answer, options)
 
@@ -402,15 +417,25 @@ class CapabilitiesTest(BaseGameClass):
                             i if self.include_question_num else None,
                             total_q if self.include_total_questions else None
                         )
+                        full_prompt_direct = setup_prompt_direct + "\n\n" + llm_prompt_direct
+                        print(f"\n{'='*80}")
+                        print(f"Question {i}/{total_q} - Direct Question:")
+                        print(f"{'='*80}")
+                        print(full_prompt_direct)
+                        print(f"{'='*80}\n")
                         subject_answer, _, probs = self._get_llm_answer(
                             options_direct,
-                            setup_prompt_direct + "\n\n" + llm_prompt_direct,
+                            full_prompt_direct,
                             [],  # Empty message history - separate conversation
                             keep_appending=gla_args["keep_appending"],
                             MAX_TOKENS=gla_args["MAX_TOKENS"],
                             temp=gla_args["temp"],
                             accept_any=gla_args["accept_any"]
                         )
+                        print(f"LLM Response: {subject_answer}")
+                        if probs:
+                            print(f"Probabilities: {probs}")
+                        print()
                         
                         # Second prompt: Ask self-confidence question (nested="Self")
                         self.nested = "Self"
@@ -421,15 +446,27 @@ class CapabilitiesTest(BaseGameClass):
                             i if self.include_question_num else None,
                             total_q if self.include_total_questions else None
                         )
+                        full_prompt_self = setup_prompt_self + "\n\n" + llm_prompt_self
+                        if self.print_llm_interactions:
+                            print(f"\n{'='*80}")
+                            print(f"Question {i}/{total_q} - Self-Confidence Question:")
+                            print(f"{'='*80}")
+                            print(full_prompt_self)
+                            print(f"{'='*80}\n")
                         self_confidence_answer, _, self_confidence_probs = self._get_llm_answer(
                             options_self,
-                            setup_prompt_self + "\n\n" + llm_prompt_self,
+                            full_prompt_self,
                             [],  # Empty message history - separate conversation
                             keep_appending=gla_args["keep_appending"],
                             MAX_TOKENS=gla_args["MAX_TOKENS"],
                             temp=gla_args["temp"],
                             accept_any=gla_args["accept_any"]
                         )
+                        if self.print_llm_interactions:
+                            print(f"LLM Response: {self_confidence_answer}")
+                            if self_confidence_probs:
+                                print(f"Probabilities: {self_confidence_probs}")
+                            print()
                         
                         # Third prompt: Ask other-confidence question (nested="Other")
                         self.nested = "Other"
@@ -440,15 +477,27 @@ class CapabilitiesTest(BaseGameClass):
                             i if self.include_question_num else None,
                             total_q if self.include_total_questions else None
                         )
+                        full_prompt_other = setup_prompt_other + "\n\n" + llm_prompt_other
+                        if self.print_llm_interactions:
+                            print(f"\n{'='*80}")
+                            print(f"Question {i}/{total_q} - Other-Confidence Question:")
+                            print(f"{'='*80}")
+                            print(full_prompt_other)
+                            print(f"{'='*80}\n")
                         other_confidence_answer, _, other_confidence_probs = self._get_llm_answer(
                             options_other,
-                            setup_prompt_other + "\n\n" + llm_prompt_other,
+                            full_prompt_other,
                             [],  # Empty message history - separate conversation
                             keep_appending=gla_args["keep_appending"],
                             MAX_TOKENS=gla_args["MAX_TOKENS"],
                             temp=gla_args["temp"],
                             accept_any=gla_args["accept_any"]
                         )
+                        if self.print_llm_interactions:
+                            print(f"LLM Response: {other_confidence_answer}")
+                            if other_confidence_probs:
+                                print(f"Probabilities: {other_confidence_probs}")
+                            print()
                         
                         # Restore original nested value
                         self.nested = original_nested
@@ -474,15 +523,27 @@ class CapabilitiesTest(BaseGameClass):
                             total_q if self.include_total_questions else None
                         )
                         # Use empty message history so LLM doesn't know about previous answer
+                        full_prompt_direct = setup_prompt_direct + "\n\n" + llm_prompt_direct
+                        if self.print_llm_interactions:
+                            print(f"\n{'='*80}")
+                            print(f"Question {i}/{total_q} - Direct Question:")
+                            print(f"{'='*80}")
+                            print(full_prompt_direct)
+                            print(f"{'='*80}\n")
                         subject_answer, _, probs = self._get_llm_answer(
                             options_direct,
-                            setup_prompt_direct + "\n\n" + llm_prompt_direct,
+                            full_prompt_direct,
                             [],  # Empty message history - separate conversation
                             keep_appending=gla_args["keep_appending"],
                             MAX_TOKENS=gla_args["MAX_TOKENS"],
                             temp=gla_args["temp"],
                             accept_any=gla_args["accept_any"]
                         )
+                        if self.print_llm_interactions:
+                            print(f"LLM Response: {subject_answer}")
+                            if probs:
+                                print(f"Probabilities: {probs}")
+                            print()
                         
                         # Second prompt: Ask the confidence question (with nested="Self")
                         self.nested = "Self"
@@ -499,15 +560,27 @@ class CapabilitiesTest(BaseGameClass):
                             total_q if self.include_total_questions else None
                         )
                         # Use empty message history - separate conversation
+                        full_prompt_confidence = setup_prompt_confidence + "\n\n" + llm_prompt_confidence
+                        if self.print_llm_interactions:
+                            print(f"\n{'='*80}")
+                            print(f"Question {i}/{total_q} - Confidence Question:")
+                            print(f"{'='*80}")
+                            print(full_prompt_confidence)
+                            print(f"{'='*80}\n")
                         confidence_answer, _, confidence_probs = self._get_llm_answer(
                             options_confidence,
-                            setup_prompt_confidence + "\n\n" + llm_prompt_confidence,
+                            full_prompt_confidence,
                             [],  # Empty message history - separate conversation
                             keep_appending=gla_args["keep_appending"],
                             MAX_TOKENS=gla_args["MAX_TOKENS"],
                             temp=gla_args["temp"],
                             accept_any=gla_args["accept_any"]
                         )
+                        if self.print_llm_interactions:
+                            print(f"LLM Response: {confidence_answer}")
+                            if confidence_probs:
+                                print(f"Probabilities: {confidence_probs}")
+                            print()
                         # Restore original nested value
                         self.nested = original_nested
                         
@@ -524,15 +597,27 @@ class CapabilitiesTest(BaseGameClass):
                             total_q if self.include_total_questions else None
                         )
 
+                        full_prompt = setup_prompt + "\n\n" + llm_prompt
+                        if self.print_llm_interactions:
+                            print(f"\n{'='*80}")
+                            print(f"Question {i}/{total_q}:")
+                            print(f"{'='*80}")
+                            print(full_prompt)
+                            print(f"{'='*80}\n")
                         subject_answer, _, probs = self._get_llm_answer(
                             options,
-                            setup_prompt + "\n\n" + llm_prompt,
+                            full_prompt,
                             gla_args["message_history"],
                             keep_appending=gla_args["keep_appending"],
                             MAX_TOKENS=gla_args["MAX_TOKENS"],
                             temp=gla_args["temp"],
                             accept_any=gla_args["accept_any"]
                         )
+                        if self.print_llm_interactions:
+                            print(f"LLM Response: {subject_answer}")
+                            if probs:
+                                print(f"Probabilities: {probs}")
+                            print()
                         confidence_answer = None
                         confidence_probs = None
                         confidence_decision = None
@@ -642,14 +727,26 @@ class CapabilitiesTest(BaseGameClass):
                 llm_prompt = q_text + "\nYour answer: "
                 setup_prompt = self.sa_setup_prompt
                 gla_args = self.run_parameters["get_llm_answer_static_args"]
+                full_prompt = setup_prompt + "\n\n" + llm_prompt
+                if self.print_llm_interactions:
+                    print(f"\n{'='*80}")
+                    print(f"Question {i}/{total_q} (Short Answer):")
+                    print(f"{'='*80}")
+                    print(full_prompt)
+                    print(f"{'='*80}\n")
                 subject_answer, _, probs = self._get_llm_answer(
                     None,
-                    setup_prompt + "\n\n" + llm_prompt,
+                    full_prompt,
                     gla_args["message_history"], # no history
                     keep_appending=gla_args["keep_appending"],
                     MAX_TOKENS=gla_args["MAX_TOKENS"],
                     temp=gla_args["temp"]
                 )
+                if self.print_llm_interactions:
+                    print(f"LLM Response: {subject_answer}")
+                    if probs:
+                        print(f"Probabilities: {probs}")
+                    print()
                         
             # Store result
             if subject_answer != "":
@@ -681,10 +778,11 @@ def main(model_dataset_dict, temp):
             INCLUDE_QNUM = False
             INCLUDE_TOTAL = False
             # Set resume_from to the existing results file to continue from where it left off
-            resume_from = "explicit_confidence_task_logs/llama-3.1-8b-instruct_PopMC_0_difficulty_filtered_11412_2025-11-25-17-02-17_explicit_confidence_task_all.json"
-            RESAMPLE = False
+            # resume_from = "explicit_confidence_task_logs/llama-3.1-8b-instruct_PopMC_0_difficulty_filtered_11412_2025-11-25-17-02-17_explicit_confidence_task_all.json"
+            resume_from = False
             NESTED = "All" #values: None, "Self", "Other", "All"
             EXPLICIT_CONFIDENCE_TASK = True  # If True, ask two separate prompts: direct question + confidence question
+            PRINT_LLM_INTERACTIONS = False  # If True, print each question sent to the LLM and the LLM's response
             temp = temp
             seed = 42
             
@@ -692,7 +790,7 @@ def main(model_dataset_dict, temp):
             if IS_HUMAN:
                 N_QUESTIONS = 5
             else:
-                N_QUESTIONS = None  # Load all questions in the dataset 
+                N_QUESTIONS = 10  # Load all questions in the dataset 
             # Load questions first to get actual count
             formatted_questions = load_and_format_dataset(DATASET_NAME, N_QUESTIONS)
             if formatted_questions:
@@ -734,12 +832,13 @@ def main(model_dataset_dict, temp):
                     is_human_player=IS_HUMAN,
                     resume_from=resume_from,
                     temperature=temp,
-                    resample_for_probs=RESAMPLE,
+                    # resample_for_probs=RESAMPLE,
                     nested=NESTED,
                     include_question_num=INCLUDE_QNUM,
                     include_total_questions=INCLUDE_TOTAL,
                     explicit_confidence_task=EXPLICIT_CONFIDENCE_TASK,
-                    output_file=output_file
+                    output_file=output_file,
+                    print_llm_interactions=PRINT_LLM_INTERACTIONS
                 )
 
                 # Store the seed used (run-level, for reproducibility)

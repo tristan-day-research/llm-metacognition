@@ -1,0 +1,851 @@
+{"message": "Loaded 21304 MCQ results entries"}
+{"type": "verification_passed", "qid": "popmc_test_5113889", "question_snippet": "Who was the director of Mata?", "timestamp": "2025-11-28T00:42:12.372791"}
+{"type": "verification_passed", "qid": "popmc_test_313396", "question_snippet": "What is Soria the capital of?", "timestamp": "2025-11-28T00:42:12.372878"}
+{"type": "verification_passed", "qid": "popmc_test_5068264", "question_snippet": "Who was the screenwriter for Manhattan?", "timestamp": "2025-11-28T00:42:12.372924"}
+{"type": "verification_passed", "qid": "popmc_test_5111257", "question_snippet": "What is Masayoshi Nataniya's occupation?", "timestamp": "2025-11-28T00:42:12.372962"}
+{"type": "verification_passed", "qid": "popmc_test_2074848", "question_snippet": "Who is the father of Charles of Valois?", "timestamp": "2025-11-28T00:42:12.372998"}
+{"type": "verification_passed", "qid": "popmc_test_4004443", "question_snippet": "In what country is Eglon?", "timestamp": "2025-11-28T00:42:12.373033"}
+{"type": "verification_passed", "qid": "popmc_test_108188", "question_snippet": "Who was the screenwriter for Japón?", "timestamp": "2025-11-28T00:42:12.373067"}
+{"type": "verification_passed", "qid": "popmc_test_2983287", "question_snippet": "Who was the screenwriter for Resurrection?", "timestamp": "2025-11-28T00:42:12.373102"}
+{"type": "verification_passed", "qid": "popmc_test_1495173", "question_snippet": "Who was the director of Anybody's Woman?", "timestamp": "2025-11-28T00:42:13.481361"}
+{"type": "verification_passed", "qid": "popmc_test_4331633", "question_snippet": "What is Iba the capital of?", "timestamp": "2025-11-28T00:42:13.481497"}
+{"type": "verification_passed", "qid": "popmc_test_5383283", "question_snippet": "What is Paris's occupation?", "timestamp": "2025-11-28T00:42:13.481540"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_152102", "question_snippet": "What genre is First Love?", "timestamp": "2025-11-28T00:42:13.481598"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_3216986", "question_snippet": "Who was the director of Accident?", "timestamp": "2025-11-28T00:42:13.481642"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_4034856", "question_snippet": "Who is the author of Empire?", "timestamp": "2025-11-28T00:42:13.481681"}
+{"type": "verification_passed", "qid": "popmc_test_5906207", "question_snippet": "Who was the director of That Summer?", "timestamp": "2025-11-28T00:42:13.481717"}
+{"type": "verification_passed", "qid": "popmc_test_1751617", "question_snippet": "Who was the director of The Letter?", "timestamp": "2025-11-28T00:42:13.481751"}
+{"error": "No recorded MCQ results for qid: popmc_test_152102, using dynamic teacher fallback", "qid": "popmc_test_152102"}
+{"error": "No recorded MCQ results for qid: popmc_test_3216986, using dynamic teacher fallback", "qid": "popmc_test_3216986"}
+{"error": "No recorded MCQ results for qid: popmc_test_4034856, using dynamic teacher fallback", "qid": "popmc_test_4034856"}
+{"type": "verification_passed", "qid": "popmc_test_4901059", "question_snippet": "Who was the producer of LOL?", "timestamp": "2025-11-28T00:42:13.981772"}
+{"type": "verification_passed", "qid": "popmc_test_3633815", "question_snippet": "Who was the composer of Candy?", "timestamp": "2025-11-28T00:42:13.981899"}
+{"type": "verification_passed", "qid": "popmc_test_5332462", "question_snippet": "Who is the author of Old Money?", "timestamp": "2025-11-28T00:42:13.981941"}
+{"type": "verification_passed", "qid": "popmc_test_2841140", "question_snippet": "What sport does Adílson Batista play?", "timestamp": "2025-11-28T00:42:13.981978"}
+{"type": "verification_passed", "qid": "popmc_test_5004691", "question_snippet": "Who was the director of Lizards?", "timestamp": "2025-11-28T00:42:13.982016"}
+{"type": "verification_passed", "qid": "popmc_test_5383095", "question_snippet": "Who was the director of Pariah?", "timestamp": "2025-11-28T00:42:13.982068"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_4534055", "question_snippet": "Who was the screenwriter for I Love You?", "timestamp": "2025-11-28T00:42:13.982118"}
+{"type": "verification_passed", "qid": "popmc_test_3763323", "question_snippet": "Who is the father of Colcu mac Domnaill?", "timestamp": "2025-11-28T00:42:13.982163"}
+{"error": "No recorded MCQ results for qid: popmc_test_4534055, using dynamic teacher fallback", "qid": "popmc_test_4534055"}
+{"type": "verification_passed", "qid": "popmc_test_5953033", "question_snippet": "Who was the director of The Saint?", "timestamp": "2025-11-28T00:42:14.557472"}
+{"type": "verification_passed", "qid": "popmc_test_5431559", "question_snippet": "What is Peter Murnoy's occupation?", "timestamp": "2025-11-28T00:42:14.557610"}
+{"type": "verification_passed", "qid": "popmc_test_4350002", "question_snippet": "Who was the producer of Another Year?", "timestamp": "2025-11-28T00:42:14.557663"}
+{"type": "verification_passed", "qid": "popmc_test_5318700", "question_snippet": "Who was the composer of Nurse?", "timestamp": "2025-11-28T00:42:14.557704"}
+{"type": "verification_passed", "qid": "popmc_test_3777407", "question_snippet": "Who was the producer of Condition?", "timestamp": "2025-11-28T00:42:14.557749"}
+{"type": "verification_passed", "qid": "popmc_test_1182482", "question_snippet": "Who is the author of Let's Take the Long Way Home?", "timestamp": "2025-11-28T00:42:14.557782"}
+{"type": "verification_passed", "qid": "popmc_test_1368385", "question_snippet": "What is Mildred Okwo's occupation?", "timestamp": "2025-11-28T00:42:14.557816"}
+{"type": "verification_passed", "qid": "popmc_test_2541619", "question_snippet": "What sport does Henk Timmer play?", "timestamp": "2025-11-28T00:42:14.557848"}
+{"type": "verification_passed", "qid": "popmc_test_4652935", "question_snippet": "Who was the producer of Jayam Manade Raa?", "timestamp": "2025-11-28T00:42:15.073804"}
+{"type": "verification_passed", "qid": "popmc_test_5520260", "question_snippet": "Who is the author of Race?", "timestamp": "2025-11-28T00:42:15.073929"}
+{"type": "verification_passed", "qid": "popmc_test_5495431", "question_snippet": "What genre is Prototype?", "timestamp": "2025-11-28T00:42:15.073973"}
+{"type": "verification_passed", "qid": "popmc_test_2774195", "question_snippet": "What genre is Covers?", "timestamp": "2025-11-28T00:42:15.074010"}
+{"type": "verification_passed", "qid": "popmc_test_5360289", "question_snippet": "Who is the author of Out of Order?", "timestamp": "2025-11-28T00:42:15.074045"}
+{"type": "verification_passed", "qid": "popmc_test_5113194", "question_snippet": "Who was the producer of Master?", "timestamp": "2025-11-28T00:42:15.074088"}
+{"type": "verification_passed", "qid": "popmc_test_1175451", "question_snippet": "What genre is A Winter of Cyclists?", "timestamp": "2025-11-28T00:42:15.074120"}
+{"type": "verification_passed", "qid": "popmc_test_1647876", "question_snippet": "Who was the composer of 1984?", "timestamp": "2025-11-28T00:42:15.074151"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_1811012", "question_snippet": "Who was the producer of Lemon?", "timestamp": "2025-11-28T00:42:15.596632"}
+{"type": "verification_passed", "qid": "popmc_test_5578162", "question_snippet": "What genre is Kill?", "timestamp": "2025-11-28T00:42:15.596714"}
+{"type": "verification_passed", "qid": "popmc_test_2206348", "question_snippet": "Who was the screenwriter for Genesis?", "timestamp": "2025-11-28T00:42:15.596767"}
+{"type": "verification_passed", "qid": "popmc_test_526116", "question_snippet": "What is Vic the capital of?", "timestamp": "2025-11-28T00:42:15.596809"}
+{"type": "verification_passed", "qid": "popmc_test_1710792", "question_snippet": "Who was the producer of The Criminal?", "timestamp": "2025-11-28T00:42:15.596844"}
+{"type": "verification_passed", "qid": "popmc_test_2436588", "question_snippet": "Who was the director of Enclosure?", "timestamp": "2025-11-28T00:42:15.596888"}
+{"type": "verification_passed", "qid": "popmc_test_3554379", "question_snippet": "What is the capital of Lewis County?", "timestamp": "2025-11-28T00:42:15.596921"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_5453524", "question_snippet": "Who was the director of Pilot?", "timestamp": "2025-11-28T00:42:15.596958"}
+{"error": "No recorded MCQ results for qid: popmc_test_1811012, using dynamic teacher fallback", "qid": "popmc_test_1811012"}
+{"error": "No recorded MCQ results for qid: popmc_test_5453524, using dynamic teacher fallback", "qid": "popmc_test_5453524"}
+{"type": "verification_passed", "qid": "popmc_test_3697904", "question_snippet": "What genre is Skin?", "timestamp": "2025-11-28T00:42:16.060365"}
+{"type": "verification_passed", "qid": "popmc_test_5549934", "question_snippet": "Who is the author of Recursion?", "timestamp": "2025-11-28T00:42:16.060489"}
+{"type": "verification_passed", "qid": "popmc_test_1975787", "question_snippet": "Who was the screenwriter for Tickets?", "timestamp": "2025-11-28T00:42:16.060532"}
+{"type": "verification_passed", "qid": "popmc_test_3417474", "question_snippet": "Who is the author of Freezing?", "timestamp": "2025-11-28T00:42:16.060576"}
+{"type": "verification_passed", "qid": "popmc_test_3875467", "question_snippet": "In what country is DeWitt Township?", "timestamp": "2025-11-28T00:42:16.060620"}
+{"type": "verification_passed", "qid": "popmc_test_906463", "question_snippet": "Who was the producer of I Like?", "timestamp": "2025-11-28T00:42:16.060654"}
+{"type": "verification_passed", "qid": "popmc_test_4073456", "question_snippet": "Who is the author of Eva?", "timestamp": "2025-11-28T00:42:16.060687"}
+{"type": "verification_passed", "qid": "popmc_test_2358241", "question_snippet": "Who was the director of Green Tea?", "timestamp": "2025-11-28T00:42:16.060721"}
+{"type": "verification_passed", "qid": "popmc_test_3479251", "question_snippet": "What genre is Between God?", "timestamp": "2025-11-28T00:42:16.537483"}
+{"type": "verification_passed", "qid": "popmc_test_5277834", "question_snippet": "Who was the producer of Postal?", "timestamp": "2025-11-28T00:42:16.537593"}
+{"type": "verification_passed", "qid": "popmc_test_926802", "question_snippet": "In what city was Kevin Morton born?", "timestamp": "2025-11-28T00:42:16.537666"}
+{"type": "verification_passed", "qid": "popmc_test_3803489", "question_snippet": "Who is the author of Cross My Heart and Hope to Sp", "timestamp": "2025-11-28T00:42:16.537702"}
+{"type": "verification_passed", "qid": "popmc_test_3516235", "question_snippet": "What is the religion of Birmingham–Southern Colleg", "timestamp": "2025-11-28T00:42:16.537743"}
+{"type": "verification_passed", "qid": "popmc_test_6390063", "question_snippet": "What genre is Breathe?", "timestamp": "2025-11-28T00:42:16.537780"}
+{"type": "verification_passed", "qid": "popmc_test_506311", "question_snippet": "Who was the director of Still Life?", "timestamp": "2025-11-28T00:42:16.537814"}
+{"type": "verification_passed", "qid": "popmc_test_5325447", "question_snippet": "Who is the author of Odds On?", "timestamp": "2025-11-28T00:42:16.537858"}
+{"type": "verification_passed", "qid": "popmc_test_3049881", "question_snippet": "Who was the director of Transit?", "timestamp": "2025-11-28T00:42:16.996159"}
+{"type": "verification_passed", "qid": "popmc_test_3436303", "question_snippet": "Who was the director of Spring Waltz?", "timestamp": "2025-11-28T00:42:16.996283"}
+{"type": "verification_passed", "qid": "popmc_test_2140148", "question_snippet": "Who is the author of Western?", "timestamp": "2025-11-28T00:42:16.996340"}
+{"type": "verification_passed", "qid": "popmc_test_1173999", "question_snippet": "Who is the author of Lest We Remember?", "timestamp": "2025-11-28T00:42:16.996378"}
+{"type": "verification_passed", "qid": "popmc_test_1612356", "question_snippet": "Who was the producer of 18?", "timestamp": "2025-11-28T00:42:16.996411"}
+{"type": "verification_passed", "qid": "popmc_test_1317713", "question_snippet": "What genre is The Music?", "timestamp": "2025-11-28T00:42:16.996453"}
+{"type": "verification_passed", "qid": "popmc_test_1437954", "question_snippet": "Who is the author of The Third Gate?", "timestamp": "2025-11-28T00:42:16.996487"}
+{"type": "verification_passed", "qid": "popmc_test_268085", "question_snippet": "In what city was Gerhard Ludwig born?", "timestamp": "2025-11-28T00:42:16.996527"}
+{"type": "verification_passed", "qid": "popmc_test_403310", "question_snippet": "Who was the screenwriter for True Crime?", "timestamp": "2025-11-28T00:42:17.467695"}
+{"type": "verification_passed", "qid": "popmc_test_985065", "question_snippet": "What genre is Peggle 2?", "timestamp": "2025-11-28T00:42:17.467828"}
+{"type": "verification_passed", "qid": "popmc_test_1781815", "question_snippet": "Who was the screenwriter for Solo Sunny?", "timestamp": "2025-11-28T00:42:17.467871"}
+{"type": "verification_passed", "qid": "popmc_test_6418858", "question_snippet": "Who is the author of B²FH paper?", "timestamp": "2025-11-28T00:42:17.467907"}
+{"type": "verification_passed", "qid": "popmc_test_5141436", "question_snippet": "Who was the director of Men and Women?", "timestamp": "2025-11-28T00:42:17.467959"}
+{"type": "verification_passed", "qid": "popmc_test_805810", "question_snippet": "Who is the author of A New Life?", "timestamp": "2025-11-28T00:42:17.467993"}
+{"type": "verification_passed", "qid": "popmc_test_5049215", "question_snippet": "In what country is Mackay Courthouse?", "timestamp": "2025-11-28T00:42:17.468036"}
+{"type": "verification_passed", "qid": "popmc_test_2029841", "question_snippet": "Who was the producer of Cinderella?", "timestamp": "2025-11-28T00:42:17.468070"}
+{"type": "verification_passed", "qid": "popmc_test_5965725", "question_snippet": "Who is the author of The World Before?", "timestamp": "2025-11-28T00:42:17.943902"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_727282", "question_snippet": "Who was the director of More?", "timestamp": "2025-11-28T00:42:17.944047"}
+{"type": "verification_passed", "qid": "popmc_test_5749111", "question_snippet": "In what country is Sholoktu?", "timestamp": "2025-11-28T00:42:17.944092"}
+{"type": "verification_passed", "qid": "popmc_test_1782279", "question_snippet": "Who was the producer of Primary?", "timestamp": "2025-11-28T00:42:17.944129"}
+{"type": "verification_passed", "qid": "popmc_test_3451987", "question_snippet": "What sport does Friedhelm Konietzka play?", "timestamp": "2025-11-28T00:42:17.944176"}
+{"type": "verification_passed", "qid": "popmc_test_437313", "question_snippet": "What genre is Embrace?", "timestamp": "2025-11-28T00:42:17.944213"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_1129121", "question_snippet": "Who was the director of Destiny?", "timestamp": "2025-11-28T00:42:17.944256"}
+{"type": "verification_passed", "qid": "popmc_test_4830853", "question_snippet": "Who is the father of Nicholas I of Bohemia?", "timestamp": "2025-11-28T00:42:17.944300"}
+{"error": "No recorded MCQ results for qid: popmc_test_727282, using dynamic teacher fallback", "qid": "popmc_test_727282"}
+{"error": "No recorded MCQ results for qid: popmc_test_1129121, using dynamic teacher fallback", "qid": "popmc_test_1129121"}
+{"type": "verification_passed", "qid": "popmc_test_3148272", "question_snippet": "Who was the composer of Every Night?", "timestamp": "2025-11-28T00:42:18.435231"}
+{"type": "verification_passed", "qid": "popmc_test_1596119", "question_snippet": "What is the capital of Gmina Andrespol?", "timestamp": "2025-11-28T00:42:18.435350"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_2454554", "question_snippet": "What genre is The Children?", "timestamp": "2025-11-28T00:42:18.435429"}
+{"type": "verification_passed", "qid": "popmc_test_6082176", "question_snippet": "In what country is Upper Midwest forest-savanna tr", "timestamp": "2025-11-28T00:42:18.435469"}
+{"type": "verification_passed", "qid": "popmc_test_4552932", "question_snippet": "What genre is In Your Eyes?", "timestamp": "2025-11-28T00:42:18.435505"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_475186", "question_snippet": "Who is the author of Memory?", "timestamp": "2025-11-28T00:42:18.435542"}
+{"type": "verification_passed", "qid": "popmc_test_5360349", "question_snippet": "Who is the author of Out of This World?", "timestamp": "2025-11-28T00:42:18.435578"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_5343876", "question_snippet": "Who is the author of Only Human?", "timestamp": "2025-11-28T00:42:18.435633"}
+{"error": "No recorded MCQ results for qid: popmc_test_2454554, using dynamic teacher fallback", "qid": "popmc_test_2454554"}
+{"error": "No recorded MCQ results for qid: popmc_test_475186, using dynamic teacher fallback", "qid": "popmc_test_475186"}
+{"error": "No recorded MCQ results for qid: popmc_test_5343876, using dynamic teacher fallback", "qid": "popmc_test_5343876"}
+{"type": "verification_passed", "qid": "popmc_test_3064460", "question_snippet": "Who is the author of Bring Me the Head of Prince C", "timestamp": "2025-11-28T00:42:18.913041"}
+{"type": "verification_passed", "qid": "popmc_test_1227698", "question_snippet": "Who was the producer of Kiss?", "timestamp": "2025-11-28T00:42:18.913182"}
+{"type": "verification_passed", "qid": "popmc_test_3199632", "question_snippet": "What genre is A Question and Answer Guide to Astro", "timestamp": "2025-11-28T00:42:18.913224"}
+{"type": "verification_passed", "qid": "popmc_test_1679170", "question_snippet": "Who was the director of Ah Ying?", "timestamp": "2025-11-28T00:42:18.913268"}
+{"type": "verification_passed", "qid": "popmc_test_2936891", "question_snippet": "Who is the author of Knock?", "timestamp": "2025-11-28T00:42:18.913315"}
+{"type": "verification_passed", "qid": "popmc_test_5149643", "question_snippet": "What is Michael's occupation?", "timestamp": "2025-11-28T00:42:18.913365"}
+{"type": "verification_passed", "qid": "popmc_test_2008493", "question_snippet": "Who was the screenwriter for Prince of Jutland?", "timestamp": "2025-11-28T00:42:18.913399"}
+{"type": "verification_passed", "qid": "popmc_test_5946894", "question_snippet": "Who was the producer of The Passage?", "timestamp": "2025-11-28T00:42:18.913432"}
+{"type": "verification_passed", "qid": "popmc_test_627430", "question_snippet": "In what country is KIQZ?", "timestamp": "2025-11-28T00:42:19.391073"}
+{"type": "verification_passed", "qid": "popmc_test_1582608", "question_snippet": "Who was the screenwriter for From the Terrace?", "timestamp": "2025-11-28T00:42:19.391219"}
+{"type": "verification_passed", "qid": "popmc_test_6381763", "question_snippet": "Who was the producer of Curtains?", "timestamp": "2025-11-28T00:42:19.391263"}
+{"type": "verification_passed", "qid": "popmc_test_2897580", "question_snippet": "Who was the screenwriter for Parlami d'Amore?", "timestamp": "2025-11-28T00:42:19.391312"}
+{"type": "verification_passed", "qid": "popmc_test_2815934", "question_snippet": "What is the capital of Clay County?", "timestamp": "2025-11-28T00:42:19.391358"}
+{"type": "verification_passed", "qid": "popmc_test_331490", "question_snippet": "What sport does Walter Pfeiffer play?", "timestamp": "2025-11-28T00:42:19.391392"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_4117682", "question_snippet": "Who was the screenwriter for Flood?", "timestamp": "2025-11-28T00:42:19.391432"}
+{"type": "verification_passed", "qid": "popmc_test_3903496", "question_snippet": "Who was the director of Desires?", "timestamp": "2025-11-28T00:42:19.391467"}
+{"error": "No recorded MCQ results for qid: popmc_test_4117682, using dynamic teacher fallback", "qid": "popmc_test_4117682"}
+{"type": "verification_passed", "qid": "popmc_test_5250402", "question_snippet": "Who is the author of MÄR?", "timestamp": "2025-11-28T00:42:19.877228"}
+{"type": "verification_passed", "qid": "popmc_test_5931167", "question_snippet": "Who was the director of The Hard Way?", "timestamp": "2025-11-28T00:42:19.877369"}
+{"type": "verification_passed", "qid": "popmc_test_2764073", "question_snippet": "What is the capital of Jackson County?", "timestamp": "2025-11-28T00:42:19.877412"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_6414631", "question_snippet": "Who was the composer of So What?", "timestamp": "2025-11-28T00:42:19.877456"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_5294177", "question_snippet": "What genre is Nine?", "timestamp": "2025-11-28T00:42:19.877497"}
+{"type": "verification_passed", "qid": "popmc_test_5932165", "question_snippet": "Who was the director of The Hole?", "timestamp": "2025-11-28T00:42:19.877547"}
+{"type": "verification_passed", "qid": "popmc_test_6120764", "question_snippet": "What sport does Juan Carlos Stauskas play?", "timestamp": "2025-11-28T00:42:19.877583"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_5926717", "question_snippet": "Who was the director of The Forest?", "timestamp": "2025-11-28T00:42:19.877629"}
+{"error": "No recorded MCQ results for qid: popmc_test_6414631, using dynamic teacher fallback", "qid": "popmc_test_6414631"}
+{"error": "No recorded MCQ results for qid: popmc_test_5294177, using dynamic teacher fallback", "qid": "popmc_test_5294177"}
+{"error": "No recorded MCQ results for qid: popmc_test_5926717, using dynamic teacher fallback", "qid": "popmc_test_5926717"}
+{"type": "verification_passed", "qid": "popmc_test_1345256", "question_snippet": "Who was the composer of Rose?", "timestamp": "2025-11-28T00:42:20.353074"}
+{"type": "verification_passed", "qid": "popmc_test_4585572", "question_snippet": "Who was the producer of It Takes Two?", "timestamp": "2025-11-28T00:42:20.353203"}
+{"type": "verification_passed", "qid": "popmc_test_2540451", "question_snippet": "What sport does Niklas Stark play?", "timestamp": "2025-11-28T00:42:20.353247"}
+{"type": "verification_passed", "qid": "popmc_test_980083", "question_snippet": "Who was the composer of Rough?", "timestamp": "2025-11-28T00:42:20.353285"}
+{"type": "verification_passed", "qid": "popmc_test_4811648", "question_snippet": "In what country is Karahasanlı?", "timestamp": "2025-11-28T00:42:20.353332"}
+{"type": "verification_passed", "qid": "popmc_test_1822320", "question_snippet": "Who was the screenwriter for A Personal Journey wi", "timestamp": "2025-11-28T00:42:20.353381"}
+{"type": "verification_passed", "qid": "popmc_test_5533209", "question_snippet": "In what country is Ramon Magsaysay Technological U", "timestamp": "2025-11-28T00:42:20.353416"}
+{"type": "verification_passed", "qid": "popmc_test_6482305", "question_snippet": "Who is the author of The Fountain?", "timestamp": "2025-11-28T00:42:20.353450"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_2664757", "question_snippet": "Who was the composer of Symphony No. 3?", "timestamp": "2025-11-28T00:42:20.828325"}
+{"type": "verification_passed", "qid": "popmc_test_2303897", "question_snippet": "What is Edwin Wallock's occupation?", "timestamp": "2025-11-28T00:42:20.828415"}
+{"type": "verification_passed", "qid": "popmc_test_3823041", "question_snippet": "Who is the father of Dafydd ap Dafydd ap Llywelyn?", "timestamp": "2025-11-28T00:42:20.828459"}
+{"type": "verification_passed", "qid": "popmc_test_5479086", "question_snippet": "Who was the screenwriter for Merci pour le chocola", "timestamp": "2025-11-28T00:42:20.828496"}
+{"type": "verification_passed", "qid": "popmc_test_513956", "question_snippet": "Who was the producer of Fiction?", "timestamp": "2025-11-28T00:42:20.828537"}
+{"type": "verification_passed", "qid": "popmc_test_3342671", "question_snippet": "What is Anjali Sudhakar's occupation?", "timestamp": "2025-11-28T00:42:20.828585"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_2766397", "question_snippet": "Who was the producer of Chrome?", "timestamp": "2025-11-28T00:42:20.828621"}
+{"type": "verification_passed", "qid": "popmc_test_6118725", "question_snippet": "Who is the author of Voyage d'Egypte et de Nubie?", "timestamp": "2025-11-28T00:42:20.828655"}
+{"error": "No recorded MCQ results for qid: popmc_test_2664757, using dynamic teacher fallback", "qid": "popmc_test_2664757"}
+{"error": "No recorded MCQ results for qid: popmc_test_2766397, using dynamic teacher fallback", "qid": "popmc_test_2766397"}
+{"type": "verification_passed", "qid": "popmc_test_1189733", "question_snippet": "Who was the producer of Rise?", "timestamp": "2025-11-28T00:42:21.379226"}
+{"type": "verification_passed", "qid": "popmc_test_5166295", "question_snippet": "Who is the author of Midnight Tides?", "timestamp": "2025-11-28T00:42:21.379363"}
+{"type": "verification_passed", "qid": "popmc_test_6437886", "question_snippet": "What is Sala the capital of?", "timestamp": "2025-11-28T00:42:21.379415"}
+{"type": "verification_passed", "qid": "popmc_test_6302983", "question_snippet": "Who was the screenwriter for High Risk?", "timestamp": "2025-11-28T00:42:21.379453"}
+{"type": "verification_passed", "qid": "popmc_test_3083621", "question_snippet": "What genre is David Byron?", "timestamp": "2025-11-28T00:42:21.379496"}
+{"type": "verification_passed", "qid": "popmc_test_672588", "question_snippet": "Who was the producer of Continental?", "timestamp": "2025-11-28T00:42:21.379541"}
+{"type": "verification_passed", "qid": "popmc_test_1288987", "question_snippet": "What genre is A Trick of the Tail?", "timestamp": "2025-11-28T00:42:21.379574"}
+{"type": "verification_passed", "qid": "popmc_test_792503", "question_snippet": "What sport does Livia Altmann play?", "timestamp": "2025-11-28T00:42:21.379616"}
+{"type": "verification_passed", "qid": "popmc_test_5128622", "question_snippet": "In what country is Mayville?", "timestamp": "2025-11-28T00:42:21.851523"}
+{"type": "verification_passed", "qid": "popmc_test_5834394", "question_snippet": "Who was the producer of Still?", "timestamp": "2025-11-28T00:42:21.851658"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_3543732", "question_snippet": "Who was the screenwriter for Bomb?", "timestamp": "2025-11-28T00:42:21.851708"}
+{"type": "verification_passed", "qid": "popmc_test_741439", "question_snippet": "Who was the director of Falling in Love?", "timestamp": "2025-11-28T00:42:21.851750"}
+{"type": "verification_passed", "qid": "popmc_test_3635589", "question_snippet": "What is the capital of Verbandsgemeinde Bad Ems?", "timestamp": "2025-11-28T00:42:21.851799"}
+{"type": "verification_passed", "qid": "popmc_test_4013695", "question_snippet": "In what country is Kamioka Station?", "timestamp": "2025-11-28T00:42:21.851840"}
+{"type": "verification_passed", "qid": "popmc_test_1374814", "question_snippet": "Who was the screenwriter for Athirathan?", "timestamp": "2025-11-28T00:42:21.851873"}
+{"type": "verification_passed", "qid": "popmc_test_2746781", "question_snippet": "In what city was Beniamino Di Giacomo born?", "timestamp": "2025-11-28T00:42:21.851905"}
+{"error": "No recorded MCQ results for qid: popmc_test_3543732, using dynamic teacher fallback", "qid": "popmc_test_3543732"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_4549280", "question_snippet": "Who was the composer of Images?", "timestamp": "2025-11-28T00:42:22.326131"}
+{"type": "verification_passed", "qid": "popmc_test_2180364", "question_snippet": "Who was the composer of Monster?", "timestamp": "2025-11-28T00:42:22.326214"}
+{"type": "verification_passed", "qid": "popmc_test_2034592", "question_snippet": "Who is the author of The Cat?", "timestamp": "2025-11-28T00:42:22.326256"}
+{"type": "verification_passed", "qid": "popmc_test_5964605", "question_snippet": "Who was the composer of The Wife?", "timestamp": "2025-11-28T00:42:22.326309"}
+{"type": "verification_passed", "qid": "popmc_test_3677957", "question_snippet": "Who was the director of Champion?", "timestamp": "2025-11-28T00:42:22.326350"}
+{"type": "verification_passed", "qid": "popmc_test_4587149", "question_snippet": "Who was the screenwriter for Ivan?", "timestamp": "2025-11-28T00:42:22.326384"}
+{"type": "verification_passed", "qid": "popmc_test_1586993", "question_snippet": "In what country is Pindus?", "timestamp": "2025-11-28T00:42:22.326418"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_4534054", "question_snippet": "Who was the director of I Love You?", "timestamp": "2025-11-28T00:42:22.326464"}
+{"error": "No recorded MCQ results for qid: popmc_test_4549280, using dynamic teacher fallback", "qid": "popmc_test_4549280"}
+{"error": "No recorded MCQ results for qid: popmc_test_4534054, using dynamic teacher fallback", "qid": "popmc_test_4534054"}
+{"type": "verification_passed", "qid": "popmc_test_2641221", "question_snippet": "Who was the producer of September?", "timestamp": "2025-11-28T00:42:22.802233"}
+{"type": "verification_passed", "qid": "popmc_test_1982827", "question_snippet": "Who was the screenwriter for The General Line?", "timestamp": "2025-11-28T00:42:22.802369"}
+{"type": "verification_passed", "qid": "popmc_test_1202223", "question_snippet": "Who is the father of Tiridates III of Armenia?", "timestamp": "2025-11-28T00:42:22.802414"}
+{"type": "verification_passed", "qid": "popmc_test_2592797", "question_snippet": "Who was the screenwriter for The Games?", "timestamp": "2025-11-28T00:42:22.802458"}
+{"type": "verification_passed", "qid": "popmc_test_1949764", "question_snippet": "In what country is Tegher?", "timestamp": "2025-11-28T00:42:22.802493"}
+{"type": "verification_passed", "qid": "popmc_test_3499204", "question_snippet": "Who was the director of Big Time?", "timestamp": "2025-11-28T00:42:22.802526"}
+{"type": "verification_passed", "qid": "popmc_test_5054077", "question_snippet": "Who was the producer of Pumpkin?", "timestamp": "2025-11-28T00:42:22.802560"}
+{"type": "verification_passed", "qid": "popmc_test_3927677", "question_snippet": "In what city was Doc Parker born?", "timestamp": "2025-11-28T00:42:22.802600"}
+{"type": "verification_passed", "qid": "popmc_test_1809727", "question_snippet": "What is Thanasis Pafilis's occupation?", "timestamp": "2025-11-28T00:42:23.289987"}
+{"type": "verification_passed", "qid": "popmc_test_2668563", "question_snippet": "In what country is Medveščak?", "timestamp": "2025-11-28T00:42:23.290231"}
+{"type": "verification_passed", "qid": "popmc_test_3036434", "question_snippet": "Who was the screenwriter for Modern Vampires?", "timestamp": "2025-11-28T00:42:23.290285"}
+{"type": "verification_passed", "qid": "popmc_test_3392374", "question_snippet": "Who is the father of Jan V of Zator?", "timestamp": "2025-11-28T00:42:23.290338"}
+{"type": "verification_passed", "qid": "popmc_test_4903677", "question_snippet": "In what city was Heinrich August Jäschke born?", "timestamp": "2025-11-28T00:42:23.290376"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_5910105", "question_snippet": "Who is the author of The Bat?", "timestamp": "2025-11-28T00:42:23.290421"}
+{"type": "verification_passed", "qid": "popmc_test_1999159", "question_snippet": "What genre is Edward Lamson Henry?", "timestamp": "2025-11-28T00:42:23.290469"}
+{"type": "verification_passed", "qid": "popmc_test_5082721", "question_snippet": "What is the capital of Kingdom of Sussex?", "timestamp": "2025-11-28T00:42:23.290503"}
+{"error": "No recorded MCQ results for qid: popmc_test_5910105, using dynamic teacher fallback", "qid": "popmc_test_5910105"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_5453472", "question_snippet": "Who was the screenwriter for Pilot?", "timestamp": "2025-11-28T00:42:23.782108"}
+{"type": "verification_passed", "qid": "popmc_test_5930089", "question_snippet": "Who was the director of The Great Question?", "timestamp": "2025-11-28T00:42:23.782206"}
+{"type": "verification_passed", "qid": "popmc_test_1597302", "question_snippet": "In what country is Ruth?", "timestamp": "2025-11-28T00:42:23.782250"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_5953047", "question_snippet": "Who is the author of The Saint?", "timestamp": "2025-11-28T00:42:23.782302"}
+{"type": "verification_passed", "qid": "popmc_test_175943", "question_snippet": "In what country is Arri?", "timestamp": "2025-11-28T00:42:23.782346"}
+{"type": "verification_passed", "qid": "popmc_test_5834485", "question_snippet": "What genre is Still Life?", "timestamp": "2025-11-28T00:42:23.782382"}
+{"type": "verification_passed", "qid": "popmc_test_6149266", "question_snippet": "Who was the director of Wavelength?", "timestamp": "2025-11-28T00:42:23.782421"}
+{"type": "verification_passed", "qid": "popmc_test_3003917", "question_snippet": "In what country is Iksan?", "timestamp": "2025-11-28T00:42:23.782455"}
+{"error": "No recorded MCQ results for qid: popmc_test_5453472, using dynamic teacher fallback", "qid": "popmc_test_5453472"}
+{"error": "No recorded MCQ results for qid: popmc_test_5953047, using dynamic teacher fallback", "qid": "popmc_test_5953047"}
+{"type": "verification_passed", "qid": "popmc_test_6290189", "question_snippet": "Who was the producer of Into the Wild?", "timestamp": "2025-11-28T00:42:24.248398"}
+{"type": "verification_passed", "qid": "popmc_test_354224", "question_snippet": "What genre is The Driver?", "timestamp": "2025-11-28T00:42:24.248565"}
+{"type": "verification_passed", "qid": "popmc_test_6074031", "question_snippet": "What is the religion of Union of Catholic Asian Ne", "timestamp": "2025-11-28T00:42:24.248616"}
+{"type": "verification_passed", "qid": "popmc_test_2780526", "question_snippet": "What is the religion of Diarmuid Martin?", "timestamp": "2025-11-28T00:42:24.248659"}
+{"type": "verification_passed", "qid": "popmc_test_5464122", "question_snippet": "In what country is Plum?", "timestamp": "2025-11-28T00:42:24.248698"}
+{"type": "verification_passed", "qid": "popmc_test_145561", "question_snippet": "What is the capital of Limburg?", "timestamp": "2025-11-28T00:42:24.248736"}
+{"type": "verification_passed", "qid": "popmc_test_978061", "question_snippet": "Who was the composer of Yvonne, Prinzessin von Bur", "timestamp": "2025-11-28T00:42:24.248785"}
+{"type": "verification_passed", "qid": "popmc_test_3362950", "question_snippet": "Who was the screenwriter for Volcano?", "timestamp": "2025-11-28T00:42:24.248823"}
+{"type": "verification_passed", "qid": "popmc_test_5739856", "question_snippet": "Who was the screenwriter for She?", "timestamp": "2025-11-28T00:42:24.728734"}
+{"type": "verification_passed", "qid": "popmc_test_6276988", "question_snippet": "What is the capital of Berry?", "timestamp": "2025-11-28T00:42:24.728885"}
+{"type": "verification_passed", "qid": "popmc_test_6331558", "question_snippet": "What is the capital of Likouala Department?", "timestamp": "2025-11-28T00:42:24.728928"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_5453555", "question_snippet": "Who was the screenwriter for Pilot?", "timestamp": "2025-11-28T00:42:24.728976"}
+{"type": "verification_passed", "qid": "popmc_test_2933196", "question_snippet": "Who was the director of The Debt?", "timestamp": "2025-11-28T00:42:24.729013"}
+{"type": "verification_passed", "qid": "popmc_test_3786185", "question_snippet": "In what country is Cordova Bay Records?", "timestamp": "2025-11-28T00:42:24.729048"}
+{"type": "verification_passed", "qid": "popmc_test_5785289", "question_snippet": "Who was the composer of Solo?", "timestamp": "2025-11-28T00:42:24.729081"}
+{"type": "verification_passed", "qid": "popmc_test_2969054", "question_snippet": "Who was the director of Hunting?", "timestamp": "2025-11-28T00:42:24.729114"}
+{"error": "No recorded MCQ results for qid: popmc_test_5453555, using dynamic teacher fallback", "qid": "popmc_test_5453555"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_4117680", "question_snippet": "Who was the screenwriter for Flood?", "timestamp": "2025-11-28T00:42:25.192461"}
+{"type": "verification_passed", "qid": "popmc_test_3928592", "question_snippet": "Who was the director of Dog?", "timestamp": "2025-11-28T00:42:25.192547"}
+{"type": "verification_passed", "qid": "popmc_test_6147908", "question_snippet": "Who was the screenwriter for Watch Out?", "timestamp": "2025-11-28T00:42:25.192590"}
+{"type": "verification_passed", "qid": "popmc_test_5343867", "question_snippet": "Who is the author of Only Human?", "timestamp": "2025-11-28T00:42:25.192627"}
+{"type": "verification_passed", "qid": "popmc_test_2529254", "question_snippet": "Who was the producer of Absolutely Free?", "timestamp": "2025-11-28T00:42:25.192661"}
+{"type": "verification_passed", "qid": "popmc_test_233822", "question_snippet": "Who was the screenwriter for The Firm?", "timestamp": "2025-11-28T00:42:25.192694"}
+{"type": "verification_passed", "qid": "popmc_test_4466133", "question_snippet": "In what country is Chal Siah Manchatun Jowkar?", "timestamp": "2025-11-28T00:42:25.192727"}
+{"type": "verification_passed", "qid": "popmc_test_1654374", "question_snippet": "Who was the producer of Inspiration?", "timestamp": "2025-11-28T00:42:25.192768"}
+{"error": "No recorded MCQ results for qid: popmc_test_4117680, using dynamic teacher fallback", "qid": "popmc_test_4117680"}
+{"type": "verification_passed", "qid": "popmc_test_2693771", "question_snippet": "In what city was Suad Nasr born?", "timestamp": "2025-11-28T00:42:25.655498"}
+{"type": "verification_passed", "qid": "popmc_test_5059380", "question_snippet": "Who is the author of Make Love! The Bruce Campbell", "timestamp": "2025-11-28T00:42:25.655647"}
+{"type": "verification_passed", "qid": "popmc_test_3207264", "question_snippet": "Who was the screenwriter for The Substitute?", "timestamp": "2025-11-28T00:42:25.655690"}
+{"type": "verification_passed", "qid": "popmc_test_3466259", "question_snippet": "Who is the author of Before?", "timestamp": "2025-11-28T00:42:25.655728"}
+{"type": "verification_passed", "qid": "popmc_test_4270722", "question_snippet": "Who is the author of Gowie Corby Plays Chicken?", "timestamp": "2025-11-28T00:42:25.655762"}
+{"type": "verification_passed", "qid": "popmc_test_2667458", "question_snippet": "Who was the director of Only People?", "timestamp": "2025-11-28T00:42:25.655795"}
+{"type": "verification_passed", "qid": "popmc_test_2656239", "question_snippet": "Who was the producer of Blue?", "timestamp": "2025-11-28T00:42:25.655828"}
+{"type": "verification_passed", "qid": "popmc_test_180464", "question_snippet": "Who is the father of Whalebone?", "timestamp": "2025-11-28T00:42:25.655860"}
+{"type": "verification_passed", "qid": "popmc_test_5528429", "question_snippet": "Who is the father of Rajshree?", "timestamp": "2025-11-28T00:42:26.131322"}
+{"type": "verification_passed", "qid": "popmc_test_6266277", "question_snippet": "Who was the director of Jud Süß?", "timestamp": "2025-11-28T00:42:26.131456"}
+{"type": "verification_passed", "qid": "popmc_test_2025404", "question_snippet": "In what country is Rozsochatec?", "timestamp": "2025-11-28T00:42:26.131500"}
+{"type": "verification_passed", "qid": "popmc_test_5343321", "question_snippet": "Who was the producer of One of the Best?", "timestamp": "2025-11-28T00:42:26.131537"}
+{"type": "verification_passed", "qid": "popmc_test_2005692", "question_snippet": "Who was the screenwriter for The Players?", "timestamp": "2025-11-28T00:42:26.131582"}
+{"type": "verification_passed", "qid": "popmc_test_5102920", "question_snippet": "In what city was Martin Simonson born?", "timestamp": "2025-11-28T00:42:26.131615"}
+{"type": "verification_passed", "qid": "popmc_test_1325968", "question_snippet": "Who was the director of The Heroes?", "timestamp": "2025-11-28T00:42:26.131648"}
+{"type": "verification_passed", "qid": "popmc_test_625391", "question_snippet": "Who was the screenwriter for The Order?", "timestamp": "2025-11-28T00:42:26.131681"}
+{"type": "verification_passed", "qid": "popmc_test_3194987", "question_snippet": "Who was the producer of A Better Place?", "timestamp": "2025-11-28T00:42:26.604862"}
+{"type": "verification_passed", "qid": "popmc_test_5913920", "question_snippet": "Who was the director of The Boys?", "timestamp": "2025-11-28T00:42:26.604996"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_595965", "question_snippet": "Who was the screenwriter for Paradise?", "timestamp": "2025-11-28T00:42:26.605056"}
+{"type": "verification_passed", "qid": "popmc_test_1636329", "question_snippet": "Who was the screenwriter for Broken Lullaby?", "timestamp": "2025-11-28T00:42:26.605100"}
+{"type": "verification_passed", "qid": "popmc_test_1755706", "question_snippet": "What sport does Arivaldo Alves dos Santos play?", "timestamp": "2025-11-28T00:42:26.605135"}
+{"type": "verification_passed", "qid": "popmc_test_975490", "question_snippet": "Who was the composer of Boss?", "timestamp": "2025-11-28T00:42:26.605170"}
+{"type": "verification_passed", "qid": "popmc_test_1332074", "question_snippet": "Who was the producer of Around the World?", "timestamp": "2025-11-28T00:42:26.605203"}
+{"type": "verification_passed", "qid": "popmc_test_283289", "question_snippet": "What is Jörg A. Eggers's occupation?", "timestamp": "2025-11-28T00:42:26.605243"}
+{"error": "No recorded MCQ results for qid: popmc_test_595965, using dynamic teacher fallback", "qid": "popmc_test_595965"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_4403337", "question_snippet": "In what country is Ava?", "timestamp": "2025-11-28T00:42:27.081550"}
+{"type": "verification_passed", "qid": "popmc_test_442737", "question_snippet": "What sport does Francesco Reda play?", "timestamp": "2025-11-28T00:42:27.081650"}
+{"type": "verification_passed", "qid": "popmc_test_5117704", "question_snippet": "In what city was Matt Moralee born?", "timestamp": "2025-11-28T00:42:27.081704"}
+{"type": "verification_passed", "qid": "popmc_test_325021", "question_snippet": "In what city was Jack Culcay-Keth born?", "timestamp": "2025-11-28T00:42:27.081740"}
+{"type": "verification_passed", "qid": "popmc_test_2806611", "question_snippet": "What is the capital of Riley County?", "timestamp": "2025-11-28T00:42:27.081775"}
+{"type": "verification_passed", "qid": "popmc_test_6207039", "question_snippet": "Who was the composer of Wish You Were Here?", "timestamp": "2025-11-28T00:42:27.081808"}
+{"type": "verification_passed", "qid": "popmc_test_3880267", "question_snippet": "Who was the director of The Patriots?", "timestamp": "2025-11-28T00:42:27.081841"}
+{"type": "verification_passed", "qid": "popmc_test_6305089", "question_snippet": "Who was the composer of La rondine?", "timestamp": "2025-11-28T00:42:27.081874"}
+{"error": "No recorded MCQ results for qid: popmc_test_4403337, using dynamic teacher fallback", "qid": "popmc_test_4403337"}
+{"type": "verification_passed", "qid": "popmc_test_145630", "question_snippet": "Who is the father of Richard III of Capua?", "timestamp": "2025-11-28T00:42:27.558764"}
+{"type": "verification_passed", "qid": "popmc_test_6320551", "question_snippet": "What is the religion of Romanian Greek Catholic Ch", "timestamp": "2025-11-28T00:42:27.558906"}
+{"type": "verification_passed", "qid": "popmc_test_5334722", "question_snippet": "What genre is Shin?", "timestamp": "2025-11-28T00:42:27.558949"}
+{"type": "verification_passed", "qid": "popmc_test_6534376", "question_snippet": "Who was the director of The Stranger?", "timestamp": "2025-11-28T00:42:27.558987"}
+{"type": "verification_passed", "qid": "popmc_test_2313044", "question_snippet": "Who was the director of Eva?", "timestamp": "2025-11-28T00:42:27.559021"}
+{"type": "verification_passed", "qid": "popmc_test_4534020", "question_snippet": "What genre is Süpercan?", "timestamp": "2025-11-28T00:42:27.559055"}
+{"type": "verification_passed", "qid": "popmc_test_6261602", "question_snippet": "What genre is Believer?", "timestamp": "2025-11-28T00:42:27.559089"}
+{"type": "verification_passed", "qid": "popmc_test_3754115", "question_snippet": "Who is the author of Click?", "timestamp": "2025-11-28T00:42:27.559122"}
+{"type": "verification_passed", "qid": "popmc_test_6512081", "question_snippet": "Who was the composer of Nozze istriane?", "timestamp": "2025-11-28T00:42:28.035851"}
+{"type": "verification_passed", "qid": "popmc_test_465467", "question_snippet": "What is Robert Florey's occupation?", "timestamp": "2025-11-28T00:42:28.035994"}
+{"type": "verification_passed", "qid": "popmc_test_5290980", "question_snippet": "Who was the producer of Night in Paradise?", "timestamp": "2025-11-28T00:42:28.036037"}
+{"type": "verification_passed", "qid": "popmc_test_6403004", "question_snippet": "What is the capital of Wu?", "timestamp": "2025-11-28T00:42:28.036074"}
+{"type": "verification_passed", "qid": "popmc_test_5714816", "question_snippet": "What is the capital of Gmina Osiecznica?", "timestamp": "2025-11-28T00:42:28.036109"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_2245633", "question_snippet": "Who was the director of Pilgrimage?", "timestamp": "2025-11-28T00:42:28.036153"}
+{"type": "verification_passed", "qid": "popmc_test_3274419", "question_snippet": "What sport does Alex Crombie play?", "timestamp": "2025-11-28T00:42:28.036188"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_4657189", "question_snippet": "Who was the director of One Night?", "timestamp": "2025-11-28T00:42:28.036233"}
+{"error": "No recorded MCQ results for qid: popmc_test_2245633, using dynamic teacher fallback", "qid": "popmc_test_2245633"}
+{"error": "No recorded MCQ results for qid: popmc_test_4657189, using dynamic teacher fallback", "qid": "popmc_test_4657189"}
+{"type": "verification_passed", "qid": "popmc_test_1846195", "question_snippet": "What genre is El Aura?", "timestamp": "2025-11-28T00:42:28.621827"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_5931114", "question_snippet": "Who was the director of The Happy Family?", "timestamp": "2025-11-28T00:42:28.621982"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_4939550", "question_snippet": "What genre is Gateway?", "timestamp": "2025-11-28T00:42:28.622029"}
+{"type": "verification_passed", "qid": "popmc_test_969340", "question_snippet": "What is Hawthorne James's occupation?", "timestamp": "2025-11-28T00:42:28.622067"}
+{"type": "verification_passed", "qid": "popmc_test_5966775", "question_snippet": "What genre is Theatre?", "timestamp": "2025-11-28T00:42:28.622101"}
+{"type": "verification_passed", "qid": "popmc_test_785341", "question_snippet": "Who was the screenwriter for Head?", "timestamp": "2025-11-28T00:42:28.622134"}
+{"type": "verification_passed", "qid": "popmc_test_5919221", "question_snippet": "What genre is The Court?", "timestamp": "2025-11-28T00:42:28.622167"}
+{"type": "verification_passed", "qid": "popmc_test_4522436", "question_snippet": "Who was the screenwriter for The Apple?", "timestamp": "2025-11-28T00:42:28.622199"}
+{"error": "No recorded MCQ results for qid: popmc_test_5931114, using dynamic teacher fallback", "qid": "popmc_test_5931114"}
+{"error": "No recorded MCQ results for qid: popmc_test_4939550, using dynamic teacher fallback", "qid": "popmc_test_4939550"}
+{"type": "verification_passed", "qid": "popmc_test_5784677", "question_snippet": "Who was the composer of Soldier?", "timestamp": "2025-11-28T00:42:29.101860"}
+{"type": "verification_passed", "qid": "popmc_test_5934267", "question_snippet": "Who is the author of The Island?", "timestamp": "2025-11-28T00:42:29.102005"}
+{"type": "verification_passed", "qid": "popmc_test_5756001", "question_snippet": "Who was the producer of Police?", "timestamp": "2025-11-28T00:42:29.102048"}
+{"type": "verification_passed", "qid": "popmc_test_5727082", "question_snippet": "Who was the screenwriter for Shadow Man?", "timestamp": "2025-11-28T00:42:29.102084"}
+{"type": "verification_passed", "qid": "popmc_test_4228857", "question_snippet": "Who was the director of Georgia?", "timestamp": "2025-11-28T00:42:29.102118"}
+{"type": "verification_passed", "qid": "popmc_test_459924", "question_snippet": "What is the religion of Innocent I?", "timestamp": "2025-11-28T00:42:29.102151"}
+{"type": "verification_passed", "qid": "popmc_test_5586876", "question_snippet": "What genre is Ring?", "timestamp": "2025-11-28T00:42:29.102183"}
+{"type": "verification_passed", "qid": "popmc_test_2006987", "question_snippet": "What genre is Gwyneth Jones?", "timestamp": "2025-11-28T00:42:29.102215"}
+{"type": "verification_passed", "qid": "popmc_test_2688331", "question_snippet": "Who was the composer of Adelaide?", "timestamp": "2025-11-28T00:42:29.574658"}
+{"type": "verification_passed", "qid": "popmc_test_3396997", "question_snippet": "Who was the director of The Blues?", "timestamp": "2025-11-28T00:42:29.574793"}
+{"type": "verification_passed", "qid": "popmc_test_1872913", "question_snippet": "What sport does Ondřej Kušnír play?", "timestamp": "2025-11-28T00:42:29.574835"}
+{"type": "verification_passed", "qid": "popmc_test_5944033", "question_snippet": "What genre is The Nest?", "timestamp": "2025-11-28T00:42:29.574874"}
+{"type": "verification_passed", "qid": "popmc_test_5815560", "question_snippet": "Who was the director of Star?", "timestamp": "2025-11-28T00:42:29.574909"}
+{"type": "verification_passed", "qid": "popmc_test_5175436", "question_snippet": "What sport does Mikhail Petrusyov play?", "timestamp": "2025-11-28T00:42:29.574951"}
+{"type": "verification_passed", "qid": "popmc_test_1823768", "question_snippet": "Who is the father of Alice of France?", "timestamp": "2025-11-28T00:42:29.574987"}
+{"type": "verification_passed", "qid": "popmc_test_2438841", "question_snippet": "Who was the composer of The Good Life?", "timestamp": "2025-11-28T00:42:29.575019"}
+{"type": "verification_passed", "qid": "popmc_test_2872979", "question_snippet": "Who was the composer of Maria?", "timestamp": "2025-11-28T00:42:30.038992"}
+{"type": "verification_passed", "qid": "popmc_test_4682524", "question_snippet": "Who was the composer of Leader?", "timestamp": "2025-11-28T00:42:30.039134"}
+{"type": "verification_passed", "qid": "popmc_test_4076535", "question_snippet": "Who was the producer of Evergreen?", "timestamp": "2025-11-28T00:42:30.039178"}
+{"type": "verification_passed", "qid": "popmc_test_3152683", "question_snippet": "What sport does 1988–89 FA Cup Qualifying Rounds p", "timestamp": "2025-11-28T00:42:30.039216"}
+{"type": "verification_passed", "qid": "popmc_test_2518299", "question_snippet": "Who was the producer of Mickey?", "timestamp": "2025-11-28T00:42:30.039253"}
+{"type": "verification_passed", "qid": "popmc_test_136561", "question_snippet": "Who was the director of The Inspector General?", "timestamp": "2025-11-28T00:42:30.039288"}
+{"type": "verification_passed", "qid": "popmc_test_4555018", "question_snippet": "Who was the director of Independence Day UK?", "timestamp": "2025-11-28T00:42:30.039337"}
+{"type": "verification_passed", "qid": "popmc_test_5785486", "question_snippet": "What is Cambridge the capital of?", "timestamp": "2025-11-28T00:42:30.039372"}
+{"type": "verification_passed", "qid": "popmc_test_1233512", "question_snippet": "In what city was Quorey Payne born?", "timestamp": "2025-11-28T00:42:30.517757"}
+{"type": "verification_passed", "qid": "popmc_test_3918710", "question_snippet": "In what city was Din Joe Crowley born?", "timestamp": "2025-11-28T00:42:30.517896"}
+{"type": "verification_passed", "qid": "popmc_test_5736302", "question_snippet": "What genre is Truckfighters?", "timestamp": "2025-11-28T00:42:30.517949"}
+{"type": "verification_passed", "qid": "popmc_test_2911045", "question_snippet": "Who was the composer of Thank You?", "timestamp": "2025-11-28T00:42:30.517985"}
+{"type": "verification_passed", "qid": "popmc_test_3399172", "question_snippet": "Who is the author of At Night?", "timestamp": "2025-11-28T00:42:30.518018"}
+{"type": "verification_passed", "qid": "popmc_test_3390452", "question_snippet": "In what city was Betty Francisco born?", "timestamp": "2025-11-28T00:42:30.518051"}
+{"type": "verification_passed", "qid": "popmc_test_588438", "question_snippet": "What genre is Born American?", "timestamp": "2025-11-28T00:42:30.518083"}
+{"type": "verification_passed", "qid": "popmc_test_287773", "question_snippet": "Who was the director of The Departure?", "timestamp": "2025-11-28T00:42:30.518114"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_5329237", "question_snippet": "Who was the screenwriter for Oil?", "timestamp": "2025-11-28T00:42:31.000415"}
+{"type": "verification_passed", "qid": "popmc_test_4637050", "question_snippet": "What sport does Shuto Suzuki play?", "timestamp": "2025-11-28T00:42:31.000509"}
+{"type": "verification_passed", "qid": "popmc_test_672700", "question_snippet": "What genre is Thin Ice?", "timestamp": "2025-11-28T00:42:31.000565"}
+{"type": "verification_passed", "qid": "popmc_test_459928", "question_snippet": "Who is the father of Innocent I?", "timestamp": "2025-11-28T00:42:31.000601"}
+{"type": "verification_passed", "qid": "popmc_test_3543362", "question_snippet": "Who is the father of Bolo?", "timestamp": "2025-11-28T00:42:31.000634"}
+{"type": "verification_passed", "qid": "popmc_test_3821577", "question_snippet": "Who was the screenwriter for D Day?", "timestamp": "2025-11-28T00:42:31.000668"}
+{"type": "verification_passed", "qid": "popmc_test_5579512", "question_snippet": "Who is the father of Richard Somerset, 2nd Baron R", "timestamp": "2025-11-28T00:42:31.000701"}
+{"type": "verification_passed", "qid": "popmc_test_1495219", "question_snippet": "What genre is Caught?", "timestamp": "2025-11-28T00:42:31.000741"}
+{"error": "No recorded MCQ results for qid: popmc_test_5329237, using dynamic teacher fallback", "qid": "popmc_test_5329237"}
+{"type": "verification_passed", "qid": "popmc_test_4235086", "question_snippet": "What genre is Straight Out of Hell?", "timestamp": "2025-11-28T00:42:31.557500"}
+{"type": "verification_passed", "qid": "popmc_test_1547771", "question_snippet": "What is the religion of Antonio Hernández Gallegos", "timestamp": "2025-11-28T00:42:31.557638"}
+{"type": "verification_passed", "qid": "popmc_test_4532127", "question_snippet": "What genre is I Am?", "timestamp": "2025-11-28T00:42:31.557691"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_2703525", "question_snippet": "What genre is Neighbours?", "timestamp": "2025-11-28T00:42:31.557734"}
+{"type": "verification_passed", "qid": "popmc_test_1058324", "question_snippet": "What is the capital of Zavkhan Province?", "timestamp": "2025-11-28T00:42:31.557770"}
+{"type": "verification_passed", "qid": "popmc_test_5745750", "question_snippet": "What genre is Shine?", "timestamp": "2025-11-28T00:42:31.557803"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_2183288", "question_snippet": "Who was the director of The Ring?", "timestamp": "2025-11-28T00:42:31.557840"}
+{"type": "verification_passed", "qid": "popmc_test_3639687", "question_snippet": "Who was the screenwriter for Care?", "timestamp": "2025-11-28T00:42:31.557874"}
+{"error": "No recorded MCQ results for qid: popmc_test_2703525, using dynamic teacher fallback", "qid": "popmc_test_2703525"}
+{"error": "No recorded MCQ results for qid: popmc_test_2183288, using dynamic teacher fallback", "qid": "popmc_test_2183288"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_4494929", "question_snippet": "In what country is Lima?", "timestamp": "2025-11-28T00:42:32.027712"}
+{"type": "verification_passed", "qid": "popmc_test_2835513", "question_snippet": "Who was the screenwriter for Il Boss?", "timestamp": "2025-11-28T00:42:32.027817"}
+{"type": "verification_passed", "qid": "popmc_test_1170993", "question_snippet": "What genre is The Profit?", "timestamp": "2025-11-28T00:42:32.027860"}
+{"type": "verification_passed", "qid": "popmc_test_6374080", "question_snippet": "What is the capital of Fareham?", "timestamp": "2025-11-28T00:42:32.027896"}
+{"type": "verification_passed", "qid": "popmc_test_2259095", "question_snippet": "In what country is Canadian Dairy Commission?", "timestamp": "2025-11-28T00:42:32.027929"}
+{"type": "verification_passed", "qid": "popmc_test_1270194", "question_snippet": "Who was the screenwriter for Red?", "timestamp": "2025-11-28T00:42:32.027963"}
+{"type": "verification_passed", "qid": "popmc_test_4073090", "question_snippet": "What is the capital of West Coast Region?", "timestamp": "2025-11-28T00:42:32.027995"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_1451652", "question_snippet": "What genre is Discount?", "timestamp": "2025-11-28T00:42:32.028031"}
+{"error": "No recorded MCQ results for qid: popmc_test_4494929, using dynamic teacher fallback", "qid": "popmc_test_4494929"}
+{"error": "No recorded MCQ results for qid: popmc_test_1451652, using dynamic teacher fallback", "qid": "popmc_test_1451652"}
+{"type": "verification_passed", "qid": "popmc_test_841679", "question_snippet": "What is Neville Ashenheim's occupation?", "timestamp": "2025-11-28T00:42:32.491819"}
+{"type": "verification_passed", "qid": "popmc_test_6411341", "question_snippet": "What is Stari Ras the capital of?", "timestamp": "2025-11-28T00:42:32.491964"}
+{"type": "verification_passed", "qid": "popmc_test_5636548", "question_snippet": "Who is the author of Ross O'Carroll-Kelly?", "timestamp": "2025-11-28T00:42:32.492007"}
+{"type": "verification_passed", "qid": "popmc_test_6386524", "question_snippet": "Who is the author of Legion?", "timestamp": "2025-11-28T00:42:32.492043"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_2084445", "question_snippet": "Who was the screenwriter for One Week?", "timestamp": "2025-11-28T00:42:32.492092"}
+{"type": "verification_passed", "qid": "popmc_test_5978125", "question_snippet": "Who was the producer of Setup?", "timestamp": "2025-11-28T00:42:32.492130"}
+{"type": "verification_passed", "qid": "popmc_test_246607", "question_snippet": "Who was the director of The Claim?", "timestamp": "2025-11-28T00:42:32.492165"}
+{"type": "verification_passed", "qid": "popmc_test_2491925", "question_snippet": "Who was the screenwriter for It's Not Just You?", "timestamp": "2025-11-28T00:42:32.492198"}
+{"error": "No recorded MCQ results for qid: popmc_test_2084445, using dynamic teacher fallback", "qid": "popmc_test_2084445"}
+{"type": "verification_passed", "qid": "popmc_test_2993416", "question_snippet": "Who was the director of Friends?", "timestamp": "2025-11-28T00:42:32.982004"}
+{"type": "verification_passed", "qid": "popmc_test_2502695", "question_snippet": "Who was the screenwriter for Sumurun?", "timestamp": "2025-11-28T00:42:32.982221"}
+{"type": "verification_passed", "qid": "popmc_test_2627969", "question_snippet": "Who was the composer of Once?", "timestamp": "2025-11-28T00:42:32.982282"}
+{"type": "verification_passed", "qid": "popmc_test_3094817", "question_snippet": "What sport does Stu Grimson play?", "timestamp": "2025-11-28T00:42:32.982335"}
+{"type": "verification_passed", "qid": "popmc_test_5024400", "question_snippet": "Who was the composer of Love?", "timestamp": "2025-11-28T00:42:32.982381"}
+{"type": "verification_passed", "qid": "popmc_test_3963198", "question_snippet": "What is the religion of Gianfranco Ravasi?", "timestamp": "2025-11-28T00:42:32.982415"}
+{"type": "verification_passed", "qid": "popmc_test_5773446", "question_snippet": "Who was the producer of Skin?", "timestamp": "2025-11-28T00:42:32.982447"}
+{"type": "verification_passed", "qid": "popmc_test_3426769", "question_snippet": "Who is the author of Bad Habits?", "timestamp": "2025-11-28T00:42:32.982479"}
+{"type": "verification_passed", "qid": "popmc_test_5554259", "question_snippet": "Who is the father of Regal Embrace?", "timestamp": "2025-11-28T00:42:33.458196"}
+{"type": "verification_passed", "qid": "popmc_test_1143958", "question_snippet": "In what country is Juma Masjid Mosque?", "timestamp": "2025-11-28T00:42:33.458349"}
+{"type": "verification_passed", "qid": "popmc_test_432839", "question_snippet": "In what country is Volgodonsk?", "timestamp": "2025-11-28T00:42:33.458392"}
+{"type": "verification_passed", "qid": "popmc_test_1330638", "question_snippet": "Who was the producer of Paid?", "timestamp": "2025-11-28T00:42:33.458429"}
+{"type": "verification_passed", "qid": "popmc_test_4729181", "question_snippet": "What is the religion of John Orr?", "timestamp": "2025-11-28T00:42:33.458463"}
+{"type": "verification_passed", "qid": "popmc_test_1534275", "question_snippet": "Who was the screenwriter for Lovers?", "timestamp": "2025-11-28T00:42:33.458496"}
+{"type": "verification_passed", "qid": "popmc_test_3363036", "question_snippet": "Who was the director of The Variable?", "timestamp": "2025-11-28T00:42:33.458528"}
+{"type": "verification_passed", "qid": "popmc_test_1514591", "question_snippet": "In what city was Gloria Porras Valles born?", "timestamp": "2025-11-28T00:42:33.458560"}
+{"type": "verification_passed", "qid": "popmc_test_6167732", "question_snippet": "In what country is Wiconisco Township?", "timestamp": "2025-11-28T00:42:33.921942"}
+{"type": "verification_passed", "qid": "popmc_test_1548949", "question_snippet": "Who was the composer of Stop?", "timestamp": "2025-11-28T00:42:33.922084"}
+{"type": "verification_passed", "qid": "popmc_test_323943", "question_snippet": "In what country is Directorate of Military Intelli", "timestamp": "2025-11-28T00:42:33.922127"}
+{"type": "verification_passed", "qid": "popmc_test_2991143", "question_snippet": "Who is the father of Leo VI the Wise?", "timestamp": "2025-11-28T00:42:33.922165"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_130408", "question_snippet": "Who was the composer of Gentleman?", "timestamp": "2025-11-28T00:42:33.922219"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_5996520", "question_snippet": "Who was the screenwriter for Time?", "timestamp": "2025-11-28T00:42:33.922261"}
+{"type": "verification_passed", "qid": "popmc_test_307016", "question_snippet": "Who was the screenwriter for The Ax?", "timestamp": "2025-11-28T00:42:33.922307"}
+{"type": "verification_passed", "qid": "popmc_test_5985932", "question_snippet": "What is Thomas Widdrington's occupation?", "timestamp": "2025-11-28T00:42:33.922346"}
+{"error": "No recorded MCQ results for qid: popmc_test_130408, using dynamic teacher fallback", "qid": "popmc_test_130408"}
+{"error": "No recorded MCQ results for qid: popmc_test_5996520, using dynamic teacher fallback", "qid": "popmc_test_5996520"}
+{"type": "verification_passed", "qid": "popmc_test_3553522", "question_snippet": "What is Boutheina Jabnoun's occupation?", "timestamp": "2025-11-28T00:42:34.390066"}
+{"type": "verification_passed", "qid": "popmc_test_5176271", "question_snippet": "Who was the director of Milan?", "timestamp": "2025-11-28T00:42:34.390214"}
+{"type": "verification_passed", "qid": "popmc_test_5065973", "question_snippet": "Who was the director of Man of the Year?", "timestamp": "2025-11-28T00:42:34.390257"}
+{"type": "verification_passed", "qid": "popmc_test_6305440", "question_snippet": "Who is the author of Durchmusterung?", "timestamp": "2025-11-28T00:42:34.390303"}
+{"type": "verification_passed", "qid": "popmc_test_1237972", "question_snippet": "Who was the screenwriter for Middle of the Night?", "timestamp": "2025-11-28T00:42:34.390344"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_908041", "question_snippet": "Who was the screenwriter for Pilot?", "timestamp": "2025-11-28T00:42:34.390384"}
+{"type": "verification_passed", "qid": "popmc_test_2695219", "question_snippet": "Who is the author of Doll?", "timestamp": "2025-11-28T00:42:34.390421"}
+{"type": "verification_passed", "qid": "popmc_test_4571239", "question_snippet": "Who was the screenwriter for How to Deal?", "timestamp": "2025-11-28T00:42:34.390455"}
+{"error": "No recorded MCQ results for qid: popmc_test_908041, using dynamic teacher fallback", "qid": "popmc_test_908041"}
+{"type": "verification_passed", "qid": "popmc_test_1051707", "question_snippet": "Who was the director of Tested?", "timestamp": "2025-11-28T00:42:34.867174"}
+{"type": "verification_passed", "qid": "popmc_test_5863023", "question_snippet": "What sport does grip play?", "timestamp": "2025-11-28T00:42:34.867314"}
+{"type": "verification_passed", "qid": "popmc_test_1897548", "question_snippet": "Who was the screenwriter for Je t'aime, je t'aime?", "timestamp": "2025-11-28T00:42:34.867361"}
+{"type": "verification_passed", "qid": "popmc_test_971044", "question_snippet": "Who was the director of 100?", "timestamp": "2025-11-28T00:42:34.867399"}
+{"type": "verification_passed", "qid": "popmc_test_2727141", "question_snippet": "Who is the author of Unless?", "timestamp": "2025-11-28T00:42:34.867433"}
+{"type": "verification_passed", "qid": "popmc_test_1315628", "question_snippet": "Who was the screenwriter for The Heart of Me?", "timestamp": "2025-11-28T00:42:34.867466"}
+{"type": "verification_passed", "qid": "popmc_test_510782", "question_snippet": "What genre is Sherlock Holmes: The Mystery of the ", "timestamp": "2025-11-28T00:42:34.867499"}
+{"type": "verification_passed", "qid": "popmc_test_5378331", "question_snippet": "What is Paolo Pellizzari's occupation?", "timestamp": "2025-11-28T00:42:34.867532"}
+{"type": "verification_passed", "qid": "popmc_test_5815555", "question_snippet": "Who was the producer of Star?", "timestamp": "2025-11-28T00:42:35.346492"}
+{"type": "verification_passed", "qid": "popmc_test_1187163", "question_snippet": "What genre is V?", "timestamp": "2025-11-28T00:42:35.346636"}
+{"type": "verification_passed", "qid": "popmc_test_4130118", "question_snippet": "Who was the director of Fortuna?", "timestamp": "2025-11-28T00:42:35.346678"}
+{"type": "verification_passed", "qid": "popmc_test_5648015", "question_snippet": "Who was the screenwriter for Run?", "timestamp": "2025-11-28T00:42:35.346725"}
+{"type": "verification_passed", "qid": "popmc_test_6339290", "question_snippet": "What is William Murray, 1st Earl of Mansfield's oc", "timestamp": "2025-11-28T00:42:35.346763"}
+{"type": "verification_passed", "qid": "popmc_test_351597", "question_snippet": "What is the capital of Loir-et-Cher?", "timestamp": "2025-11-28T00:42:35.346796"}
+{"type": "verification_passed", "qid": "popmc_test_4350340", "question_snippet": "In what country is Hatnagoda?", "timestamp": "2025-11-28T00:42:35.346829"}
+{"type": "verification_passed", "qid": "popmc_test_1537486", "question_snippet": "Who was the producer of Calendar?", "timestamp": "2025-11-28T00:42:35.346862"}
+{"type": "verification_passed", "qid": "popmc_test_2436328", "question_snippet": "Who was the screenwriter for The Assault?", "timestamp": "2025-11-28T00:42:35.826110"}
+{"type": "verification_passed", "qid": "popmc_test_2441863", "question_snippet": "What genre is La nudité toute nue?", "timestamp": "2025-11-28T00:42:35.826253"}
+{"type": "verification_passed", "qid": "popmc_test_6037440", "question_snippet": "Who is the author of Trouble?", "timestamp": "2025-11-28T00:42:35.826307"}
+{"type": "verification_passed", "qid": "popmc_test_2442515", "question_snippet": "Who was the screenwriter for La rabbia?", "timestamp": "2025-11-28T00:42:35.826351"}
+{"type": "verification_passed", "qid": "popmc_test_1306160", "question_snippet": "What is the capital of La Matapédia Regional Count", "timestamp": "2025-11-28T00:42:35.826396"}
+{"type": "verification_passed", "qid": "popmc_test_5922043", "question_snippet": "Who is the author of The Discarded?", "timestamp": "2025-11-28T00:42:35.826431"}
+{"type": "verification_passed", "qid": "popmc_test_1053271", "question_snippet": "What is Rose Beaudet's occupation?", "timestamp": "2025-11-28T00:42:35.826465"}
+{"type": "verification_passed", "qid": "popmc_test_1294396", "question_snippet": "Who was the composer of Walker?", "timestamp": "2025-11-28T00:42:35.826497"}
+{"type": "verification_passed", "qid": "popmc_test_5959354", "question_snippet": "What genre is The Test?", "timestamp": "2025-11-28T00:42:36.306694"}
+{"type": "verification_passed", "qid": "popmc_test_82380", "question_snippet": "Who was the screenwriter for Superfantozzi?", "timestamp": "2025-11-28T00:42:36.306843"}
+{"type": "verification_passed", "qid": "popmc_test_1410036", "question_snippet": "Who was the director of The Chief?", "timestamp": "2025-11-28T00:42:36.306887"}
+{"type": "verification_passed", "qid": "popmc_test_2139819", "question_snippet": "What genre is Disney's The Kid?", "timestamp": "2025-11-28T00:42:36.306923"}
+{"type": "verification_passed", "qid": "popmc_test_1814391", "question_snippet": "What is Kam the capital of?", "timestamp": "2025-11-28T00:42:36.306959"}
+{"type": "verification_passed", "qid": "popmc_test_2448372", "question_snippet": "Who was the director of The Creator?", "timestamp": "2025-11-28T00:42:36.306993"}
+{"type": "verification_passed", "qid": "popmc_test_2634351", "question_snippet": "Who is the father of Robert I of Burgundy?", "timestamp": "2025-11-28T00:42:36.307026"}
+{"type": "verification_passed", "qid": "popmc_test_2493472", "question_snippet": "Who was the director of The Black Book?", "timestamp": "2025-11-28T00:42:36.307059"}
+{"type": "verification_passed", "qid": "popmc_test_3895236", "question_snippet": "In what country is Denmark Hill Insect Bed?", "timestamp": "2025-11-28T00:42:36.780691"}
+{"type": "verification_passed", "qid": "popmc_test_3076671", "question_snippet": "What sport does Gus Bodnar play?", "timestamp": "2025-11-28T00:42:36.780822"}
+{"type": "verification_passed", "qid": "popmc_test_1994847", "question_snippet": "Who was the screenwriter for Your Face?", "timestamp": "2025-11-28T00:42:36.780873"}
+{"type": "verification_passed", "qid": "popmc_test_2734204", "question_snippet": "Who is the author of Love?", "timestamp": "2025-11-28T00:42:36.780909"}
+{"type": "verification_passed", "qid": "popmc_test_4120648", "question_snippet": "What genre is Tim?", "timestamp": "2025-11-28T00:42:36.780948"}
+{"type": "verification_passed", "qid": "popmc_test_2313917", "question_snippet": "Who was the screenwriter for Whatever?", "timestamp": "2025-11-28T00:42:36.780983"}
+{"type": "verification_passed", "qid": "popmc_test_2039717", "question_snippet": "Who was the screenwriter for Old Money?", "timestamp": "2025-11-28T00:42:36.781016"}
+{"type": "verification_passed", "qid": "popmc_test_5959084", "question_snippet": "Who was the screenwriter for The Teaser?", "timestamp": "2025-11-28T00:42:36.781048"}
+{"type": "verification_passed", "qid": "popmc_test_1890563", "question_snippet": "Who was the screenwriter for A Woman?", "timestamp": "2025-11-28T00:42:37.245511"}
+{"type": "verification_passed", "qid": "popmc_test_569615", "question_snippet": "Who is the author of Ion?", "timestamp": "2025-11-28T00:42:37.245667"}
+{"type": "verification_passed", "qid": "popmc_test_5136630", "question_snippet": "Who is the father of Mei Baojiu?", "timestamp": "2025-11-28T00:42:37.245710"}
+{"type": "verification_passed", "qid": "popmc_test_1260252", "question_snippet": "Who was the director of Forget Paris?", "timestamp": "2025-11-28T00:42:37.245746"}
+{"type": "verification_passed", "qid": "popmc_test_1162864", "question_snippet": "Who is the author of Rowan and the Travellers?", "timestamp": "2025-11-28T00:42:37.245780"}
+{"type": "verification_passed", "qid": "popmc_test_6084372", "question_snippet": "Who was the director of Us?", "timestamp": "2025-11-28T00:42:37.245814"}
+{"type": "verification_passed", "qid": "popmc_test_6365723", "question_snippet": "In what city was Bob Geddins born?", "timestamp": "2025-11-28T00:42:37.245847"}
+{"type": "verification_passed", "qid": "popmc_test_3620201", "question_snippet": "Who was the screenwriter for Cages?", "timestamp": "2025-11-28T00:42:37.245879"}
+{"type": "verification_passed", "qid": "popmc_test_3459812", "question_snippet": "What is Oral the capital of?", "timestamp": "2025-11-28T00:42:37.721152"}
+{"type": "verification_passed", "qid": "popmc_test_1496437", "question_snippet": "Who is the author of Hawk?", "timestamp": "2025-11-28T00:42:37.721310"}
+{"type": "verification_passed", "qid": "popmc_test_5980452", "question_snippet": "Who was the director of Thomas Jefferson?", "timestamp": "2025-11-28T00:42:37.721357"}
+{"type": "verification_passed", "qid": "popmc_test_5942709", "question_snippet": "Who was the screenwriter for The Monster?", "timestamp": "2025-11-28T00:42:37.721395"}
+{"type": "verification_passed", "qid": "popmc_test_1283559", "question_snippet": "Who is the father of Asher?", "timestamp": "2025-11-28T00:42:37.721429"}
+{"type": "verification_passed", "qid": "popmc_test_6250781", "question_snippet": "What is Þorsteinn Bachmann's occupation?", "timestamp": "2025-11-28T00:42:37.721462"}
+{"type": "verification_passed", "qid": "popmc_test_2609987", "question_snippet": "In what city was Zijah Sokolović born?", "timestamp": "2025-11-28T00:42:37.721495"}
+{"type": "verification_passed", "qid": "popmc_test_1760362", "question_snippet": "In what country is Manitoba Museum?", "timestamp": "2025-11-28T00:42:37.721530"}
+{"type": "verification_passed", "qid": "popmc_test_2413136", "question_snippet": "Who was the screenwriter for Jiminy Glick in Lalaw", "timestamp": "2025-11-28T00:42:38.182603"}
+{"type": "verification_passed", "qid": "popmc_test_2525215", "question_snippet": "What is Alexandre Bóveda's occupation?", "timestamp": "2025-11-28T00:42:38.182753"}
+{"type": "verification_passed", "qid": "popmc_test_5929321", "question_snippet": "Who was the screenwriter for The Good Life?", "timestamp": "2025-11-28T00:42:38.182798"}
+{"type": "verification_passed", "qid": "popmc_test_1832156", "question_snippet": "Who was the composer of The Nose?", "timestamp": "2025-11-28T00:42:38.182837"}
+{"type": "verification_passed", "qid": "popmc_test_4762268", "question_snippet": "Who is the author of Josh?", "timestamp": "2025-11-28T00:42:38.182872"}
+{"type": "verification_passed", "qid": "popmc_test_6458781", "question_snippet": "What genre is The Rebound?", "timestamp": "2025-11-28T00:42:38.182912"}
+{"type": "verification_passed", "qid": "popmc_test_1136027", "question_snippet": "What is John Blake, Jr.'s occupation?", "timestamp": "2025-11-28T00:42:38.182946"}
+{"type": "verification_passed", "qid": "popmc_test_2175819", "question_snippet": "Who was the screenwriter for April?", "timestamp": "2025-11-28T00:42:38.182979"}
+{"type": "verification_passed", "qid": "popmc_test_3556718", "question_snippet": "Who is the father of Brad Armstrong?", "timestamp": "2025-11-28T00:42:38.660348"}
+{"type": "verification_passed", "qid": "popmc_test_5539257", "question_snippet": "What genre is Culture?", "timestamp": "2025-11-28T00:42:38.660469"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_445032", "question_snippet": "Who was the producer of Peter Gabriel?", "timestamp": "2025-11-28T00:42:38.660537"}
+{"type": "verification_passed", "qid": "popmc_test_2245900", "question_snippet": "In what city was Afonso II of Portugal born?", "timestamp": "2025-11-28T00:42:38.660576"}
+{"type": "verification_passed", "qid": "popmc_test_3518904", "question_snippet": "What genre is Quick?", "timestamp": "2025-11-28T00:42:38.660611"}
+{"type": "verification_passed", "qid": "popmc_test_1114521", "question_snippet": "In what country is Usinskoe mine?", "timestamp": "2025-11-28T00:42:38.660645"}
+{"type": "verification_passed", "qid": "popmc_test_5613857", "question_snippet": "What genre is Jetpac?", "timestamp": "2025-11-28T00:42:38.660677"}
+{"type": "verification_passed", "qid": "popmc_test_1901465", "question_snippet": "What is Ivo Perilli's occupation?", "timestamp": "2025-11-28T00:42:38.660709"}
+{"error": "No recorded MCQ results for qid: popmc_test_445032, using dynamic teacher fallback", "qid": "popmc_test_445032"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_3904646", "question_snippet": "Who was the director of Detective?", "timestamp": "2025-11-28T00:42:39.142220"}
+{"type": "verification_passed", "qid": "popmc_test_3557063", "question_snippet": "In what city was Brad Goddard born?", "timestamp": "2025-11-28T00:42:39.142316"}
+{"type": "verification_passed", "qid": "popmc_test_5131889", "question_snippet": "What sport does McPherson Meade play?", "timestamp": "2025-11-28T00:42:39.142361"}
+{"type": "verification_passed", "qid": "popmc_test_204177", "question_snippet": "Who was the screenwriter for The Calamari Wrestler", "timestamp": "2025-11-28T00:42:39.142400"}
+{"type": "verification_passed", "qid": "popmc_test_2743323", "question_snippet": "Who is the father of Dub?", "timestamp": "2025-11-28T00:42:39.142434"}
+{"type": "verification_passed", "qid": "popmc_test_1841625", "question_snippet": "What sport does André Racicot play?", "timestamp": "2025-11-28T00:42:39.142468"}
+{"type": "verification_passed", "qid": "popmc_test_5889620", "question_snippet": "Who was the director of Five?", "timestamp": "2025-11-28T00:42:39.142503"}
+{"type": "verification_passed", "qid": "popmc_test_2112582", "question_snippet": "In what city was Barbara Harris born?", "timestamp": "2025-11-28T00:42:39.142536"}
+{"error": "No recorded MCQ results for qid: popmc_test_3904646, using dynamic teacher fallback", "qid": "popmc_test_3904646"}
+{"type": "verification_passed", "qid": "popmc_test_2933537", "question_snippet": "What genre is The Freeze?", "timestamp": "2025-11-28T00:42:39.619835"}
+{"type": "verification_passed", "qid": "popmc_test_5187475", "question_snippet": "Who is the author of Miracle on 34th Street?", "timestamp": "2025-11-28T00:42:39.619984"}
+{"type": "verification_passed", "qid": "popmc_test_1478183", "question_snippet": "What is Guiyang the capital of?", "timestamp": "2025-11-28T00:42:39.620027"}
+{"type": "verification_passed", "qid": "popmc_test_2796864", "question_snippet": "In what city was Erika M. Anderson born?", "timestamp": "2025-11-28T00:42:39.620065"}
+{"type": "verification_passed", "qid": "popmc_test_1052154", "question_snippet": "In what country is Istedgade?", "timestamp": "2025-11-28T00:42:39.620099"}
+{"type": "verification_passed", "qid": "popmc_test_3524029", "question_snippet": "What is the capital of Harding County?", "timestamp": "2025-11-28T00:42:39.620139"}
+{"type": "verification_passed", "qid": "popmc_test_778795", "question_snippet": "Who was the screenwriter for The Beginning?", "timestamp": "2025-11-28T00:42:39.620175"}
+{"type": "verification_passed", "qid": "popmc_test_905955", "question_snippet": "Who was the composer of Symphony, K. 19b?", "timestamp": "2025-11-28T00:42:39.620207"}
+{"type": "verification_passed", "qid": "popmc_test_2143226", "question_snippet": "What sport does Willy Roy play?", "timestamp": "2025-11-28T00:42:40.096474"}
+{"type": "verification_passed", "qid": "popmc_test_1325197", "question_snippet": "Who was the screenwriter for April 18?", "timestamp": "2025-11-28T00:42:40.096616"}
+{"type": "verification_passed", "qid": "popmc_test_1838983", "question_snippet": "Who was the producer of Green Light?", "timestamp": "2025-11-28T00:42:40.096659"}
+{"type": "verification_passed", "qid": "popmc_test_714110", "question_snippet": "In what city was Giovanni Speranza born?", "timestamp": "2025-11-28T00:42:40.096701"}
+{"type": "verification_passed", "qid": "popmc_test_2084442", "question_snippet": "Who was the producer of One Week?", "timestamp": "2025-11-28T00:42:40.096735"}
+{"type": "verification_passed", "qid": "popmc_test_3130395", "question_snippet": "Who was the director of 180?", "timestamp": "2025-11-28T00:42:40.096768"}
+{"type": "verification_passed", "qid": "popmc_test_3651318", "question_snippet": "Who was the composer of Carrie?", "timestamp": "2025-11-28T00:42:40.096801"}
+{"type": "verification_passed", "qid": "popmc_test_1791490", "question_snippet": "Who was the producer of Thunderbirds Are Go?", "timestamp": "2025-11-28T00:42:40.096832"}
+{"type": "verification_passed", "qid": "popmc_test_2827342", "question_snippet": "What is Guillem Ramon de Gironella's occupation?", "timestamp": "2025-11-28T00:42:40.561753"}
+{"type": "verification_passed", "qid": "popmc_test_4938592", "question_snippet": "Who was the composer of Alone?", "timestamp": "2025-11-28T00:42:40.561900"}
+{"type": "verification_passed", "qid": "popmc_test_5242947", "question_snippet": "Who is the author of Nabokov's Butterflies?", "timestamp": "2025-11-28T00:42:40.561953"}
+{"type": "verification_passed", "qid": "popmc_test_397208", "question_snippet": "Who was the screenwriter for Wrong?", "timestamp": "2025-11-28T00:42:40.561991"}
+{"type": "verification_passed", "qid": "popmc_test_2062099", "question_snippet": "What genre is Music in the Air?", "timestamp": "2025-11-28T00:42:40.562026"}
+{"type": "verification_passed", "qid": "popmc_test_2727560", "question_snippet": "Who is the author of Abel?", "timestamp": "2025-11-28T00:42:40.562061"}
+{"type": "verification_passed", "qid": "popmc_test_5328509", "question_snippet": "Who was the composer of Oh Maane Maane?", "timestamp": "2025-11-28T00:42:40.562093"}
+{"type": "verification_passed", "qid": "popmc_test_2491924", "question_snippet": "Who was the director of It's Not Just You?", "timestamp": "2025-11-28T00:42:40.562125"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_1437951", "question_snippet": "Who is the author of The Storm?", "timestamp": "2025-11-28T00:42:41.042949"}
+{"type": "verification_passed", "qid": "popmc_test_3800204", "question_snippet": "What genre is Crew?", "timestamp": "2025-11-28T00:42:41.043044"}
+{"type": "verification_passed", "qid": "popmc_test_2077641", "question_snippet": "What genre is Face Off?", "timestamp": "2025-11-28T00:42:41.043097"}
+{"type": "verification_passed", "qid": "popmc_test_2353403", "question_snippet": "Who was the director of Mypods and Boomsticks?", "timestamp": "2025-11-28T00:42:41.043134"}
+{"type": "verification_passed", "qid": "popmc_test_4584501", "question_snippet": "Who was the screenwriter for On the Day Before?", "timestamp": "2025-11-28T00:42:41.043167"}
+{"type": "verification_passed", "qid": "popmc_test_448335", "question_snippet": "Who was the producer of Peter Gabriel?", "timestamp": "2025-11-28T00:42:41.043201"}
+{"type": "verification_passed", "qid": "popmc_test_1683421", "question_snippet": "Who is the author of Enchiridion of Epictetus?", "timestamp": "2025-11-28T00:42:41.043240"}
+{"type": "verification_passed", "qid": "popmc_test_6383796", "question_snippet": "What genre is Episode?", "timestamp": "2025-11-28T00:42:41.043274"}
+{"error": "No recorded MCQ results for qid: popmc_test_1437951, using dynamic teacher fallback", "qid": "popmc_test_1437951"}
+{"type": "verification_passed", "qid": "popmc_test_672890", "question_snippet": "Who is the author of Capital?", "timestamp": "2025-11-28T00:42:41.518944"}
+{"type": "verification_passed", "qid": "popmc_test_6154838", "question_snippet": "In what country is Globe?", "timestamp": "2025-11-28T00:42:41.519090"}
+{"type": "verification_passed", "qid": "popmc_test_4077477", "question_snippet": "Who was the producer of The Era?", "timestamp": "2025-11-28T00:42:41.519131"}
+{"type": "verification_passed", "qid": "popmc_test_26545", "question_snippet": "What is Clanwilliam the capital of?", "timestamp": "2025-11-28T00:42:41.519167"}
+{"type": "verification_passed", "qid": "popmc_test_3147463", "question_snippet": "Who was the producer of 1977?", "timestamp": "2025-11-28T00:42:41.519200"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_5753186", "question_snippet": "Who was the screenwriter for Sick?", "timestamp": "2025-11-28T00:42:41.519239"}
+{"type": "verification_passed", "qid": "popmc_test_5130344", "question_snippet": "In what city was Wayne Cooper born?", "timestamp": "2025-11-28T00:42:41.519274"}
+{"type": "verification_passed", "qid": "popmc_test_5157909", "question_snippet": "What is Michael Shelley's occupation?", "timestamp": "2025-11-28T00:42:41.519321"}
+{"error": "No recorded MCQ results for qid: popmc_test_5753186, using dynamic teacher fallback", "qid": "popmc_test_5753186"}
+{"type": "verification_passed", "qid": "popmc_test_5845627", "question_snippet": "Who is the author of Success?", "timestamp": "2025-11-28T00:42:42.010258"}
+{"type": "verification_passed", "qid": "popmc_test_5996519", "question_snippet": "Who was the screenwriter for Time?", "timestamp": "2025-11-28T00:42:42.010405"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_2162041", "question_snippet": "Who was the composer of Alone?", "timestamp": "2025-11-28T00:42:42.010459"}
+{"type": "verification_passed", "qid": "popmc_test_5946412", "question_snippet": "Who was the screenwriter for The Owl?", "timestamp": "2025-11-28T00:42:42.010496"}
+{"type": "verification_passed", "qid": "popmc_test_2413157", "question_snippet": "What is the religion of Caesar Baronius?", "timestamp": "2025-11-28T00:42:42.010530"}
+{"type": "verification_passed", "qid": "popmc_test_2198169", "question_snippet": "Who was the producer of Believe in Me?", "timestamp": "2025-11-28T00:42:42.010563"}
+{"type": "verification_passed", "qid": "popmc_test_383351", "question_snippet": "In what city was Jacob Duck born?", "timestamp": "2025-11-28T00:42:42.010596"}
+{"type": "verification_passed", "qid": "popmc_test_1034128", "question_snippet": "What sport does Inter Moengotapoe play?", "timestamp": "2025-11-28T00:42:42.010628"}
+{"error": "No recorded MCQ results for qid: popmc_test_2162041, using dynamic teacher fallback", "qid": "popmc_test_2162041"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_390288", "question_snippet": "Who was the composer of Starship Trooper?", "timestamp": "2025-11-28T00:42:42.472401"}
+{"type": "verification_passed", "qid": "popmc_test_241622", "question_snippet": "Who was the composer of Alexander's Feast?", "timestamp": "2025-11-28T00:42:42.472547"}
+{"type": "verification_passed", "qid": "popmc_test_236106", "question_snippet": "Who was the composer of Easy Living?", "timestamp": "2025-11-28T00:42:42.472600"}
+{"type": "verification_passed", "qid": "popmc_test_2106548", "question_snippet": "In what country is Gare de Rosporden?", "timestamp": "2025-11-28T00:42:42.472636"}
+{"type": "verification_passed", "qid": "popmc_test_5920612", "question_snippet": "Who was the director of The Day?", "timestamp": "2025-11-28T00:42:42.472675"}
+{"type": "verification_passed", "qid": "popmc_test_1444653", "question_snippet": "In what country is Lind?", "timestamp": "2025-11-28T00:42:42.472709"}
+{"type": "verification_passed", "qid": "popmc_test_6042636", "question_snippet": "What genre is Tug?", "timestamp": "2025-11-28T00:42:42.472757"}
+{"type": "verification_passed", "qid": "popmc_test_3586375", "question_snippet": "What sport does Bryan Schmidt play?", "timestamp": "2025-11-28T00:42:42.472789"}
+{"error": "No recorded MCQ results for qid: popmc_test_390288, using dynamic teacher fallback", "qid": "popmc_test_390288"}
+{"type": "verification_passed", "qid": "popmc_test_3416971", "question_snippet": "What genre is Axis Of?", "timestamp": "2025-11-28T00:42:42.947276"}
+{"type": "verification_passed", "qid": "popmc_test_3204479", "question_snippet": "Who was the screenwriter for The Brave?", "timestamp": "2025-11-28T00:42:42.947405"}
+{"type": "verification_passed", "qid": "popmc_test_5526916", "question_snippet": "Who was the composer of Raising the Wind?", "timestamp": "2025-11-28T00:42:42.947448"}
+{"type": "verification_passed", "qid": "popmc_test_3093369", "question_snippet": "What genre is Technology?", "timestamp": "2025-11-28T00:42:42.947495"}
+{"type": "verification_passed", "qid": "popmc_test_5933806", "question_snippet": "Who is the author of The Information?", "timestamp": "2025-11-28T00:42:42.947531"}
+{"type": "verification_passed", "qid": "popmc_test_192848", "question_snippet": "Who was the producer of Most?", "timestamp": "2025-11-28T00:42:42.947563"}
+{"type": "verification_passed", "qid": "popmc_test_542248", "question_snippet": "What is Tadhg Dall Ó hUiginn's occupation?", "timestamp": "2025-11-28T00:42:42.947597"}
+{"type": "verification_passed", "qid": "popmc_test_2736130", "question_snippet": "What genre is Animal?", "timestamp": "2025-11-28T00:42:42.947632"}
+{"type": "verification_passed", "qid": "popmc_test_5988231", "question_snippet": "Who is the author of Three Days to Never?", "timestamp": "2025-11-28T00:42:43.406964"}
+{"type": "verification_passed", "qid": "popmc_test_975935", "question_snippet": "Who was the screenwriter for Drushyam?", "timestamp": "2025-11-28T00:42:43.407104"}
+{"type": "verification_passed", "qid": "popmc_test_1787219", "question_snippet": "Who was the screenwriter for Together?", "timestamp": "2025-11-28T00:42:43.407156"}
+{"type": "verification_passed", "qid": "popmc_test_5716672", "question_snippet": "In what country is Seishi Ursula Gakuen Junior Col", "timestamp": "2025-11-28T00:42:43.407191"}
+{"type": "verification_passed", "qid": "popmc_test_2548111", "question_snippet": "Who was the producer of On Tour?", "timestamp": "2025-11-28T00:42:43.407226"}
+{"type": "verification_passed", "qid": "popmc_test_1442188", "question_snippet": "What genre is DOS MZ executable?", "timestamp": "2025-11-28T00:42:43.407259"}
+{"type": "verification_passed", "qid": "popmc_test_4570128", "question_snippet": "Who is the author of Invasion?", "timestamp": "2025-11-28T00:42:43.407300"}
+{"type": "verification_passed", "qid": "popmc_test_2318096", "question_snippet": "In what city was Ferdinand Elle born?", "timestamp": "2025-11-28T00:42:43.407340"}
+{"type": "verification_passed", "qid": "popmc_test_511422", "question_snippet": "What sport does Indrek Pertelson play?", "timestamp": "2025-11-28T00:42:43.882679"}
+{"type": "verification_passed", "qid": "popmc_test_1625069", "question_snippet": "Who was the producer of Freak?", "timestamp": "2025-11-28T00:42:43.882814"}
+{"type": "verification_passed", "qid": "popmc_test_3599732", "question_snippet": "Who was the director of Changes?", "timestamp": "2025-11-28T00:42:43.882857"}
+{"type": "verification_passed", "qid": "popmc_test_2646290", "question_snippet": "Who was the screenwriter for Slam?", "timestamp": "2025-11-28T00:42:43.882893"}
+{"type": "verification_passed", "qid": "popmc_test_5715625", "question_snippet": "What genre is Seed?", "timestamp": "2025-11-28T00:42:43.882926"}
+{"type": "verification_passed", "qid": "popmc_test_5943798", "question_snippet": "Who was the director of The National Health?", "timestamp": "2025-11-28T00:42:43.882964"}
+{"type": "verification_passed", "qid": "popmc_test_1051649", "question_snippet": "Who was the director of Sacrifice?", "timestamp": "2025-11-28T00:42:43.882998"}
+{"type": "verification_passed", "qid": "popmc_test_2730256", "question_snippet": "In what city was Bruce Charles Heezen born?", "timestamp": "2025-11-28T00:42:43.883029"}
+{"type": "verification_passed", "qid": "popmc_test_4500781", "question_snippet": "What genre is House Guest?", "timestamp": "2025-11-28T00:42:44.357864"}
+{"type": "verification_passed", "qid": "popmc_test_2189871", "question_snippet": "Who was the director of Barabbas?", "timestamp": "2025-11-28T00:42:44.357998"}
+{"type": "verification_passed", "qid": "popmc_test_1001085", "question_snippet": "Who is the author of Lust?", "timestamp": "2025-11-28T00:42:44.358041"}
+{"type": "verification_passed", "qid": "popmc_test_2648130", "question_snippet": "What genre is The Firm?", "timestamp": "2025-11-28T00:42:44.358076"}
+{"type": "verification_passed", "qid": "popmc_test_6341002", "question_snippet": "In what country is Roman Catholic Diocese of Kasan", "timestamp": "2025-11-28T00:42:44.358110"}
+{"type": "verification_passed", "qid": "popmc_test_5479972", "question_snippet": "Who was the director of Positive?", "timestamp": "2025-11-28T00:42:44.358143"}
+{"type": "verification_passed", "qid": "popmc_test_5343324", "question_snippet": "Who is the author of One of the Family?", "timestamp": "2025-11-28T00:42:44.358175"}
+{"type": "verification_passed", "qid": "popmc_test_2913344", "question_snippet": "What genre is Lux?", "timestamp": "2025-11-28T00:42:44.358207"}
+{"type": "verification_passed", "qid": "popmc_test_671635", "question_snippet": "Who was the producer of You're Not You?", "timestamp": "2025-11-28T00:42:44.820454"}
+{"type": "verification_passed", "qid": "popmc_test_1730422", "question_snippet": "What is Ramla the capital of?", "timestamp": "2025-11-28T00:42:44.820608"}
+{"type": "verification_passed", "qid": "popmc_test_2026207", "question_snippet": "Who was the director of Second Skin?", "timestamp": "2025-11-28T00:42:44.820651"}
+{"type": "verification_passed", "qid": "popmc_test_6113335", "question_snippet": "Who is the author of Visionseeker: Shared Wisdom f", "timestamp": "2025-11-28T00:42:44.820687"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_2217230", "question_snippet": "Who was the composer of The Seasons?", "timestamp": "2025-11-28T00:42:44.820732"}
+{"type": "verification_passed", "qid": "popmc_test_5269031", "question_snippet": "Who was the composer of Nelson?", "timestamp": "2025-11-28T00:42:44.820768"}
+{"type": "verification_passed", "qid": "popmc_test_3927118", "question_snippet": "In what country is Dobra River?", "timestamp": "2025-11-28T00:42:44.820802"}
+{"type": "verification_passed", "qid": "popmc_test_4400693", "question_snippet": "What genre is HiM?", "timestamp": "2025-11-28T00:42:44.820836"}
+{"error": "No recorded MCQ results for qid: popmc_test_2217230, using dynamic teacher fallback", "qid": "popmc_test_2217230"}
+{"type": "verification_passed", "qid": "popmc_test_4608279", "question_snippet": "In what country is Jinhua railway station?", "timestamp": "2025-11-28T00:42:45.301402"}
+{"type": "verification_passed", "qid": "popmc_test_3542459", "question_snippet": "Who was the director of Bol?", "timestamp": "2025-11-28T00:42:45.301507"}
+{"type": "verification_passed", "qid": "popmc_test_5702088", "question_snippet": "What is the capital of canton of Gordes?", "timestamp": "2025-11-28T00:42:45.301579"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_6078967", "question_snippet": "What genre is Universe?", "timestamp": "2025-11-28T00:42:45.301623"}
+{"type": "verification_passed", "qid": "popmc_test_1627122", "question_snippet": "What is the religion of Waalo?", "timestamp": "2025-11-28T00:42:45.301672"}
+{"type": "verification_passed", "qid": "popmc_test_5436280", "question_snippet": "In what city was Petros Tabouris born?", "timestamp": "2025-11-28T00:42:45.301707"}
+{"type": "verification_passed", "qid": "popmc_test_235812", "question_snippet": "Who was the composer of Unser Mund sei voll Lachen", "timestamp": "2025-11-28T00:42:45.301746"}
+{"type": "verification_passed", "qid": "popmc_test_6273322", "question_snippet": "What is Ronneby the capital of?", "timestamp": "2025-11-28T00:42:45.301782"}
+{"error": "No recorded MCQ results for qid: popmc_test_6078967, using dynamic teacher fallback", "qid": "popmc_test_6078967"}
+{"type": "verification_passed", "qid": "popmc_test_1993825", "question_snippet": "Who was the screenwriter for Ballad?", "timestamp": "2025-11-28T00:42:45.794297"}
+{"type": "verification_passed", "qid": "popmc_test_3952467", "question_snippet": "In what country is Dragomirna River?", "timestamp": "2025-11-28T00:42:45.794421"}
+{"type": "verification_passed", "qid": "popmc_test_6383571", "question_snippet": "Who was the composer of In the Garden?", "timestamp": "2025-11-28T00:42:45.794477"}
+{"type": "verification_passed", "qid": "popmc_test_3373198", "question_snippet": "In what country is Breitenfelde?", "timestamp": "2025-11-28T00:42:45.794523"}
+{"type": "verification_passed", "qid": "popmc_test_2713407", "question_snippet": "Who was the screenwriter for Yesterday's Hero?", "timestamp": "2025-11-28T00:42:45.794558"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_245215", "question_snippet": "Who was the composer of Le Concert?", "timestamp": "2025-11-28T00:42:45.794598"}
+{"type": "verification_passed", "qid": "popmc_test_5591620", "question_snippet": "Who is the author of Road?", "timestamp": "2025-11-28T00:42:45.794633"}
+{"type": "verification_passed", "qid": "popmc_test_4263258", "question_snippet": "What genre is Good Question?", "timestamp": "2025-11-28T00:42:45.794677"}
+{"error": "No recorded MCQ results for qid: popmc_test_245215, using dynamic teacher fallback", "qid": "popmc_test_245215"}
+{"type": "verification_passed", "qid": "popmc_test_692943", "question_snippet": "Who was the screenwriter for The Medic?", "timestamp": "2025-11-28T00:42:46.254404"}
+{"type": "verification_passed", "qid": "popmc_test_5564579", "question_snippet": "Who is the author of Rewind?", "timestamp": "2025-11-28T00:42:46.254538"}
+{"type": "verification_passed", "qid": "popmc_test_1239812", "question_snippet": "Who was the producer of Our Love?", "timestamp": "2025-11-28T00:42:46.254580"}
+{"type": "verification_passed", "qid": "popmc_test_2856592", "question_snippet": "Who was the director of 15 Maiden Lane?", "timestamp": "2025-11-28T00:42:46.254617"}
+{"type": "verification_passed", "qid": "popmc_test_3196113", "question_snippet": "Who was the director of A Day to Remember?", "timestamp": "2025-11-28T00:42:46.254650"}
+{"type": "verification_passed", "qid": "popmc_test_5930682", "question_snippet": "Who is the author of The Guard?", "timestamp": "2025-11-28T00:42:46.254682"}
+{"type": "verification_passed", "qid": "popmc_test_260134", "question_snippet": "Who was the director of Before and After?", "timestamp": "2025-11-28T00:42:46.254714"}
+{"type": "verification_passed", "qid": "popmc_test_3900281", "question_snippet": "What is Derek Ingram Hill's occupation?", "timestamp": "2025-11-28T00:42:46.254745"}
+{"type": "verification_passed", "qid": "popmc_test_4984600", "question_snippet": "Who was the director of Michael?", "timestamp": "2025-11-28T00:42:46.733763"}
+{"type": "verification_passed", "qid": "popmc_test_2838012", "question_snippet": "Who was the composer of High Time?", "timestamp": "2025-11-28T00:42:46.733903"}
+{"type": "verification_passed", "qid": "popmc_test_3956274", "question_snippet": "What genre is Ange?", "timestamp": "2025-11-28T00:42:46.733946"}
+{"type": "verification_passed", "qid": "popmc_test_4558262", "question_snippet": "In what country is Landresse?", "timestamp": "2025-11-28T00:42:46.733984"}
+{"type": "verification_passed", "qid": "popmc_test_1627151", "question_snippet": "Who was the director of Rebellion?", "timestamp": "2025-11-28T00:42:46.734018"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_5753187", "question_snippet": "Who was the screenwriter for Sick?", "timestamp": "2025-11-28T00:42:46.734063"}
+{"type": "verification_passed", "qid": "popmc_test_1693405", "question_snippet": "Who was the producer of Riding the Bullet?", "timestamp": "2025-11-28T00:42:46.734099"}
+{"type": "verification_passed", "qid": "popmc_test_4822110", "question_snippet": "What is Kathy Saltzman's occupation?", "timestamp": "2025-11-28T00:42:46.734132"}
+{"error": "No recorded MCQ results for qid: popmc_test_5753187, using dynamic teacher fallback", "qid": "popmc_test_5753187"}
+{"type": "verification_passed", "qid": "popmc_test_1782118", "question_snippet": "Who was the director of Slaves of New York?", "timestamp": "2025-11-28T00:42:47.202895"}
+{"type": "verification_passed", "qid": "popmc_test_5317224", "question_snippet": "Who was the director of Nuclear Strike?", "timestamp": "2025-11-28T00:42:47.203045"}
+{"type": "verification_passed", "qid": "popmc_test_4864707", "question_snippet": "What genre is Mary's Child?", "timestamp": "2025-11-28T00:42:47.203088"}
+{"type": "verification_passed", "qid": "popmc_test_190883", "question_snippet": "What is Huntington Wilson's occupation?", "timestamp": "2025-11-28T00:42:47.203125"}
+{"type": "verification_passed", "qid": "popmc_test_2229638", "question_snippet": "Who is the author of Cages?", "timestamp": "2025-11-28T00:42:47.203159"}
+{"type": "verification_passed", "qid": "popmc_test_6314040", "question_snippet": "Who was the producer of Buffalo?", "timestamp": "2025-11-28T00:42:47.203193"}
+{"type": "verification_passed", "qid": "popmc_test_1144587", "question_snippet": "Who was the director of Left Behind?", "timestamp": "2025-11-28T00:42:47.203226"}
+{"type": "verification_passed", "qid": "popmc_test_5933855", "question_snippet": "Who was the screenwriter for The Injury?", "timestamp": "2025-11-28T00:42:47.203258"}
+{"type": "verification_passed", "qid": "popmc_test_971045", "question_snippet": "Who was the screenwriter for 100?", "timestamp": "2025-11-28T00:42:47.669102"}
+{"type": "verification_passed", "qid": "popmc_test_1846198", "question_snippet": "Who was the director of El Aura?", "timestamp": "2025-11-28T00:42:47.669235"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_186338", "question_snippet": "Who was the composer of Wish You Were Here?", "timestamp": "2025-11-28T00:42:47.669305"}
+{"type": "verification_passed", "qid": "popmc_test_3356649", "question_snippet": "In what city was Anton Lui born?", "timestamp": "2025-11-28T00:42:47.669350"}
+{"type": "verification_passed", "qid": "popmc_test_1184585", "question_snippet": "What genre is Unknown?", "timestamp": "2025-11-28T00:42:47.669395"}
+{"type": "verification_passed", "qid": "popmc_test_5667071", "question_snippet": "Who was the director of Sagar Sangamey?", "timestamp": "2025-11-28T00:42:47.669430"}
+{"type": "verification_passed", "qid": "popmc_test_5645463", "question_snippet": "Who was the screenwriter for Boys?", "timestamp": "2025-11-28T00:42:47.669462"}
+{"type": "verification_passed", "qid": "popmc_test_245029", "question_snippet": "Who was the director of Under the Sun?", "timestamp": "2025-11-28T00:42:47.669495"}
+{"error": "No recorded MCQ results for qid: popmc_test_186338, using dynamic teacher fallback", "qid": "popmc_test_186338"}
+{"type": "verification_passed", "qid": "popmc_test_4815732", "question_snippet": "In what country is Lent?", "timestamp": "2025-11-28T00:42:48.145574"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_4086374", "question_snippet": "Who was the director of Face to Face?", "timestamp": "2025-11-28T00:42:48.145716"}
+{"type": "verification_passed", "qid": "popmc_test_2108874", "question_snippet": "Who was the screenwriter for A Matter of Time?", "timestamp": "2025-11-28T00:42:48.145762"}
+{"type": "verification_passed", "qid": "popmc_test_2890337", "question_snippet": "Who was the director of Oliver's Story?", "timestamp": "2025-11-28T00:42:48.145808"}
+{"type": "verification_passed", "qid": "popmc_test_6484458", "question_snippet": "What sport does Muhamed Konjić play?", "timestamp": "2025-11-28T00:42:48.145844"}
+{"type": "verification_passed", "qid": "popmc_test_1323296", "question_snippet": "What genre is Prestige?", "timestamp": "2025-11-28T00:42:48.145884"}
+{"type": "verification_passed", "qid": "popmc_test_4302670", "question_snippet": "Who was the director of The Hook?", "timestamp": "2025-11-28T00:42:48.145919"}
+{"type": "verification_passed", "qid": "popmc_test_6126841", "question_snippet": "In what country is WLRA?", "timestamp": "2025-11-28T00:42:48.145951"}
+{"error": "No recorded MCQ results for qid: popmc_test_4086374, using dynamic teacher fallback", "qid": "popmc_test_4086374"}
+{"type": "verification_passed", "qid": "popmc_test_1941", "question_snippet": "What is Hallsberg the capital of?", "timestamp": "2025-11-28T00:42:48.609321"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_6501898", "question_snippet": "Who is the author of Storm?", "timestamp": "2025-11-28T00:42:48.609480"}
+{"type": "verification_passed", "qid": "popmc_test_549776", "question_snippet": "What genre is Delete Yourself!?", "timestamp": "2025-11-28T00:42:48.609533"}
+{"type": "verification_passed", "qid": "popmc_test_5359853", "question_snippet": "Who is the author of Our Story?", "timestamp": "2025-11-28T00:42:48.609573"}
+{"type": "verification_passed", "qid": "popmc_test_3974677", "question_snippet": "Who is the father of Theodelap of Spoleto?", "timestamp": "2025-11-28T00:42:48.609608"}
+{"type": "verification_passed", "qid": "popmc_test_2935301", "question_snippet": "Who was the producer of The Trap?", "timestamp": "2025-11-28T00:42:48.609641"}
+{"type": "verification_passed", "qid": "popmc_test_1398877", "question_snippet": "Who was the composer of Ghost?", "timestamp": "2025-11-28T00:42:48.609674"}
+{"type": "verification_passed", "qid": "popmc_test_5905890", "question_snippet": "Who was the composer of That's What Love Is Made O", "timestamp": "2025-11-28T00:42:48.609707"}
+{"error": "No recorded MCQ results for qid: popmc_test_6501898, using dynamic teacher fallback", "qid": "popmc_test_6501898"}
+{"type": "verification_passed", "qid": "popmc_test_1505982", "question_snippet": "What is C. E. Webber's occupation?", "timestamp": "2025-11-28T00:42:49.148713"}
+{"type": "verification_passed", "qid": "popmc_test_2672689", "question_snippet": "What genre is Cows?", "timestamp": "2025-11-28T00:42:49.148865"}
+{"type": "verification_passed", "qid": "popmc_test_1986529", "question_snippet": "Who was the director of Imprint?", "timestamp": "2025-11-28T00:42:49.148907"}
+{"type": "verification_passed", "qid": "popmc_test_6474728", "question_snippet": "Who was the producer of Shor?", "timestamp": "2025-11-28T00:42:49.148944"}
+{"type": "verification_passed", "qid": "popmc_test_5485880", "question_snippet": "Who was the director of Premi?", "timestamp": "2025-11-28T00:42:49.148977"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_234491", "question_snippet": "Who was the screenwriter for The Company?", "timestamp": "2025-11-28T00:42:49.149018"}
+{"type": "verification_passed", "qid": "popmc_test_5955665", "question_snippet": "Who was the director of The Sisters?", "timestamp": "2025-11-28T00:42:49.149054"}
+{"type": "verification_passed", "qid": "popmc_test_1982186", "question_snippet": "Who was the director of The Illusionist?", "timestamp": "2025-11-28T00:42:49.149087"}
+{"error": "No recorded MCQ results for qid: popmc_test_234491, using dynamic teacher fallback", "qid": "popmc_test_234491"}
+{"type": "verification_passed", "qid": "popmc_test_1274037", "question_snippet": "Who is the author of Listen?", "timestamp": "2025-11-28T00:42:49.623147"}
+{"type": "verification_passed", "qid": "popmc_test_2300498", "question_snippet": "In what country is Vaiea?", "timestamp": "2025-11-28T00:42:49.623306"}
+{"type": "verification_passed", "qid": "popmc_test_2675069", "question_snippet": "Who was the composer of The Sanguine Fan?", "timestamp": "2025-11-28T00:42:49.623353"}
+{"type": "verification_passed", "qid": "popmc_test_1620533", "question_snippet": "Who was the screenwriter for Company Man?", "timestamp": "2025-11-28T00:42:49.623392"}
+{"type": "verification_passed", "qid": "popmc_test_3067431", "question_snippet": "What sport does Tim Jackman play?", "timestamp": "2025-11-28T00:42:49.623433"}
+{"type": "verification_passed", "qid": "popmc_test_1730929", "question_snippet": "What is Alexander Rinnooy Kan's occupation?", "timestamp": "2025-11-28T00:42:49.623468"}
+{"type": "verification_passed", "qid": "popmc_test_5340918", "question_snippet": "Who was the screenwriter for On the Job?", "timestamp": "2025-11-28T00:42:49.623503"}
+{"type": "verification_passed", "qid": "popmc_test_5394168", "question_snippet": "What is Patrick O'Brien Demsey's occupation?", "timestamp": "2025-11-28T00:42:49.623536"}
+{"type": "verification_passed", "qid": "popmc_test_2857594", "question_snippet": "Who was the director of The Well?", "timestamp": "2025-11-28T00:42:50.087643"}
+{"type": "verification_passed", "qid": "popmc_test_776129", "question_snippet": "Who was the screenwriter for The Keeper?", "timestamp": "2025-11-28T00:42:50.087791"}
+{"type": "verification_passed", "qid": "popmc_test_693882", "question_snippet": "Who was the director of To Live?", "timestamp": "2025-11-28T00:42:50.087835"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_4109853", "question_snippet": "What genre is Fire?", "timestamp": "2025-11-28T00:42:50.087879"}
+{"type": "verification_passed", "qid": "popmc_test_1015466", "question_snippet": "In what city was Aleksandra Socha born?", "timestamp": "2025-11-28T00:42:50.087917"}
+{"type": "verification_passed", "qid": "popmc_test_4176391", "question_snippet": "What is the religion of Pierre-Antoine Paulo?", "timestamp": "2025-11-28T00:42:50.087953"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_2344983", "question_snippet": "Who is the father of George?", "timestamp": "2025-11-28T00:42:50.087991"}
+{"type": "verification_passed", "qid": "popmc_test_979999", "question_snippet": "Who was the director of Nice People?", "timestamp": "2025-11-28T00:42:50.088026"}
+{"error": "No recorded MCQ results for qid: popmc_test_4109853, using dynamic teacher fallback", "qid": "popmc_test_4109853"}
+{"error": "No recorded MCQ results for qid: popmc_test_2344983, using dynamic teacher fallback", "qid": "popmc_test_2344983"}
+{"type": "verification_passed", "qid": "popmc_test_5914041", "question_snippet": "Who was the composer of Orlando finto pazzo?", "timestamp": "2025-11-28T00:42:50.555696"}
+{"type": "verification_passed", "qid": "popmc_test_6038226", "question_snippet": "Who is the author of Tru?", "timestamp": "2025-11-28T00:42:50.555835"}
+{"type": "verification_passed", "qid": "popmc_test_3559271", "question_snippet": "What genre is Brain Slaves?", "timestamp": "2025-11-28T00:42:50.555877"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_1038180", "question_snippet": "Who was the director of Interview?", "timestamp": "2025-11-28T00:42:50.555923"}
+{"type": "verification_passed", "qid": "popmc_test_5991967", "question_snippet": "Who was the screenwriter for Tiger?", "timestamp": "2025-11-28T00:42:50.555959"}
+{"type": "verification_passed", "qid": "popmc_test_5142735", "question_snippet": "Who was the director of The Company?", "timestamp": "2025-11-28T00:42:50.555994"}
+{"type": "verification_passed", "qid": "popmc_test_2840241", "question_snippet": "What sport does Irina Crasnoscioc play?", "timestamp": "2025-11-28T00:42:50.556028"}
+{"type": "verification_passed", "qid": "popmc_test_2289674", "question_snippet": "What genre is Discount?", "timestamp": "2025-11-28T00:42:50.556061"}
+{"error": "No recorded MCQ results for qid: popmc_test_1038180, using dynamic teacher fallback", "qid": "popmc_test_1038180"}
+{"type": "verification_passed", "qid": "popmc_test_4541376", "question_snippet": "Who is the father of Carlo de' Medici?", "timestamp": "2025-11-28T00:42:51.035513"}
+{"type": "verification_passed", "qid": "popmc_test_6501114", "question_snippet": "Who is the author of Silk?", "timestamp": "2025-11-28T00:42:51.035639"}
+{"type": "verification_passed", "qid": "popmc_test_2374638", "question_snippet": "Who is the author of Instruction of Hardjedef?", "timestamp": "2025-11-28T00:42:51.035715"}
+{"type": "verification_passed", "qid": "popmc_test_2785560", "question_snippet": "In what country is Khafr County?", "timestamp": "2025-11-28T00:42:51.035753"}
+{"type": "verification_passed", "qid": "popmc_test_6220618", "question_snippet": "Who was the screenwriter for Bala?", "timestamp": "2025-11-28T00:42:51.035788"}
+{"type": "verification_passed", "qid": "popmc_test_6258787", "question_snippet": "In what country is Eschbronn?", "timestamp": "2025-11-28T00:42:51.035820"}
+{"type": "verification_passed", "qid": "popmc_test_4150846", "question_snippet": "What is the religion of Frank White?", "timestamp": "2025-11-28T00:42:51.035853"}
+{"type": "verification_passed", "qid": "popmc_test_5880253", "question_snippet": "Who was the director of Tamas?", "timestamp": "2025-11-28T00:42:51.035885"}
+{"type": "verification_passed", "qid": "popmc_test_2663022", "question_snippet": "Who was the producer of (One Glance Is) Holy?", "timestamp": "2025-11-28T00:42:51.528670"}
+{"type": "verification_passed", "qid": "popmc_test_1677824", "question_snippet": "Who is the father of Denis I of Portugal?", "timestamp": "2025-11-28T00:42:51.528785"}
+{"type": "verification_passed", "qid": "popmc_test_96493", "question_snippet": "Who was the producer of Play?", "timestamp": "2025-11-28T00:42:51.528856"}
+{"type": "verification_passed", "qid": "popmc_test_6433404", "question_snippet": "Who was the screenwriter for Ten Seconds to Hell?", "timestamp": "2025-11-28T00:42:51.528893"}
+{"type": "verification_passed", "qid": "popmc_test_205012", "question_snippet": "Who was the screenwriter for Cromwell?", "timestamp": "2025-11-28T00:42:51.528927"}
+{"type": "verification_passed", "qid": "popmc_test_33517", "question_snippet": "Who is the mother of Dinara Safina?", "timestamp": "2025-11-28T00:42:51.528960"}
+{"type": "verification_passed", "qid": "popmc_test_2493408", "question_snippet": "What genre is The Capture?", "timestamp": "2025-11-28T00:42:51.528993"}
+{"type": "verification_passed", "qid": "popmc_test_2895094", "question_snippet": "Who is the mother of Liza Huber?", "timestamp": "2025-11-28T00:42:51.529025"}
+{"type": "verification_passed", "qid": "popmc_test_3024635", "question_snippet": "What sport does Nobuhiro Ishizaki play?", "timestamp": "2025-11-28T00:42:52.010176"}
+{"type": "verification_passed", "qid": "popmc_test_5773447", "question_snippet": "Who was the screenwriter for Skin?", "timestamp": "2025-11-28T00:42:52.010407"}
+{"type": "verification_passed", "qid": "popmc_test_1178924", "question_snippet": "What genre is I Lost My Heart in Heidelberg?", "timestamp": "2025-11-28T00:42:52.010452"}
+{"type": "verification_passed", "qid": "popmc_test_3859284", "question_snippet": "Who was the producer of Maling Kutang?", "timestamp": "2025-11-28T00:42:52.010489"}
+{"type": "verification_passed", "qid": "popmc_test_3791883", "question_snippet": "Who was the producer of Side Effects?", "timestamp": "2025-11-28T00:42:52.010522"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_1969758", "question_snippet": "Who was the screenwriter for Emma?", "timestamp": "2025-11-28T00:42:52.010564"}
+{"type": "verification_passed", "qid": "popmc_test_6376093", "question_snippet": "In what country is Riechheimer Berg?", "timestamp": "2025-11-28T00:42:52.010600"}
+{"type": "verification_passed", "qid": "popmc_test_1621813", "question_snippet": "Who was the screenwriter for Breath?", "timestamp": "2025-11-28T00:42:52.010643"}
+{"error": "No recorded MCQ results for qid: popmc_test_1969758, using dynamic teacher fallback", "qid": "popmc_test_1969758"}
+{"type": "verification_passed", "qid": "popmc_test_4552545", "question_snippet": "Who was the director of In Old Cheyenne?", "timestamp": "2025-11-28T00:42:52.487153"}
+{"type": "verification_passed", "qid": "popmc_test_6119423", "question_snippet": "Who was the screenwriter for All Superheroes Must ", "timestamp": "2025-11-28T00:42:52.487278"}
+{"type": "verification_passed", "qid": "popmc_test_3806311", "question_snippet": "What genre is Crystal Shawanda?", "timestamp": "2025-11-28T00:42:52.487338"}
+{"type": "verification_passed", "qid": "popmc_test_2663393", "question_snippet": "Who was the director of An Event?", "timestamp": "2025-11-28T00:42:52.487386"}
+{"type": "verification_passed", "qid": "popmc_test_199829", "question_snippet": "Who was the screenwriter for Cover Up?", "timestamp": "2025-11-28T00:42:52.487421"}
+{"type": "verification_passed", "qid": "popmc_test_632612", "question_snippet": "Who was the director of The Corporation?", "timestamp": "2025-11-28T00:42:52.487455"}
+{"type": "verification_passed", "qid": "popmc_test_6535205", "question_snippet": "Who was the screenwriter for Détective?", "timestamp": "2025-11-28T00:42:52.487486"}
+{"type": "verification_passed", "qid": "popmc_test_5696015", "question_snippet": "In what country is Sarnowo, Chełmno County?", "timestamp": "2025-11-28T00:42:52.487519"}
+{"type": "verification_passed", "qid": "popmc_test_3930012", "question_snippet": "Who was the screenwriter for See How They Fall?", "timestamp": "2025-11-28T00:42:52.969104"}
+{"type": "verification_passed", "qid": "popmc_test_2926285", "question_snippet": "Who is the mother of Speed?", "timestamp": "2025-11-28T00:42:52.969231"}
+{"type": "verification_passed", "qid": "popmc_test_4089904", "question_snippet": "Who is the author of Falling?", "timestamp": "2025-11-28T00:42:52.969328"}
+{"type": "verification_passed", "qid": "popmc_test_724210", "question_snippet": "Who is the author of Solar?", "timestamp": "2025-11-28T00:42:52.969368"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_2486842", "question_snippet": "Who was the director of Conspiracy?", "timestamp": "2025-11-28T00:42:52.969411"}
+{"type": "verification_passed", "qid": "popmc_test_2979494", "question_snippet": "What is the religion of Covenant Theological Semin", "timestamp": "2025-11-28T00:42:52.969448"}
+{"type": "verification_passed", "qid": "popmc_test_1928219", "question_snippet": "What genre is Portia White?", "timestamp": "2025-11-28T00:42:52.969483"}
+{"type": "verification_passed", "qid": "popmc_test_2415819", "question_snippet": "In what city was Pierre-Yves Barré born?", "timestamp": "2025-11-28T00:42:52.969515"}
+{"error": "No recorded MCQ results for qid: popmc_test_2486842, using dynamic teacher fallback", "qid": "popmc_test_2486842"}
+{"type": "verification_passed", "qid": "popmc_test_5944707", "question_snippet": "Who was the director of The Night Riders?", "timestamp": "2025-11-28T00:42:53.447985"}
+{"type": "verification_passed", "qid": "popmc_test_4535360", "question_snippet": "Who was the composer of I Will?", "timestamp": "2025-11-28T00:42:53.448144"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_2435558", "question_snippet": "Who was the composer of On the Town?", "timestamp": "2025-11-28T00:42:53.448195"}
+{"type": "verification_passed", "qid": "popmc_test_3248819", "question_snippet": "In what country is Aki?", "timestamp": "2025-11-28T00:42:53.448234"}
+{"type": "verification_passed", "qid": "popmc_test_1925221", "question_snippet": "In what city was Mimoun Ouled Radi born?", "timestamp": "2025-11-28T00:42:53.448269"}
+{"type": "verification_passed", "qid": "popmc_test_5780955", "question_snippet": "Who was the composer of So Far?", "timestamp": "2025-11-28T00:42:53.448316"}
+{"type": "verification_passed", "qid": "popmc_test_5221630", "question_snippet": "Who was the screenwriter for Haunted Honeymoon?", "timestamp": "2025-11-28T00:42:53.448353"}
+{"type": "verification_passed", "qid": "popmc_test_3592879", "question_snippet": "In what country is Buford High School?", "timestamp": "2025-11-28T00:42:53.448385"}
+{"error": "No recorded MCQ results for qid: popmc_test_2435558, using dynamic teacher fallback", "qid": "popmc_test_2435558"}
+{"type": "verification_passed", "qid": "popmc_test_1632526", "question_snippet": "Who is the author of Easy Money?", "timestamp": "2025-11-28T00:42:53.916981"}
+{"type": "verification_passed", "qid": "popmc_test_995167", "question_snippet": "Who was the composer of Seema Tapakai?", "timestamp": "2025-11-28T00:42:53.917129"}
+{"type": "verification_passed", "qid": "popmc_test_1909486", "question_snippet": "Who was the screenwriter for Bug?", "timestamp": "2025-11-28T00:42:53.917176"}
+{"type": "verification_passed", "qid": "popmc_test_5120341", "question_snippet": "What is Matthew McKay's occupation?", "timestamp": "2025-11-28T00:42:53.917216"}
+{"type": "verification_passed", "qid": "popmc_test_2853980", "question_snippet": "Who is the father of Tharrawaddy Min?", "timestamp": "2025-11-28T00:42:53.917250"}
+{"type": "verification_passed", "qid": "popmc_test_2769983", "question_snippet": "Who was the screenwriter for Compagni di scuola?", "timestamp": "2025-11-28T00:42:53.917283"}
+{"type": "verification_passed", "qid": "popmc_test_940200", "question_snippet": "In what city was Mariano Chao born?", "timestamp": "2025-11-28T00:42:53.917329"}
+{"type": "verification_passed", "qid": "popmc_test_5912947", "question_snippet": "Who was the composer of Martin's Lie?", "timestamp": "2025-11-28T00:42:53.917364"}
+{"type": "verification_passed", "qid": "popmc_test_3330110", "question_snippet": "Who is the mother of Andrew Montour?", "timestamp": "2025-11-28T00:42:54.410991"}
+{"type": "verification_passed", "qid": "popmc_test_689074", "question_snippet": "Who was the producer of Son of God?", "timestamp": "2025-11-28T00:42:54.411143"}
+{"type": "verification_passed", "qid": "popmc_test_305909", "question_snippet": "Who was the producer of The Dilemma?", "timestamp": "2025-11-28T00:42:54.411185"}
+{"type": "verification_passed", "qid": "popmc_test_4143981", "question_snippet": "What sport does Frank Cornan play?", "timestamp": "2025-11-28T00:42:54.411223"}
+{"type": "verification_passed", "qid": "popmc_test_493880", "question_snippet": "Who was the director of Inspector Pink Dragon?", "timestamp": "2025-11-28T00:42:54.411257"}
+{"type": "verification_passed", "qid": "popmc_test_3398558", "question_snippet": "In what country is Astrodomi Observatory?", "timestamp": "2025-11-28T00:42:54.411299"}
+{"type": "verification_passed", "qid": "popmc_test_2411849", "question_snippet": "Who is the author of Sir Thursday?", "timestamp": "2025-11-28T00:42:54.411339"}
+{"type": "verification_passed", "qid": "popmc_test_263605", "question_snippet": "Who was the director of Dear Diary?", "timestamp": "2025-11-28T00:42:54.411381"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_509657", "question_snippet": "What genre is Love Story?", "timestamp": "2025-11-28T00:42:54.872217"}
+{"type": "verification_passed", "qid": "popmc_test_5908840", "question_snippet": "Who was the screenwriter for The Arrival?", "timestamp": "2025-11-28T00:42:54.872323"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_2450253", "question_snippet": "Who was the screenwriter for The Bet?", "timestamp": "2025-11-28T00:42:54.872375"}
+{"type": "verification_passed", "qid": "popmc_test_2929435", "question_snippet": "Who was the producer of Stolen?", "timestamp": "2025-11-28T00:42:54.872415"}
+{"type": "verification_passed", "qid": "popmc_test_503138", "question_snippet": "Who was the producer of Prom?", "timestamp": "2025-11-28T00:42:54.872451"}
+{"type": "verification_passed", "qid": "popmc_test_4613096", "question_snippet": "Who is the father of Jalal Agha?", "timestamp": "2025-11-28T00:42:54.872485"}
+{"type": "verification_passed", "qid": "popmc_test_2696059", "question_snippet": "Who was the composer of One Life?", "timestamp": "2025-11-28T00:42:54.872517"}
+{"type": "verification_passed", "qid": "popmc_test_3846366", "question_snippet": "Who was the composer of Dark Days?", "timestamp": "2025-11-28T00:42:54.872549"}
+{"error": "No recorded MCQ results for qid: popmc_test_509657, using dynamic teacher fallback", "qid": "popmc_test_509657"}
+{"error": "No recorded MCQ results for qid: popmc_test_2450253, using dynamic teacher fallback", "qid": "popmc_test_2450253"}
+{"type": "verification_passed", "qid": "popmc_test_650610", "question_snippet": "Who was the director of Up All Night?", "timestamp": "2025-11-28T00:42:55.346973"}
+{"type": "verification_passed", "qid": "popmc_test_1785594", "question_snippet": "Who was the screenwriter for The Emerald City?", "timestamp": "2025-11-28T00:42:55.347123"}
+{"type": "verification_passed", "qid": "popmc_test_935146", "question_snippet": "Who was the director of Menu?", "timestamp": "2025-11-28T00:42:55.347167"}
+{"type": "verification_passed", "qid": "popmc_test_977282", "question_snippet": "In what country is history of Ghana?", "timestamp": "2025-11-28T00:42:55.347204"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_5453537", "question_snippet": "Who was the screenwriter for Pilot?", "timestamp": "2025-11-28T00:42:55.347244"}
+{"type": "verification_passed", "qid": "popmc_test_112286", "question_snippet": "Who is the father of Murong Wei?", "timestamp": "2025-11-28T00:42:55.347280"}
+{"type": "verification_passed", "qid": "popmc_test_5223929", "question_snippet": "Who was the director of Destiny?", "timestamp": "2025-11-28T00:42:55.347328"}
+{"type": "verification_passed", "qid": "popmc_test_1352541", "question_snippet": "Who was the composer of Abhinandanam?", "timestamp": "2025-11-28T00:42:55.347365"}
+{"error": "No recorded MCQ results for qid: popmc_test_5453537, using dynamic teacher fallback", "qid": "popmc_test_5453537"}
+{"type": "verification_passed", "qid": "popmc_test_256454", "question_snippet": "What sport does Iowa Wild play?", "timestamp": "2025-11-28T00:42:55.826813"}
+{"type": "verification_passed", "qid": "popmc_test_3866149", "question_snippet": "In what city was David Holmes Black born?", "timestamp": "2025-11-28T00:42:55.826957"}
+{"type": "verification_passed", "qid": "popmc_test_2681475", "question_snippet": "What genre is Tales of Maj'Eyal?", "timestamp": "2025-11-28T00:42:55.827000"}
+{"type": "verification_passed", "qid": "popmc_test_3878845", "question_snippet": "Who was the director of Day Trip?", "timestamp": "2025-11-28T00:42:55.827037"}
+{"type": "verification_passed", "qid": "popmc_test_6464079", "question_snippet": "Who was the composer of Les Girls?", "timestamp": "2025-11-28T00:42:55.827070"}
+{"type": "verification_passed", "qid": "popmc_test_6368756", "question_snippet": "Who was the screenwriter for Jade?", "timestamp": "2025-11-28T00:42:55.827104"}
+{"type": "verification_passed", "qid": "popmc_test_2805229", "question_snippet": "Who is the author of Find Me?", "timestamp": "2025-11-28T00:42:55.827136"}
+{"type": "verification_passed", "qid": "popmc_test_5243569", "question_snippet": "What is Nadia Giosia's occupation?", "timestamp": "2025-11-28T00:42:55.827168"}
+{"type": "verification_passed", "qid": "popmc_test_5947711", "question_snippet": "Who was the screenwriter for The Phone Message?", "timestamp": "2025-11-28T00:42:56.302787"}
+{"type": "verification_passed", "qid": "popmc_test_3761375", "question_snippet": "Who was the director of Cocktail?", "timestamp": "2025-11-28T00:42:56.302922"}
+{"type": "verification_passed", "qid": "popmc_test_2412245", "question_snippet": "Who was the director of Balance of Terror?", "timestamp": "2025-11-28T00:42:56.302965"}
+{"type": "verification_passed", "qid": "popmc_test_3198879", "question_snippet": "Who was the director of A New Day?", "timestamp": "2025-11-28T00:42:56.303003"}
+{"type": "verification_passed", "qid": "popmc_test_997300", "question_snippet": "Who was the composer of Symphony No. 1?", "timestamp": "2025-11-28T00:42:56.303037"}
+{"type": "verification_passed", "qid": "popmc_test_333336", "question_snippet": "What is the capital of canton of Mirambeau?", "timestamp": "2025-11-28T00:42:56.303071"}
+{"type": "verification_passed", "qid": "popmc_test_6415411", "question_snippet": "Who was the producer of The River?", "timestamp": "2025-11-28T00:42:56.303104"}
+{"type": "verification_passed", "qid": "popmc_test_4576897", "question_snippet": "Who is the father of Frederick IV, Elector Palatin", "timestamp": "2025-11-28T00:42:56.303137"}
+{"type": "verification_passed", "qid": "popmc_test_3073609", "question_snippet": "What is Andreas Rüdiger's occupation?", "timestamp": "2025-11-28T00:42:56.795404"}
+{"type": "verification_passed", "qid": "popmc_test_819155", "question_snippet": "What is Kyriakos Mavronikolas's occupation?", "timestamp": "2025-11-28T00:42:56.795536"}
+{"type": "verification_passed", "qid": "popmc_test_1286040", "question_snippet": "Who was the composer of Rebecca?", "timestamp": "2025-11-28T00:42:56.795609"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_243709", "question_snippet": "Who was the director of The Confession?", "timestamp": "2025-11-28T00:42:56.795656"}
+{"type": "verification_passed", "qid": "popmc_test_3738056", "question_snippet": "In what country is Church of Our Lady of Light, Ch", "timestamp": "2025-11-28T00:42:56.795693"}
+{"type": "verification_passed", "qid": "popmc_test_5665515", "question_snippet": "Who was the producer of Jeffrey?", "timestamp": "2025-11-28T00:42:56.795728"}
+{"type": "verification_passed", "qid": "popmc_test_4087381", "question_snippet": "What genre is Fahrenheit?", "timestamp": "2025-11-28T00:42:56.795762"}
+{"type": "verification_passed", "qid": "popmc_test_1371350", "question_snippet": "Who was the screenwriter for Daughter?", "timestamp": "2025-11-28T00:42:56.795795"}
+{"error": "No recorded MCQ results for qid: popmc_test_243709, using dynamic teacher fallback", "qid": "popmc_test_243709"}
+{"type": "verification_passed", "qid": "popmc_test_5772020", "question_snippet": "Who was the composer of Six Weeks?", "timestamp": "2025-11-28T00:42:57.273708"}
+{"type": "verification_passed", "qid": "popmc_test_2950109", "question_snippet": "Who was the director of Labor Day?", "timestamp": "2025-11-28T00:42:57.273861"}
+{"type": "verification_passed", "qid": "popmc_test_5879710", "question_snippet": "Who is the author of Tam Lin?", "timestamp": "2025-11-28T00:42:57.273903"}
+{"type": "verification_passed", "qid": "popmc_test_1396461", "question_snippet": "What genre is For a Friend?", "timestamp": "2025-11-28T00:42:57.273941"}
+{"type": "verification_passed", "qid": "popmc_test_6384726", "question_snippet": "What is Henry Tizard's occupation?", "timestamp": "2025-11-28T00:42:57.273976"}
+{"type": "verification_passed", "qid": "popmc_test_4038407", "question_snippet": "Who was the director of English?", "timestamp": "2025-11-28T00:42:57.274009"}
+{"type": "verification_passed", "qid": "popmc_test_5278327", "question_snippet": "Who was the director of New Mexico?", "timestamp": "2025-11-28T00:42:57.274041"}
+{"type": "verification_passed", "qid": "popmc_test_2138812", "question_snippet": "Who was the director of Cane?", "timestamp": "2025-11-28T00:42:57.274073"}
+{"type": "verification_passed", "qid": "popmc_test_1236283", "question_snippet": "Who was the screenwriter for The Man, the Woman an", "timestamp": "2025-11-28T00:42:57.740301"}
+{"type": "verification_passed", "qid": "popmc_test_5924909", "question_snippet": "Who is the author of The Fall?", "timestamp": "2025-11-28T00:42:57.740420"}
+{"type": "verification_passed", "qid": "popmc_test_2374351", "question_snippet": "In what city was Sue Vertue born?", "timestamp": "2025-11-28T00:42:57.740473"}
+{"type": "verification_passed", "qid": "popmc_test_2088969", "question_snippet": "Who was the producer of The Professor?", "timestamp": "2025-11-28T00:42:57.740515"}
+{"type": "verification_passed", "qid": "popmc_test_6089822", "question_snippet": "In what country is Valea Seacă River?", "timestamp": "2025-11-28T00:42:57.740549"}
+{"type": "verification_passed", "qid": "popmc_test_2603293", "question_snippet": "Who was the director of Not Quite Paradise?", "timestamp": "2025-11-28T00:42:57.740586"}
+{"type": "verification_passed", "qid": "popmc_test_5473087", "question_snippet": "In what city was Veselin Vujović born?", "timestamp": "2025-11-28T00:42:57.740620"}
+{"type": "verification_passed", "qid": "popmc_test_504410", "question_snippet": "What is the religion of Girolamo Maria Gotti?", "timestamp": "2025-11-28T00:42:57.740655"}
+{"type": "verification_passed", "qid": "popmc_test_5932478", "question_snippet": "Who was the composer of The Hope?", "timestamp": "2025-11-28T00:42:58.221628"}
+{"type": "verification_passed", "qid": "popmc_test_365151", "question_snippet": "In what city was Sugar Ray Norcia born?", "timestamp": "2025-11-28T00:42:58.221774"}
+{"type": "verification_passed", "qid": "popmc_test_4128947", "question_snippet": "What is the capital of Olyokminsky District?", "timestamp": "2025-11-28T00:42:58.221823"}
+{"type": "verification_passed", "qid": "popmc_test_6173458", "question_snippet": "Who was the director of Will to Live?", "timestamp": "2025-11-28T00:42:58.221861"}
+{"type": "verification_passed", "qid": "popmc_test_4964058", "question_snippet": "Who was the director of Life Story?", "timestamp": "2025-11-28T00:42:58.221895"}
+{"type": "verification_passed", "qid": "popmc_test_6365842", "question_snippet": "Who is the father of Sisowath of Cambodia?", "timestamp": "2025-11-28T00:42:58.221929"}
+{"type": "verification_passed", "qid": "popmc_test_2893401", "question_snippet": "In what country is Detroit?", "timestamp": "2025-11-28T00:42:58.221961"}
+{"type": "verification_passed", "qid": "popmc_test_6207552", "question_snippet": "Who was the director of Within?", "timestamp": "2025-11-28T00:42:58.221993"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_3757862", "question_snippet": "Who was the screenwriter for Closure?", "timestamp": "2025-11-28T00:42:58.700079"}
+{"type": "verification_passed", "qid": "popmc_test_4993680", "question_snippet": "What sport does Deportivo Cali play?", "timestamp": "2025-11-28T00:42:58.700183"}
+{"type": "verification_passed", "qid": "popmc_test_5707942", "question_snippet": "What sport does Scott Muirhead play?", "timestamp": "2025-11-28T00:42:58.700227"}
+{"type": "verification_passed", "qid": "popmc_test_6560203", "question_snippet": "In what country is Criuleni?", "timestamp": "2025-11-28T00:42:58.700264"}
+{"type": "verification_passed", "qid": "popmc_test_1975786", "question_snippet": "Who was the director of Tickets?", "timestamp": "2025-11-28T00:42:58.700311"}
+{"type": "verification_passed", "qid": "popmc_test_2043035", "question_snippet": "Who was the director of The Betrayed?", "timestamp": "2025-11-28T00:42:58.700349"}
+{"type": "verification_no_lookup_found", "qid": "popmc_test_2221370", "question_snippet": "Who was the screenwriter for Open House?", "timestamp": "2025-11-28T00:42:58.700389"}
+{"type": "verification_passed", "qid": "popmc_test_2035568", "question_snippet": "Who was the director of Under Age?", "timestamp": "2025-11-28T00:42:58.700425"}
+{"error": "No recorded MCQ results for qid: popmc_test_3757862, using dynamic teacher fallback", "qid": "popmc_test_3757862"}
+{"error": "No recorded MCQ results for qid: popmc_test_2221370, using dynamic teacher fallback", "qid": "popmc_test_2221370"}
+{"type": "verification_passed", "qid": "popmc_test_2567382", "question_snippet": "In what country is Perth?", "timestamp": "2025-11-28T00:42:59.169946"}
+{"type": "verification_passed", "qid": "popmc_test_1410219", "question_snippet": "Who was the director of Reducing?", "timestamp": "2025-11-28T00:42:59.170084"}
+{"type": "verification_passed", "qid": "popmc_test_5198993", "question_snippet": "Who was the composer of Hotel?", "timestamp": "2025-11-28T00:42:59.170127"}
+{"type": "verification_passed", "qid": "popmc_test_3547147", "question_snippet": "Who was the producer of The Bow?", "timestamp": "2025-11-28T00:42:59.170164"}
+{"type": "verification_passed", "qid": "popmc_test_5394014", "question_snippet": "What is Patrick Mulvany's occupation?", "timestamp": "2025-11-28T00:42:59.170198"}
+{"type": "verification_passed", "qid": "popmc_test_6029039", "question_snippet": "Who is the author of Transcension?", "timestamp": "2025-11-28T00:42:59.170234"}
+{"type": "verification_passed", "qid": "popmc_test_2681510", "question_snippet": "Who was the producer of To Love?", "timestamp": "2025-11-28T00:42:59.170268"}
+{"type": "verification_passed", "qid": "popmc_test_5960645", "question_snippet": "Who was the director of The Tree?", "timestamp": "2025-11-28T00:42:59.170314"}
+{"type": "verification_passed", "qid": "popmc_test_6483202", "question_snippet": "In what city was Gintautas Umaras born?", "timestamp": "2025-11-28T00:42:59.644596"}
+{"type": "verification_passed", "qid": "popmc_test_3886829", "question_snippet": "Who was the director of Deep Breath?", "timestamp": "2025-11-28T00:42:59.644745"}
+{"type": "verification_passed", "qid": "popmc_test_1909024", "question_snippet": "In what country is Uganda Communications Commissio", "timestamp": "2025-11-28T00:42:59.644790"}
+{"type": "verification_passed", "qid": "popmc_test_5951434", "question_snippet": "Who was the producer of The Return?", "timestamp": "2025-11-28T00:42:59.644828"}
+{"type": "verification_passed", "qid": "popmc_test_6402554", "question_snippet": "Who was the screenwriter for Bullet?", "timestamp": "2025-11-28T00:42:59.644861"}
+{"type": "verification_passed", "qid": "popmc_test_1572384", "question_snippet": "Who was the producer of A?", "timestamp": "2025-11-28T00:42:59.644894"}
+{"type": "verification_passed", "qid": "popmc_test_3492951", "question_snippet": "Who was the producer of Bhagwan Dada?", "timestamp": "2025-11-28T00:42:59.644927"}
+{"type": "verification_passed", "qid": "popmc_test_189795", "question_snippet": "In what city was Tony Clark born?", "timestamp": "2025-11-28T00:42:59.644959"}

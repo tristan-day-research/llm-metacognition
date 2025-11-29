@@ -62,9 +62,17 @@ def validate_file_exists_and_not_empty(file_path, file_description="file"):
 
 def build_multiple_choice_question_prompts(batch):
     """
-    Builds direct MCQ prompts matching explicit_confidence_task.py exactly.
-    Includes dashed formatting and specific indentation.
+    Builds direct MCQ prompts wrapped in FULL Llama-3 chat template including system prompt.
+    Matches explicit_confidence_task.py content but with proper chat formatting.
     """
+    # Llama-3 Control Tokens
+    BOS = "<|begin_of_text|>"
+    SYSTEM_START = "<|start_header_id|>system<|end_header_id|>\n\n"
+    SYSTEM_CONTENT = "You are a helpful AI assistant."  # Standard Llama-3 system prompt
+    USER_START = "<|start_header_id|>user<|end_header_id|>\n\n"
+    EOT = "<|eot_id|>"
+    ASSISTANT_START = "<|start_header_id|>assistant<|end_header_id|>\n\n"
+    
     setup_prompt = (
         "I'm going to ask you a series of multiple-choice questions. For each one, "
         "select the answer you think is best. Respond only with the letter of your choice; "
@@ -96,16 +104,29 @@ def build_multiple_choice_question_prompts(batch):
         
         # Full prompt assembly
         llm_prompt = q_text + "\nYour choice (A, B, C, or D): "
-        full_prompt = setup_prompt + "\n\n" + llm_prompt
-        prompts.append(full_prompt)
+        user_content = setup_prompt + "\n\n" + llm_prompt
         
+        # Apply FULL Llama-3 chat template WITH system prompt
+        # Format: BOS + SYSTEM + USER + ASSISTANT
+        full_prompt = f"{BOS}{SYSTEM_START}{SYSTEM_CONTENT}{EOT}{USER_START}{user_content}{EOT}{ASSISTANT_START}"
+        prompts.append(full_prompt)
+    
     return prompts
 
 
 def build_self_confidence_prompts(batch):
     """
-    Builds self-confidence prompts matching explicit_confidence_task.py exactly.
+    Builds self-confidence prompts wrapped in FULL Llama-3 chat template including system prompt.
+    Matches explicit_confidence_task.py content but with proper chat formatting.
     """
+    # Llama-3 Control Tokens
+    BOS = "<|begin_of_text|>"
+    SYSTEM_START = "<|start_header_id|>system<|end_header_id|>\n\n"
+    SYSTEM_CONTENT = "You are a helpful AI assistant."  # Standard Llama-3 system prompt
+    USER_START = "<|start_header_id|>user<|end_header_id|>\n\n"
+    EOT = "<|eot_id|>"
+    ASSISTANT_START = "<|start_header_id|>assistant<|end_header_id|>\n\n"
+    
     setup_prompt = (
         "I'm going to show you a multiple-choice question, and I want you to tell me "
         "your level of confidence that you would get the question right. Respond only "
@@ -154,7 +175,11 @@ def build_self_confidence_prompts(batch):
         # Full prompt assembly
         options_str = "A, B, C, D, E, F, G, or H"
         llm_prompt = q_text + f"\nYour choice ({options_str}): "
-        full_prompt = setup_prompt + "\n\n" + llm_prompt
+        user_content = setup_prompt + "\n\n" + llm_prompt
+        
+        # Apply FULL Llama-3 chat template WITH system prompt
+        # Format: BOS + SYSTEM + USER + ASSISTANT
+        full_prompt = f"{BOS}{SYSTEM_START}{SYSTEM_CONTENT}{EOT}{USER_START}{user_content}{EOT}{ASSISTANT_START}"
         prompts.append(full_prompt)
         
     return prompts
@@ -162,8 +187,17 @@ def build_self_confidence_prompts(batch):
 
 def build_other_confidence_prompts(batch):
     """
-    Builds other-confidence (college-educated) prompts matching explicit_confidence_task.py exactly.
+    Builds other-confidence (college-educated) prompts wrapped in FULL Llama-3 chat template including system prompt.
+    Matches explicit_confidence_task.py content but with proper chat formatting.
     """
+    # Llama-3 Control Tokens
+    BOS = "<|begin_of_text|>"
+    SYSTEM_START = "<|start_header_id|>system<|end_header_id|>\n\n"
+    SYSTEM_CONTENT = "You are a helpful AI assistant."  # Standard Llama-3 system prompt
+    USER_START = "<|start_header_id|>user<|end_header_id|>\n\n"
+    EOT = "<|eot_id|>"
+    ASSISTANT_START = "<|start_header_id|>assistant<|end_header_id|>\n\n"
+    
     setup_prompt = (
         "I want your help calibrating question difficulty. I'm going to show you a "
         "multiple-choice question, and I want you to tell me approximately what "
@@ -208,7 +242,11 @@ def build_other_confidence_prompts(batch):
         # Full prompt assembly
         options_str = "A, B, C, D, E, F, G, or H"
         llm_prompt = q_text + f"\nYour choice ({options_str}): "
-        full_prompt = setup_prompt + "\n\n" + llm_prompt
+        user_content = setup_prompt + "\n\n" + llm_prompt
+        
+        # Apply FULL Llama-3 chat template WITH system prompt
+        # Format: BOS + SYSTEM + USER + ASSISTANT
+        full_prompt = f"{BOS}{SYSTEM_START}{SYSTEM_CONTENT}{EOT}{USER_START}{user_content}{EOT}{ASSISTANT_START}"
         prompts.append(full_prompt)
         
     return prompts
@@ -269,11 +307,34 @@ class MCQDataset(Dataset):
         }
 
 
-def get_single_token_id(tokenizer, letter: str) -> int:
+def normalize_text(s):
+    """Normalize text for comparison: lowercase, strip, normalize whitespace, remove trailing period."""
+    if not s:
+        return ""
+    s = str(s).strip().lower()
+    s = re.sub(r"\s+", " ", s)
+    s = s.rstrip(".")
+    return s
+
+
+def get_single_token_id(tokenizer, letter: str, context: str = None) -> int:
     """
     Find a single-token representation for a letter.
     Try ' A' first (common for LLaMA), then 'A'.
+    
+    If context is provided, tokenize in that context to ensure we get the right token ID
+    that matches how the model will see it during inference.
     """
+    if context is not None:
+        # Tokenize the context + letter, then extract just the letter's token ID
+        full_text = context + letter
+        ids = tokenizer.encode(full_text, add_special_tokens=False)
+        context_ids = tokenizer.encode(context, add_special_tokens=False)
+        if len(ids) == len(context_ids) + 1:
+            # The letter was tokenized as a single token
+            return ids[-1]
+        # Fallback to standard method if context doesn't help
+    
     # Try with leading space (common SPM pattern)
     ids = tokenizer.encode(" " + letter, add_special_tokens=False)
     if len(ids) == 1:
@@ -288,13 +349,19 @@ def get_single_token_id(tokenizer, letter: str) -> int:
 def load_mcq_results_data(mcq_results_path, log_file_path=None):
     """
     Load MCQ results data from JSON or JSONL file.
-    Returns a dictionary mapping question ID or question text to result data.
+    Returns a dictionary mapping question ID to result data, plus a text-to-ID mapping.
+    
+    Structure:
+    - results_lookup: {qid: result_data} - primary storage by ID
+    - text_to_id: {normalized_text: qid} - mapping from text to ID for fallback lookup
     """
     if mcq_results_path is None:
         print("mcq_results_path is None")
         return None
     
-    results_lookup = {}
+    results_lookup = {}  # Primary storage: {qid: result_data}
+    text_to_id = {}  # Secondary mapping: {normalized_text: qid} for text-based lookup
+    unique_question_count = 0  # Track unique questions
     
     try:
         # Try different encodings in case of BOM or encoding issues
@@ -333,42 +400,55 @@ def load_mcq_results_data(mcq_results_path, log_file_path=None):
                         # JSON format with results dictionary
                         print(f"Found 'results' dictionary with {len(data['results'])} entries")
                         for qid, result in data["results"].items():
+                            unique_question_count += 1
                             question_data = result.get("question", {})
                             question_id = question_data.get("id", qid)
                             question_text = question_data.get("question", "")
                             
-                            # Store by ID and by question text for lookup
                             # Extract options from question_data if available
                             options = question_data.get("options", {})
                             
+                            # Store once by ID (preferred) or by text if no ID
+                            result_data = {
+                                "subject_answer": result.get("subject_answer"),
+                                "probs": result.get("probs", {}),
+                                "options": options
+                            }
+                            
                             if question_id:
-                                results_lookup[question_id] = {
-                                    "subject_answer": result.get("subject_answer"),
-                                    "probs": result.get("probs", {}),
-                                    "options": options
-                                }
-                            if question_text:
-                                results_lookup[question_text] = {
-                                    "subject_answer": result.get("subject_answer"),
-                                    "probs": result.get("probs", {}),
-                                    "options": options
-                                }
+                                results_lookup[str(question_id)] = result_data
+                                # Also create text-to-ID mapping for fallback lookup
+                                if question_text:
+                                    norm_text = normalize_text(question_text)
+                                    if norm_text:
+                                        text_to_id[norm_text] = str(question_id)
+                            elif question_text:
+                                # No ID available, use normalized text as key
+                                norm_text = normalize_text(question_text)
+                                if norm_text:
+                                    results_lookup[norm_text] = result_data
                     else:
                         # Single result object, not wrapped in "results"
+                        unique_question_count += 1
                         question_data = data.get("question", {})
                         question_id = question_data.get("id")
                         question_text = question_data.get("question", "")
                         
+                        result_data = {
+                            "subject_answer": data.get("subject_answer"),
+                            "probs": data.get("probs", {})
+                        }
+                        
                         if question_id:
-                            results_lookup[question_id] = {
-                                "subject_answer": data.get("subject_answer"),
-                                "probs": data.get("probs", {})
-                            }
-                        if question_text:
-                            results_lookup[question_text] = {
-                                "subject_answer": data.get("subject_answer"),
-                                "probs": data.get("probs", {})
-                            }
+                            results_lookup[str(question_id)] = result_data
+                            if question_text:
+                                norm_text = normalize_text(question_text)
+                                if norm_text:
+                                    text_to_id[norm_text] = str(question_id)
+                        elif question_text:
+                            norm_text = normalize_text(question_text)
+                            if norm_text:
+                                results_lookup[norm_text] = result_data
                 except json.JSONDecodeError as json_err:
                     print(f"JSON parsing error: {json_err}")
                     error_pos = json_err.pos if hasattr(json_err, 'pos') else None
@@ -420,6 +500,7 @@ def load_mcq_results_data(mcq_results_path, log_file_path=None):
                                         if not isinstance(result, dict):
                                             continue
                                         
+                                        unique_question_count += 1
                                         question_data = result.get("question", {})
                                         
                                         # Ensure question_data is a dictionary
@@ -431,16 +512,21 @@ def load_mcq_results_data(mcq_results_path, log_file_path=None):
                                             question_id = question_data.get("id", match.group(1))
                                             question_text = question_data.get("question", "")
                                         
+                                        result_data = {
+                                            "subject_answer": result.get("subject_answer"),
+                                            "probs": result.get("probs", {})
+                                        }
+                                        
                                         if question_id:
-                                            results_lookup[question_id] = {
-                                                "subject_answer": result.get("subject_answer"),
-                                                "probs": result.get("probs", {})
-                                            }
-                                        if question_text:
-                                            results_lookup[question_text] = {
-                                                "subject_answer": result.get("subject_answer"),
-                                                "probs": result.get("probs", {})
-                                            }
+                                            results_lookup[str(question_id)] = result_data
+                                            if question_text:
+                                                norm_text = normalize_text(question_text)
+                                                if norm_text:
+                                                    text_to_id[norm_text] = str(question_id)
+                                        elif question_text:
+                                            norm_text = normalize_text(question_text)
+                                            if norm_text:
+                                                results_lookup[norm_text] = result_data
                                     except (json.JSONDecodeError, AttributeError, TypeError) as e:
                                         # Skip this entry if it can't be parsed or has wrong structure
                                         continue
@@ -462,20 +548,26 @@ def load_mcq_results_data(mcq_results_path, log_file_path=None):
                                     if line.strip():
                                         try:
                                             result = json.loads(line)
+                                            unique_question_count += 1
                                             question_data = result.get("question", {})
                                             question_id = question_data.get("id")
                                             question_text = question_data.get("question", "")
                                             
+                                            result_data = {
+                                                "subject_answer": result.get("subject_answer"),
+                                                "probs": result.get("probs", {})
+                                            }
+                                            
                                             if question_id:
-                                                results_lookup[question_id] = {
-                                                    "subject_answer": result.get("subject_answer"),
-                                                    "probs": result.get("probs", {})
-                                                }
-                                            if question_text:
-                                                results_lookup[question_text] = {
-                                                    "subject_answer": result.get("subject_answer"),
-                                                    "probs": result.get("probs", {})
-                                                }
+                                                results_lookup[str(question_id)] = result_data
+                                                if question_text:
+                                                    norm_text = normalize_text(question_text)
+                                                    if norm_text:
+                                                        text_to_id[norm_text] = str(question_id)
+                                            elif question_text:
+                                                norm_text = normalize_text(question_text)
+                                                if norm_text:
+                                                    results_lookup[norm_text] = result_data
                                         except json.JSONDecodeError as line_err:
                                             if line_num <= 5:  # Only print first few errors
                                                 print(f"Warning: Failed to parse line {line_num}: {line_err}")
@@ -492,20 +584,26 @@ def load_mcq_results_data(mcq_results_path, log_file_path=None):
                             if line.strip():
                                 try:
                                     result = json.loads(line)
+                                    unique_question_count += 1
                                     question_data = result.get("question", {})
                                     question_id = question_data.get("id")
                                     question_text = question_data.get("question", "")
                                     
+                                    result_data = {
+                                        "subject_answer": result.get("subject_answer"),
+                                        "probs": result.get("probs", {})
+                                    }
+                                    
                                     if question_id:
-                                        results_lookup[question_id] = {
-                                            "subject_answer": result.get("subject_answer"),
-                                            "probs": result.get("probs", {})
-                                        }
-                                    if question_text:
-                                        results_lookup[question_text] = {
-                                            "subject_answer": result.get("subject_answer"),
-                                            "probs": result.get("probs", {})
-                                        }
+                                        results_lookup[str(question_id)] = result_data
+                                        if question_text:
+                                            norm_text = normalize_text(question_text)
+                                            if norm_text:
+                                                text_to_id[norm_text] = str(question_id)
+                                    elif question_text:
+                                        norm_text = normalize_text(question_text)
+                                        if norm_text:
+                                            results_lookup[norm_text] = result_data
                                 except json.JSONDecodeError as line_err:
                                     if line_num <= 5:  # Only print first few errors
                                         print(f"Warning: Failed to parse line {line_num}: {line_err}")
@@ -518,6 +616,7 @@ def load_mcq_results_data(mcq_results_path, log_file_path=None):
                     if line.strip():
                         try:
                             result = json.loads(line)
+                            unique_question_count += 1
                             question_data = result.get("question", {})
                             question_id = question_data.get("id")
                             question_text = question_data.get("question", "")
@@ -525,18 +624,22 @@ def load_mcq_results_data(mcq_results_path, log_file_path=None):
                             # Extract options from question_data if available
                             options = question_data.get("options", {})
                             
+                            result_data = {
+                                "subject_answer": result.get("subject_answer"),
+                                "probs": result.get("probs", {}),
+                                "options": options
+                            }
+                            
                             if question_id:
-                                results_lookup[question_id] = {
-                                    "subject_answer": result.get("subject_answer"),
-                                    "probs": result.get("probs", {}),
-                                    "options": options
-                                }
-                            if question_text:
-                                results_lookup[question_text] = {
-                                    "subject_answer": result.get("subject_answer"),
-                                    "probs": result.get("probs", {}),
-                                    "options": options
-                                }
+                                results_lookup[str(question_id)] = result_data
+                                if question_text:
+                                    norm_text = normalize_text(question_text)
+                                    if norm_text:
+                                        text_to_id[norm_text] = str(question_id)
+                            elif question_text:
+                                norm_text = normalize_text(question_text)
+                                if norm_text:
+                                    results_lookup[norm_text] = result_data
                         except json.JSONDecodeError as line_err:
                             if line_num <= 5:  # Only print first few errors
                                 print(f"Warning: Failed to parse line {line_num}: {line_err}")
@@ -549,9 +652,24 @@ def load_mcq_results_data(mcq_results_path, log_file_path=None):
         print(f"Traceback: {traceback.format_exc()}")
         return None
     
-    print(f"Loaded {len(results_lookup)} MCQ results entries")
+    # Attach text-to-ID mapping to the lookup dict for use in verify_and_resolve_options
+    # We'll use a special key that won't conflict with question IDs
+    results_lookup["__text_to_id__"] = text_to_id
+    
+    # Report loading statistics
+    if unique_question_count > 0:
+        print(f"Loaded {unique_question_count} unique questions")
+        print(f"  Created {len(results_lookup) - 1} primary lookup entries (stored by ID, with text-to-ID mapping for fallback)")
+    else:
+        print(f"Loaded {len(results_lookup) - 1 if '__text_to_id__' in results_lookup else len(results_lookup)} MCQ lookup entries")
+    
     if log_file_path:
-        write_log(log_file_path, {"message": f"Loaded {len(results_lookup)} MCQ results entries"})
+        write_log(log_file_path, {
+            "message": f"Loaded {unique_question_count} unique questions",
+            "lookup_entries": len(results_lookup) - 1 if '__text_to_id__' in results_lookup else len(results_lookup),
+            "text_to_id_mappings": len(text_to_id),
+            "note": "Questions stored once by ID, with text-to-ID mapping for flexible lookup"
+        })
 
     return results_lookup
 
@@ -634,15 +752,6 @@ def shuffle_options_and_update_correct_letter(row):
     return row
 
 
-def normalize_text(s):
-    if not s:
-        return ""
-    s = str(s).strip().lower()
-    s = re.sub(r"\s+", " ", s)
-    s = s.rstrip(".")
-    return s
-
-
 def verify_and_resolve_options(row, mcq_results_lookup, log_file_path=None):
     """
     Resolve the correct option set for the batch question.
@@ -669,14 +778,23 @@ def verify_and_resolve_options(row, mcq_results_lookup, log_file_path=None):
     # ---------- 1. Lookup ----------
     result_data = None
     
-    # Try QID match
+    # Extract text-to-ID mapping if available
+    text_to_id = mcq_results_lookup.get("__text_to_id__", {})
+    
+    # Try QID match first
     if qid is not None and str(qid) in mcq_results_lookup:
         result_data = mcq_results_lookup[str(qid)]
     
-    # Try Text match if QID failed
+    # Try Text match if QID failed - use text-to-ID mapping to find the ID, then look up by ID
     if result_data is None:
         norm_text = normalize_text(batch_question)
-        if norm_text in mcq_results_lookup:
+        if norm_text in text_to_id:
+            # Found text mapping, look up by the mapped ID
+            mapped_id = text_to_id[norm_text]
+            if mapped_id in mcq_results_lookup:
+                result_data = mcq_results_lookup[mapped_id]
+        elif norm_text in mcq_results_lookup:
+            # Fallback: text might be stored directly (for questions without IDs)
             result_data = mcq_results_lookup[norm_text]
 
     # Nothing found → fallback

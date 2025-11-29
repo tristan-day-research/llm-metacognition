@@ -4,12 +4,11 @@ import numpy as np
 import os
 import torch
 from datetime import datetime, timezone
-from torch.utils.data import DataLoader, Subset
-import random
+from torch.utils.data import DataLoader
 from peft import LoraConfig, get_peft_model
 
 # Imports from helper files
-from finetune_diagnostics import compute_metrics_for_wandb, assess_mcq_accuracy
+from finetune_evaluation_metrics import compute_metrics_for_wandb, assess_mcq_accuracy, run_evaluation, log_answer_distributions
 from finetune_utils import (
     write_log,
     MCQDataset,
@@ -41,65 +40,6 @@ def collate_fn(batch):
     """Custom collate function that returns a list of dictionaries."""
     return batch
 
-
-def log_answer_distributions(log_file_path, step_type, step_number, 
-                             predicted_letter_counts, correct_letter_counts, 
-                             total_questions, accuracy=None, avg_entropy=None,
-                             answer_variety=None, answer_entropy_std=None):
-    """
-    Log answer distribution information to a dedicated log file.
-    
-    Args:
-        log_file_path: Path to the answer distributions log file
-        step_type: "val" or "test"
-        step_number: Step number (for validation) or None (for test)
-        predicted_letter_counts: dict with counts for A, B, C, D
-        correct_letter_counts: dict with counts for A, B, C, D
-        total_questions: Total number of questions
-        accuracy: Optional accuracy value
-        avg_entropy: Optional average entropy value
-        answer_variety: Optional answer variety score (0 = always same, 1 = 25% each)
-        answer_entropy_std: Optional standard deviation of answer entropy
-    """
-    timestamp = datetime.now(timezone.utc).isoformat()
-    
-    # Calculate percentages
-    predicted_percentages = {
-        letter: (count / total_questions * 100) if total_questions > 0 else 0.0
-        for letter, count in predicted_letter_counts.items()
-    }
-    correct_percentages = {
-        letter: (count / total_questions * 100) if total_questions > 0 else 0.0
-        for letter, count in correct_letter_counts.items()
-    }
-    
-    log_entry = {
-        "type": "answer_distribution",
-        "timestamp": timestamp,
-        "step_type": step_type,  # "val" or "test"
-        "step_number": step_number,  # None for test
-        "total_questions": total_questions,
-        "accuracy": accuracy,
-        "avg_entropy": avg_entropy,
-        "answer_entropy_std": answer_entropy_std,
-        "answer_variety": answer_variety,
-        "predicted_letter_distribution": {
-            letter: {
-                "count": predicted_letter_counts.get(letter, 0),
-                "percentage": predicted_percentages.get(letter, 0.0)
-            }
-            for letter in "ABCD"
-        },
-        "correct_letter_distribution": {
-            letter: {
-                "count": correct_letter_counts.get(letter, 0),
-                "percentage": correct_percentages.get(letter, 0.0)
-            }
-            for letter in "ABCD"
-        }
-    }
-    
-    write_log(log_file_path, log_entry)
 
 # ============================================================
 # Entropy → scalar confidence → soft labels
@@ -234,12 +174,19 @@ def val_step(model, tokenizer, batch, sigma=10.0, device="cuda",
             out = model(**enc)
         
         final_logits = out.logits[:, -1, :]
+        # CRITICAL: Extract only A-D logits for MCQ answers (4 logits)
+        # We are NOT using confidence logits (A-H, 8 logits) for accuracy
         abcd_ids = torch.tensor(
             [get_single_token_id(tokenizer, c) for c in "ABCD"],
             device=device,
             dtype=torch.long
         )
-        answer_logits4 = final_logits[:, abcd_ids]
+        answer_logits4 = final_logits[:, abcd_ids]  # [B, 4] - MCQ logits only
+        
+        # OPTION: Apply logit debiasing to normalize token bias
+        # This subtracts the mean logit to center the distribution
+        # Uncomment the next line to enable debiasing:
+        # answer_logits4 = answer_logits4 - answer_logits4.mean(dim=-1, keepdim=True)
     
     # 4. Compute soft targets
     soft_targets_list = []
@@ -288,18 +235,25 @@ def val_step(model, tokenizer, batch, sigma=10.0, device="cuda",
             out2 = model(**enc2)
         
         final_logits2 = out2.logits[:, -1, :]
+        # CRITICAL: Extract A-H logits for confidence predictions (8 logits)
+        # This is separate from MCQ answer logits (A-D, 4 logits) above
         bins_ids = torch.tensor(
             [get_single_token_id(tokenizer, c) for c in "ABCDEFGH"],
             device=device,
             dtype=torch.long
         )
-        conf_logits8 = final_logits2[:, bins_ids]
+        conf_logits8 = final_logits2[:, bins_ids]  # [B, 8] - Confidence logits (separate from MCQ!)
     
     # 6. Compute loss
     log_probs = torch.log_softmax(conf_logits8, dim=-1)
     loss = (-soft_targets * log_probs).sum(dim=1).mean()
     
     # --- NEW: Calculate Raw Data for Diagnostics ---
+    # OPTION: Apply logit debiasing to normalize token bias
+    # This subtracts the mean logit to center the distribution
+    # Uncomment the next line to enable debiasing:
+    # answer_logits4 = answer_logits4 - answer_logits4.mean(dim=-1, keepdim=True)
+    
     # 1. Get Pass 1 Entropy (use temperature-scaled probabilities)
     if temperature > 0:
         scaled_logits = answer_logits4 / temperature
@@ -309,6 +263,7 @@ def val_step(model, tokenizer, batch, sigma=10.0, device="cuda",
     entropies = -(probs_mcq * torch.log(probs_mcq + 1e-12)).sum(dim=-1)
     
     # 2. Get Pass 1 Correctness (sample with temperature if > 0, else argmax)
+    # CRITICAL: This uses MCQ answer logits (A-D), NOT confidence logits (A-H)
     if temperature > 0:
         # Sample from the distribution
         preds = torch.multinomial(probs_mcq, num_samples=1).squeeze(-1)
@@ -319,11 +274,18 @@ def val_step(model, tokenizer, batch, sigma=10.0, device="cuda",
     is_correct_list = []
     for j, r in enumerate(batch):
         pred_char = "ABCD"[preds[j].item()]
+        # Ensure we're comparing MCQ answers (A-D), not confidence predictions
+        assert pred_char in "ABCD", f"MCQ prediction must be A-D, got {pred_char}"
+        assert r['correct_letter'] in "ABCD", f"Correct answer must be A-D, got {r['correct_letter']}"
         is_correct_list.append(1.0 if pred_char == r['correct_letter'] else 0.0)
     is_correct = torch.tensor(is_correct_list, device=device, dtype=torch.float32)
     
-    # 3. Get Pass 2 Verbal Confidence
-    conf_probs = torch.softmax(conf_logits8, dim=-1)
+    # 3. Get Pass 2 Verbal Confidence (use temperature-scaled probabilities)
+    if temperature > 0:
+        scaled_conf_logits = conf_logits8 / temperature
+        conf_probs = torch.softmax(scaled_conf_logits, dim=-1)
+    else:
+        conf_probs = torch.softmax(conf_logits8, dim=-1)
     bin_midpoints = torch.tensor([2.5, 7.5, 15, 30, 50, 70, 85, 95], 
                                  device=device, dtype=torch.float32)
     verbal_conf = (conf_probs * bin_midpoints).sum(dim=-1)
@@ -538,296 +500,6 @@ def train_step(model, tokenizer, batch, sigma=10.0, device="cuda",
 
 
 # ============================================================
-# Validation and Test Evaluation Functions
-# ============================================================
-
-def run_evaluation(model, tokenizer, device, args, mcq_results_lookup, log_file_path, step,
-                   mcq_accuracy_log_file_path, answer_distributions_log_file_path,
-                   eval_type, val_dataloader=None, val_dataset=None, data_path=None,
-                   val_metrics_log_file_path=None, limit_val_batches=None, temperature=0.0):
-    """
-    Unified function to run evaluation on validation or test datasets.
-    
-    This function handles:
-    - Baseline validation (before training, step=0)
-    - Regular validation during training (step=step)
-    - Final test evaluation (after training)
-    
-    Args:
-        model: Language model
-        tokenizer: Tokenizer
-        device: Device to run on
-        args: Training arguments
-        mcq_results_lookup: Lookup dict for recorded MCQ results
-        log_file_path: Path for question comparison logging
-        step: Step number (0 for baseline, training step number, or final step for test)
-        mcq_accuracy_log_file_path: Path for MCQ accuracy assessment logging
-        answer_distributions_log_file_path: Path for answer distributions logging
-        eval_type: One of "baseline", "validation", or "test"
-        val_dataloader: DataLoader for validation data (required for baseline/validation)
-        val_dataset: Dataset for MCQ accuracy assessment (required for baseline/validation)
-        data_path: Path to dataset JSONL file (required for test, optional for others)
-        val_metrics_log_file_path: Path for validation metrics logging (only for validation)
-        limit_val_batches: Optional limit on number of batches to process (only for validation)
-        
-    Returns:
-        dict with evaluation metrics
-    """
-    if eval_type not in ["baseline", "validation", "test"]:
-        raise ValueError(f"eval_type must be one of 'baseline', 'validation', or 'test', got '{eval_type}'")
-    
-    # Determine prefix and step_type based on eval_type
-    if eval_type == "test":
-        prefix = "test"
-        step_type = "test"
-        step_number_for_dist = None
-        print_header = True
-    else:  # baseline or validation
-        prefix = "val"
-        step_type = "val"
-        step_number_for_dist = step
-        print_header = False
-    
-    # Load dataset if needed (for test evaluation)
-    dataloader = val_dataloader
-    dataset = val_dataset
-    
-    if eval_type == "test":
-        if data_path is None:
-            raise ValueError("data_path must be provided for test evaluation")
-        if print_header:
-            print("\n" + "="*80)
-            print("Running final test evaluation...")
-            print("="*80)
-        
-        dataset = validate_and_load_dataset(data_path, "test")
-        dataloader = DataLoader(
-            dataset, batch_size=args.batch_size, shuffle=False,
-            collate_fn=collate_fn
-        )
-        print(f"✓ Test dataset loaded: {len(dataset)} samples")
-        num_questions_for_mcq = min(500, len(dataset))
-    else:
-        # For baseline and validation: sample 500 random questions
-        if dataloader is None or dataset is None:
-            raise ValueError(f"val_dataloader and val_dataset must be provided for {eval_type} evaluation")
-        
-        # Sample 500 random indices from the dataset
-        dataset_size = len(dataset)
-        num_questions_for_mcq = min(500, dataset_size)
-        # Use seed=42 for baseline (to match capabilities_test.py), step for validation steps
-        if eval_type == "baseline":
-            random.seed(42)  # Match capabilities_test.py seed for baseline
-        else:
-            random.seed(step if step >= 0 else 0)  # Use step as seed for reproducibility
-        sampled_indices = random.sample(range(dataset_size), num_questions_for_mcq)
-        
-        # Create subset with sampled indices
-        subset_dataset = Subset(dataset, sampled_indices)
-        dataloader = DataLoader(
-            subset_dataset, batch_size=args.batch_size, shuffle=False,
-            collate_fn=collate_fn
-        )
-        dataset = subset_dataset  # Use subset for MCQ accuracy assessment too
-    
-    # Print evaluation start message
-    eval_name = {
-        "baseline": "baseline validation",
-        "validation": "validation",
-        "test": "test evaluation"
-    }[eval_type]
-    
-    total_samples = len(dataset) if dataset else len(dataloader.dataset) if hasattr(dataloader, 'dataset') else "unknown"
-    
-    if eval_type != "test":
-        print(f"\nStarting {eval_name} on {num_questions_for_mcq} random questions...")
-    else:
-        print(f"\nStarting {eval_name} on {total_samples} questions (MCQ accuracy will be assessed on {num_questions_for_mcq} questions)...")
-    
-    if limit_val_batches and eval_type != "test":
-        print(f"  (Limited to {limit_val_batches} batches)")
-    
-    model.eval()
-    losses = []
-    all_correct = []
-    all_entropies = []
-    all_verbal_conf = []
-    all_conf_entropies = []  # Confidence entropy
-    
-    batches_processed = 0
-    
-    with torch.no_grad():
-        for batch in dataloader:
-            out_metrics = val_step(
-                model, tokenizer, batch, device=device,
-                sigma=args.sigma, mcq_results_lookup=mcq_results_lookup,
-                log_file_path=log_file_path, args=args, temperature=temperature
-            )
-            
-            losses.append(out_metrics["loss"].item())
-            all_correct.extend(out_metrics["correct"].cpu().tolist())
-            all_entropies.extend(out_metrics["entropy"].cpu().tolist())
-            all_verbal_conf.extend(out_metrics["verbal_conf"].cpu().tolist())
-            all_conf_entropies.extend(out_metrics["conf_entropy"].cpu().tolist())
-            
-            batches_processed += 1
-            
-            # Limit validation batches if specified (only for baseline/validation)
-            if eval_type != "test" and limit_val_batches and batches_processed >= limit_val_batches:
-                break
-    
-    avg_loss = sum(losses) / len(losses) if losses else 0.0
-    
-    # Compute confidence entropy and variance metrics
-    conf_entropy_arr = np.array(all_conf_entropies)
-    avg_conf_entropy = float(np.mean(conf_entropy_arr)) if len(conf_entropy_arr) > 0 else 0.0
-    conf_entropy_variance = float(np.var(conf_entropy_arr)) if len(conf_entropy_arr) > 0 else 0.0
-    
-    # Compute metrics
-    metrics = compute_metrics_for_wandb(
-        all_correct, all_entropies, all_verbal_conf
-    )
-    # Rename keys based on prefix
-    wandb_metrics = {}
-    for key, value in metrics.items():
-        if key.startswith("val/"):
-            wandb_metrics[key.replace("val/", f"{prefix}/")] = value
-        else:
-            wandb_metrics[key] = value
-    wandb_metrics[f"{prefix}/loss"] = avg_loss
-    wandb_metrics[f"{prefix}/batches_processed"] = batches_processed
-    wandb_metrics[f"{prefix}/avg_conf_entropy"] = avg_conf_entropy
-    wandb_metrics[f"{prefix}/conf_entropy_variance"] = conf_entropy_variance
-    
-    # Assess MCQ accuracy
-    mcq_accuracy = None
-    mcq_entropy = None
-    mcq_entropy_std = None
-    answer_variety = None
-    if dataset:
-        # For baseline/validation, we already have a subset of 500 questions
-        # For test, assess_mcq_accuracy will sample internally
-        if eval_type == "test":
-            print(f"Assessing MCQ accuracy on {num_questions_for_mcq} questions...")
-            # For test, use seed=42 to match capabilities_test.py
-            mcq_results = assess_mcq_accuracy(
-                model, tokenizer, dataset, device=device,
-                validation_step=step, log_file_path=mcq_accuracy_log_file_path,
-                num_questions=num_questions_for_mcq, temperature=temperature, seed=42
-            )
-        else:
-            # For baseline/validation, use the same subset we already processed
-            # assess_mcq_accuracy will use all questions in the subset (no seed needed)
-            print(f"Assessing MCQ accuracy on {len(dataset)} questions...")
-            mcq_results = assess_mcq_accuracy(
-                model, tokenizer, dataset, device=device,
-                validation_step=step, log_file_path=mcq_accuracy_log_file_path,
-                num_questions=len(dataset), temperature=temperature, seed=None  # Use all questions in the subset
-            )
-        mcq_accuracy = mcq_results["accuracy"]
-        mcq_entropy = mcq_results["avg_entropy"]
-        mcq_entropy_std = mcq_results.get("std_entropy", 0.0)
-        wandb_metrics[f"{prefix}/accuracy"] = mcq_accuracy
-        wandb_metrics[f"{prefix}/answer_entropy"] = mcq_entropy
-        wandb_metrics[f"{prefix}/answer_entropy_std"] = mcq_entropy_std
-        
-        # Calculate answer variety (normalized measure of answer distribution)
-        # 0 = always picking same answer, 1 = picking 25% each (perfect variety)
-        predicted_letter_counts = mcq_results["predicted_letter_counts"]
-        total_questions = mcq_results["total_questions"]
-        if total_questions > 0:
-            # Get proportions for each answer choice
-            proportions = np.array([
-                predicted_letter_counts.get("A", 0) / total_questions,
-                predicted_letter_counts.get("B", 0) / total_questions,
-                predicted_letter_counts.get("C", 0) / total_questions,
-                predicted_letter_counts.get("D", 0) / total_questions,
-            ])
-            # Calculate standard deviation of proportions
-            # Perfect balance (25% each) = std = 0.0
-            # All one answer (e.g., 100% A) = std ≈ 0.433
-            std = float(np.std(proportions))
-            max_std = np.sqrt(0.1875)  # Maximum std when all answers are the same (≈ 0.433)
-            
-            # Normalize: 0 = always same answer, 1 = perfect balance
-            # answer_variety = 1 - (std / max_std)
-            answer_variety = float(1.0 - (std / max_std)) if max_std > 0 else 1.0
-            # Clamp to [0, 1] in case of floating point issues
-            answer_variety = max(0.0, min(1.0, answer_variety))
-            wandb_metrics[f"{prefix}/answer_variety"] = answer_variety
-        else:
-            answer_variety = 0.0
-            wandb_metrics[f"{prefix}/answer_variety"] = answer_variety
-        
-        # Log answer distributions
-        log_answer_distributions(
-            answer_distributions_log_file_path,
-            step_type=step_type,
-            step_number=step_number_for_dist,
-            predicted_letter_counts=mcq_results["predicted_letter_counts"],
-            correct_letter_counts=mcq_results["correct_letter_counts"],
-            total_questions=mcq_results["total_questions"],
-            accuracy=mcq_accuracy,
-            avg_entropy=mcq_entropy,
-            answer_variety=answer_variety,
-            answer_entropy_std=mcq_entropy_std
-        )
-    
-    # Log to WandB
-    log_wandb_metrics(wandb_metrics, step=step)
-    
-    # Log to validation metrics file (only for regular validation, not baseline or test)
-    if eval_type == "validation" and step >= 0 and val_metrics_log_file_path:
-        timestamp = datetime.now(timezone.utc).isoformat()
-        log_entry = {
-            "type": "validation_metrics",
-            "timestamp": timestamp,
-            "step": step,
-            "metrics": {
-                "loss": avg_loss,
-                "accuracy": mcq_accuracy if mcq_accuracy is not None else None,
-                "answer_entropy": mcq_entropy if mcq_entropy is not None else None,
-                "answer_entropy_std": mcq_entropy_std if mcq_entropy_std is not None else None,
-                "avg_verbal_conf": wandb_metrics[f"{prefix}/avg_verbal_conf"],
-                "std_verbal_conf": wandb_metrics[f"{prefix}/std_verbal_conf"],
-                "alignment_corr": wandb_metrics[f"{prefix}/alignment_corr"],
-                "calibration_corr": wandb_metrics[f"{prefix}/calibration_corr"],
-                "avg_conf_entropy": avg_conf_entropy,
-                "conf_entropy_variance": conf_entropy_variance,
-                "answer_variety": answer_variety if dataset else None,
-                "batches_processed": batches_processed,
-            }
-        }
-        write_log(val_metrics_log_file_path, log_entry)
-    
-    # Print results
-    if eval_type == "baseline":
-        info_prefix = "Baseline"
-    elif eval_type == "test":
-        info_prefix = "Test"
-    else:  # validation
-        info_prefix = f"Step {step}"
-    
-    info = f"{info_prefix} | {'Val' if prefix == 'val' else 'Test'} Loss: {avg_loss:.4f} | "
-    if mcq_accuracy is not None:
-        info += f"MCQ Acc: {mcq_accuracy:.2%} | "
-    info += f"Align: {wandb_metrics.get(f'{prefix}/alignment_corr', 0.0):.3f}"
-    if eval_type != "test" and limit_val_batches:
-        info += f" (over {batches_processed} batches)"
-    print(info)
-    
-    if eval_type == "test":
-        print("="*80 + "\n")
-    
-    return {
-        "loss": avg_loss,
-        "accuracy": mcq_accuracy,
-        "entropy": mcq_entropy,
-        "wandb_metrics": wandb_metrics,
-    }
-
-
-# ============================================================
 # Main training
 # ============================================================
 
@@ -848,6 +520,16 @@ def train(args):
         "parameters": all_params
     })
     print(f"All parameters logged to: {params_log_file_path}")
+
+    # Print training mode
+    if args.use_recorded_responses:
+        print("\n" + "="*80)
+        print("TRAINING MODE: Using RECORDED responses (frozen teacher)")
+        print("="*80 + "\n")
+    else:
+        print("\n" + "="*80)
+        print("TRAINING MODE: Using LIVE responses (dynamic teacher)")
+        print("="*80 + "\n")
 
     # ============================================================
     # VALIDATE ALL FILES FIRST (before loading model)
@@ -1173,9 +855,9 @@ def parse_args():
     parser.add_argument("--temperature", type=float, default=0.0,
                         help="Temperature for sampling predictions (0.0 = deterministic/argmax, >0 = sampling)")
     parser.add_argument(
-        "--use_recorded_responses", action="store_true", default=True,
+        "--use_recorded_responses", action="store_true", default=None,
         help=("Use recorded MCQ responses (frozen teacher) as training "
-              "targets instead of recomputing logits. (Default: True)")
+              "targets instead of recomputing logits.")
     )
     parser.add_argument(
         "--no_use_recorded_responses", dest="use_recorded_responses",
@@ -1235,7 +917,16 @@ def parse_args():
     parser.add_argument("--save_wandb_artifact", action="store_true",
                         help="Save model as W&B artifact for reproducibility")
 
-    return parser.parse_args()
+    args = parser.parse_args()
+    
+    # Validate that exactly one of --use_recorded_responses or --no_use_recorded_responses is set
+    if args.use_recorded_responses is None:
+        parser.error(
+            "Exactly one of --use_recorded_responses or --no_use_recorded_responses must be specified. "
+            "You must explicitly choose whether to use recorded responses (frozen teacher) or live responses (dynamic teacher)."
+        )
+    
+    return args
 
 
 if __name__ == "__main__":

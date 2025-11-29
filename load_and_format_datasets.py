@@ -11,40 +11,43 @@ hf_token = os.environ.get("HF_TOKEN")
 def text_to_id(text):
     return hashlib.sha256(text.encode('utf-8')).hexdigest()
 
-def load_and_format_dataset(dataset_name, num_questions_needed=None, split=None, skip_questions=None):
+def load_and_format_dataset(dataset_name, num_questions_needed=None, split=None, skip_questions=None, shuffle_answers=True):
     if dataset_name=="GPQA":
         if split is None:
-            return load_and_format_gpqa(num_questions_needed, hf_token=hf_token, skip_questions=skip_questions)
+            return load_and_format_gpqa(num_questions_needed, hf_token=hf_token, skip_questions=skip_questions, shuffle_answers=shuffle_answers)
         else:
-            return load_and_format_gpqa(num_questions_needed, hf_token=hf_token, split=split, skip_questions=skip_questions)
+            return load_and_format_gpqa(num_questions_needed, hf_token=hf_token, split=split, skip_questions=skip_questions, shuffle_answers=shuffle_answers)
     if dataset_name=="GPSA":
         if split is None:
-            return load_and_format_gpsa(num_questions_needed, hf_token=hf_token, skip_questions=skip_questions)
+            return load_and_format_gpsa(num_questions_needed, hf_token=hf_token, skip_questions=skip_questions, shuffle_answers=shuffle_answers)
         else:
-            return load_and_format_gpsa(num_questions_needed, hf_token=hf_token, split=split, skip_questions=skip_questions)
+            return load_and_format_gpsa(num_questions_needed, hf_token=hf_token, split=split, skip_questions=skip_questions, shuffle_answers=shuffle_answers)
     elif dataset_name=="MMLU":
         if split is None:
-            return load_and_format_mmlu(num_questions_needed, skip_questions=skip_questions)
+            return load_and_format_mmlu(num_questions_needed, skip_questions=skip_questions, shuffle_answers=shuffle_answers)
         else:
-            return load_and_format_mmlu(num_questions_needed, split=split, skip_questions=skip_questions)
+            return load_and_format_mmlu(num_questions_needed, split=split, skip_questions=skip_questions, shuffle_answers=shuffle_answers)
     elif dataset_name=="TruthfulQA":
         if split is None:
-            return load_and_format_truthfulqa(num_questions_needed, skip_questions=skip_questions)
+            return load_and_format_truthfulqa(num_questions_needed, skip_questions=skip_questions, shuffle_answers=shuffle_answers)
         else:
-            return load_and_format_truthfulqa(num_questions_needed, split=split, skip_questions=skip_questions)
+            return load_and_format_truthfulqa(num_questions_needed, split=split, skip_questions=skip_questions, shuffle_answers=shuffle_answers)
     elif dataset_name=="SimpleQA":
         if split is None:
-            return load_and_format_simpleqa(num_questions_needed, skip_questions=skip_questions)
+            return load_and_format_simpleqa(num_questions_needed, skip_questions=skip_questions, shuffle_answers=shuffle_answers)
         else:
-            return load_and_format_simpleqa(num_questions_needed, split=split, skip_questions=skip_questions)
+            return load_and_format_simpleqa(num_questions_needed, split=split, skip_questions=skip_questions, shuffle_answers=shuffle_answers)
     elif dataset_name=="SimpleMC":
-        return load_and_format_simplemc(num_questions_needed, skip_questions=skip_questions)
+        return load_and_format_simplemc(num_questions_needed, skip_questions=skip_questions, shuffle_answers=shuffle_answers)
     elif dataset_name=="PopMC":
-        return load_and_format_popmc(num_questions_needed, skip_questions=skip_questions)
+        return load_and_format_popmc(num_questions_needed, skip_questions=skip_questions, shuffle_answers=shuffle_answers)
     elif dataset_name=="PopMC_0_difficulty_filtered":
-        return load_and_format_popmc_filtered(num_questions_needed, skip_questions=skip_questions)
+        if split is None:
+            return load_and_format_popmc_filtered(num_questions_needed, skip_questions=skip_questions, shuffle_answers=shuffle_answers)
+        else:
+            return load_and_format_popmc_filtered(num_questions_needed, split=split, skip_questions=skip_questions, shuffle_answers=shuffle_answers)
     elif dataset_name=="TriviaMC":
-        return load_and_format_triviamc(num_questions_needed, skip_questions=skip_questions)
+        return load_and_format_triviamc(num_questions_needed, skip_questions=skip_questions, shuffle_answers=shuffle_answers)
     else:
         raise ValueError(f"Unknown dataset name: {dataset_name}. Supported datasets are: GPQA, GPSA, MMLU, TruthfulQA, SimpleQA, SimpleMC, PopMC, PopMC_0_difficulty_filtered, TriviaMC.")
 
@@ -133,7 +136,7 @@ def calculate_option_question_word_overlap_ratio(question_item):
     
     return num_unique_words_options / num_unique_words_question
 
-def load_and_format_gpsa(num_questions_needed=None, hf_token=None, split="train", skip_questions=None):
+def load_and_format_gpsa(num_questions_needed=None, hf_token=None, split="train", skip_questions=None, shuffle_answers=True):
     """
     Loads the GPQA dataset and formats questions into the A-D multiple-choice format.
     """
@@ -201,7 +204,7 @@ def load_and_format_gpsa(num_questions_needed=None, hf_token=None, split="train"
     print(f"Successfully formatted {len(formatted_questions)} unique questions from GPSA.")
     return formatted_questions
 
-def load_and_format_gpqa(num_questions_needed=None, hf_token=None, split="train", skip_questions=None):
+def load_and_format_gpqa(num_questions_needed=None, hf_token=None, split="train", skip_questions=None, shuffle_answers=True):
     """
     Loads the GPQA dataset and formats questions into the A-D multiple-choice format.
     """
@@ -261,9 +264,10 @@ def load_and_format_gpqa(num_questions_needed=None, hf_token=None, split="train"
         if len(correct_answer_text) == 0 or any(len(ans) == 0 for ans in incorrect_answers_text):
             continue
 
-        # Create the pool of 4 options and shuffle
+        # Create the pool of 4 options and optionally shuffle
         options_list = [correct_answer_text] + incorrect_answers_text
-        random.shuffle(options_list)
+        if shuffle_answers:
+            random.shuffle(options_list)
 
         # Assign labels (A-D) and find the correct one
         options_dict = {}
@@ -432,9 +436,10 @@ def load_and_format_truthfulqa(num_questions_needed=None, split="validation", sk
         except ValueError:
             continue
 
-        # Create the pool of options and shuffle
+        # Create the pool of options and optionally shuffle
         options_list = [best_answer] + chosen_incorrect
-        random.shuffle(options_list)
+        if shuffle_answers:
+            random.shuffle(options_list)
 
         # Assign labels and find the correct one
         options_dict = {}
@@ -462,7 +467,7 @@ def load_and_format_truthfulqa(num_questions_needed=None, split="validation", sk
     print(f"Successfully formatted {len(formatted_questions)} unique questions from TruthfulQA.")
     return formatted_questions
 
-def load_and_format_simplemc(num_questions_needed=None, split="test", skip_questions=None):
+def load_and_format_simplemc(num_questions_needed=None, split="test", skip_questions=None, shuffle_answers=True):
     import json
     print(f"Attempting to load SimpleMC...")
     try:
@@ -598,7 +603,7 @@ def load_and_format_simpleqa(num_questions_needed=None, split="test", skip_quest
     print(f"Successfully formatted {len(formatted_questions)} unique questions from SimpleQA.")
     return formatted_questions
 
-def load_and_format_popmc(num_questions_needed=None, split="test", skip_questions=None):
+def load_and_format_popmc(num_questions_needed=None, split="test", skip_questions=None, shuffle_answers=True):
     """
     Loads the PopMC dataset from a local JSONL file and formats questions into the A-D multiple-choice format.
     """
@@ -648,9 +653,10 @@ def load_and_format_popmc(num_questions_needed=None, split="test", skip_question
         if any(len(ans.strip()) == 0 for ans in incorrect_answers_text):
             continue
 
-        # Create the pool of 4 options and shuffle
+        # Create the pool of 4 options and optionally shuffle
         options_list = [correct_answer_text] + incorrect_answers_text[:3]  # Take first 3 distractors
-        random.shuffle(options_list)
+        if shuffle_answers:
+            random.shuffle(options_list)
 
         # Assign labels (A-D) and find the correct one
         options_dict = {}
@@ -682,19 +688,26 @@ def load_and_format_popmc(num_questions_needed=None, split="test", skip_question
     print(f"Successfully formatted {len(formatted_questions)} unique questions from PopMC.")
     return formatted_questions
 
-def load_and_format_popmc_filtered(num_questions_needed=None, split="test", skip_questions=None):
+def load_and_format_popmc_filtered(num_questions_needed=None, split="test", skip_questions=None, shuffle_answers=True):
     """
     Loads the PopMC_0_difficulty_filtered dataset from a local JSONL file and formats questions into the A-D multiple-choice format.
+    
+    Args:
+        shuffle_answers: If True, randomly shuffle the order of answer options. If False, correct answer is always in position A.
     """
     import json
-    print(f"Attempting to load PopMC_0_difficulty_filtered...")
+    print(f"Attempting to load PopMC_0_difficulty_filtered ({split} split)...")
     try:
-        filename = "./data/PopMC_0_difficulty_filtered.jsonl"
+        # Construct filename based on split
+        if split == "val" or split == "validation":
+            filename = "./data/PopMC_0_difficulty_filtered_val.jsonl"
+        else:
+            filename = "./data/PopMC_0_difficulty_filtered.jsonl"
         with open(filename, 'r') as f:
             dataset = [json.loads(line) for line in f]
-        print("PopMC_0_difficulty_filtered Dataset loaded successfully.")
+        print(f"PopMC_0_difficulty_filtered Dataset ({split} split) loaded successfully.")
     except Exception as e:
-        print(f"Error loading PopMC_0_difficulty_filtered dataset: {e}")
+        print(f"Error loading PopMC_0_difficulty_filtered dataset ({split} split): {e}")
         return None
 
     formatted_questions = []
@@ -766,7 +779,7 @@ def load_and_format_popmc_filtered(num_questions_needed=None, split="test", skip
     print(f"Successfully formatted {len(formatted_questions)} unique questions from PopMC_0_difficulty_filtered.")
     return formatted_questions
 
-def load_and_format_triviamc(num_questions_needed=None, split="test", skip_questions=None):
+def load_and_format_triviamc(num_questions_needed=None, split="test", skip_questions=None, shuffle_answers=True):
     """
     Loads the TriviaMC dataset from a local JSONL file and formats questions into the A-D multiple-choice format.
     """
@@ -816,9 +829,10 @@ def load_and_format_triviamc(num_questions_needed=None, split="test", skip_quest
         if any(len(ans.strip()) == 0 for ans in incorrect_answers_text):
             continue
 
-        # Create the pool of 4 options and shuffle
+        # Create the pool of 4 options and optionally shuffle
         options_list = [correct_answer_text] + incorrect_answers_text[:3]  # Take first 3 distractors
-        random.shuffle(options_list)
+        if shuffle_answers:
+            random.shuffle(options_list)
 
         # Assign labels (A-D) and find the correct one
         options_dict = {}

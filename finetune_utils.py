@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import random
 import traceback
 from datetime import datetime, timezone
 from torch.utils.data import Dataset
@@ -555,6 +556,84 @@ def load_mcq_results_data(mcq_results_path, log_file_path=None):
     return results_lookup
 
 
+def compute_ABCD_entropy(probs):
+    """
+    Compute entropy from probability distribution for A, B, C, D options.
+
+    Args:
+        probs: tensor, list, or dict - probabilities for A, B, C, D
+               If dict, should have keys "A", "B", "C", "D"
+               If list/tensor, should be in order [A, B, C, D]
+
+    Returns:
+        scalar entropy value
+    """
+    import torch
+    
+    # Handle dictionary format (keys: "A", "B", "C", "D")
+    if isinstance(probs, dict):
+        probs = [
+            probs.get("A", 0.0),
+            probs.get("B", 0.0),
+            probs.get("C", 0.0),
+            probs.get("D", 0.0)
+        ]
+
+    # Convert to tensor if needed
+    if not isinstance(probs, torch.Tensor):
+        probs = torch.tensor(probs, dtype=torch.float32)
+
+    # Ensure probabilities sum to 1
+    probs = probs / (probs.sum() + 1e-12)
+
+    # Compute entropy (natural logs)
+    entropy = -(probs * torch.log(probs + 1e-12)).sum()
+    return entropy
+
+
+def shuffle_options_and_update_correct_letter(row):
+    """
+    Shuffle the options (A, B, C, D) and update the correct_letter accordingly.
+    
+    This ensures the correct answer isn't always in position A, preventing
+    position bias in the model.
+    
+    Args:
+        row: Dictionary with "options" (dict with keys A, B, C, D) and "correct_letter"
+        
+    Returns:
+        row: Modified row with shuffled options and updated correct_letter
+    """
+    if "options" not in row or "correct_letter" not in row:
+        return row
+    
+    options = row["options"]
+    correct_letter = row["correct_letter"]
+    
+    # Get the correct answer text
+    correct_answer_text = options.get(correct_letter, "")
+    
+    # Create list of (letter, text) pairs
+    option_pairs = [(letter, options[letter]) for letter in "ABCD" if letter in options]
+    
+    # Shuffle the pairs
+    random.shuffle(option_pairs)
+    
+    # Rebuild options dict with new letter assignments
+    new_options = {}
+    new_correct_letter = None
+    for new_letter, (old_letter, text) in zip("ABCD", option_pairs):
+        new_options[new_letter] = text
+        if old_letter == correct_letter:
+            new_correct_letter = new_letter
+    
+    # Update row
+    row["options"] = new_options
+    row["correct_letter"] = new_correct_letter
+    
+    return row
+
+
 def normalize_text(s):
     if not s:
         return ""
@@ -1046,6 +1125,135 @@ def validate_and_load_dataset(data_path, dataset_type="training"):
         )
     
     return dataset
+
+
+def resolve_file_path(file_path, search_dirs=None):
+    """
+    Try to find a file in common locations if it doesn't exist at the given path.
+    
+    Args:
+        file_path: Original file path
+        search_dirs: List of additional directories to search (optional)
+        
+    Returns:
+        Resolved file path if found, original path otherwise
+        
+    Raises:
+        FileNotFoundError: If file cannot be found in any location
+    """
+    if os.path.exists(file_path):
+        return file_path
+    
+    file_path = file_path.strip()
+    basename = os.path.basename(file_path)
+    
+    # Default search directories
+    default_search_dirs = [
+        "data",
+        "explicit_confidence_task_logs",
+        "capabilities_test_logs",
+    ]
+    
+    if search_dirs:
+        search_dirs = list(search_dirs) + default_search_dirs
+    else:
+        search_dirs = default_search_dirs
+    
+    # Build possible paths
+    possible_paths = [file_path]
+    for search_dir in search_dirs:
+        possible_paths.append(os.path.join(search_dir, basename))
+    possible_paths.append(os.path.join(os.getcwd(), file_path))
+    
+    # Try each path
+    for path in possible_paths:
+        if os.path.exists(path):
+            return path
+    
+    # If not found, raise error with helpful message
+    error_msg = (
+        f"Error: Could not find file. "
+        f"Tried the following paths:\n"
+        + "\n".join(f"  - {path}" for path in possible_paths)
+        + f"\n\nOriginal path: {file_path}"
+        + f"\nCurrent working directory: {os.getcwd()}"
+    )
+    raise FileNotFoundError(error_msg)
+
+
+def validate_training_files(args):
+    """
+    Validate all input files for training, with automatic path resolution.
+    
+    This function validates:
+    - Training data file (required)
+    - Validation data file (optional)
+    - Test data file (optional, with path resolution)
+    - MCQ results file (optional, with path resolution)
+    
+    Args:
+        args: Argument object with the following attributes:
+            - train_data_path: Path to training data (required)
+            - val_data_path: Path to validation data (optional)
+            - test_data_path: Path to test data (optional)
+            - mcq_results_data: Path to MCQ results (optional)
+            
+    Modifies args in place by resolving paths for test_data_path and mcq_results_data.
+    
+    Raises:
+        FileNotFoundError: If any required file is not found
+        ValueError: If any file is empty
+    """
+    print("\n=== Validating input files ===")
+    
+    # Validate training data file (required)
+    validate_file_exists_and_not_empty(args.train_data_path, "training data file")
+    print(f"✓ Training data file exists and is not empty: {args.train_data_path}")
+    
+    # Validate validation data file (optional)
+    if args.val_data_path:
+        validate_file_exists_and_not_empty(args.val_data_path, "validation data file")
+        print(f"✓ Validation data file exists and is not empty: {args.val_data_path}")
+    
+    # Validate test data file (optional, with path resolution)
+    if args.test_data_path:
+        try:
+            args.test_data_path = resolve_file_path(
+                args.test_data_path,
+                search_dirs=["data"]  # Test files are typically in data/
+            )
+        except FileNotFoundError as e:
+            print(f"Test data file not found at: {args.test_data_path}")
+            print(f"Current working directory: {os.getcwd()}")
+            print("Attempting to find file...")
+            raise FileNotFoundError(
+                f"Test data file not found: {args.test_data_path}\n"
+                f"Please provide a valid path to the test data file."
+            ) from e
+        
+        validate_file_exists_and_not_empty(args.test_data_path, "test data file")
+        print(f"✓ Test data file exists and is not empty: {args.test_data_path}")
+    
+    # Validate MCQ results file (optional, with path resolution)
+    if args.mcq_results_data:
+        try:
+            args.mcq_results_data = resolve_file_path(
+                args.mcq_results_data,
+                search_dirs=["data", "explicit_confidence_task_logs", "capabilities_test_logs"]
+            )
+        except FileNotFoundError as e:
+            print(f"MCQ results file not found at: {args.mcq_results_data}")
+            print(f"Current working directory: {os.getcwd()}")
+            print("Attempting to find file...")
+            raise FileNotFoundError(
+                f"MCQ results file not found: {args.mcq_results_data}\n"
+                f"Please provide a valid path to the MCQ results file."
+            ) from e
+        
+        validate_file_exists_and_not_empty(args.mcq_results_data, "MCQ results file")
+        print(f"✓ MCQ results file exists and is not empty: {args.mcq_results_data}")
+    
+    print("=== File validation complete ===\n")
 
 
 def log_prompts_and_responses(step, prompt_log_file_path, answer_logits4, conf_logits8,

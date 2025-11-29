@@ -21,7 +21,8 @@ class CapabilitiesTest(BaseGameClass):
         resample_for_probs=False,
         nested=None,
         include_question_num=False,
-        include_total_questions=False
+        include_total_questions=False,
+        shuffle_answers=True
     ):
         """
         Args:
@@ -80,6 +81,7 @@ class CapabilitiesTest(BaseGameClass):
             "resample_for_probs": self.resample_for_probs,
             "is_human_player": self.is_human_player,
             "nested": self.nested,
+            "shuffle_answers": shuffle_answers,
             "present_question_args": {
                 "include_question_num": self.include_question_num,
                 "include_total_questions": self.include_total_questions
@@ -454,7 +456,7 @@ class CapabilitiesTest(BaseGameClass):
         self._log(f"Capabilities measurement completed. Results saved to: {capabilities_file_path}")
         return True, capabilities_file_path
 
-def main(model_dataset_dict, temp):
+def main(model_dataset_dict, temp, split=None):
     for subject_name, datasets in model_dataset_dict.items():
         for DATASET_NAME in datasets:
             IS_HUMAN = False
@@ -462,7 +464,7 @@ def main(model_dataset_dict, temp):
             INCLUDE_TOTAL = False
             resume_from = None#"capabilities_1p_test_logs/llama-3.3-70b-instruct_SimpleMC_500_1759847064_test_data.json"#
             RESAMPLE = False
-            NESTED = "Self" #values: None, "Self", "Other"
+            NESTED = None #values: None, "Self", "Other"
             temp = temp
             seed = 42
             
@@ -474,7 +476,8 @@ def main(model_dataset_dict, temp):
             else:
                 N_QUESTIONS = 500  # Default sample size 
             # Load questions first to get actual count
-            formatted_questions = load_and_format_dataset(DATASET_NAME, N_QUESTIONS)
+            SHUFFLE_ANSWERS = True  # Set to False to test without shuffling
+            formatted_questions = load_and_format_dataset(DATASET_NAME, N_QUESTIONS, split=split, shuffle_answers=SHUFFLE_ANSWERS)
             if formatted_questions:
                 actual_count = len(formatted_questions)
                 SUBJECT_ID = f"{subject_name.replace('/', '-')}_{DATASET_NAME}_{actual_count}"
@@ -506,9 +509,10 @@ def main(model_dataset_dict, temp):
                     resume_from=resume_from,
                     temperature=temp,
                     resample_for_probs=RESAMPLE,
-                    nested="Self",
+                    nested=NESTED,
                     include_question_num=INCLUDE_QNUM,
-                    include_total_questions=INCLUDE_TOTAL
+                    include_total_questions=INCLUDE_TOTAL,
+                    shuffle_answers=False
                 )
 
                 # Store the seed used (run-level, for reproducibility)
@@ -543,6 +547,8 @@ def main(model_dataset_dict, temp):
 
 if __name__ == "__main__":
     model_dataset_dict = {
-        "llama-3.1-8b-instruct": ["TriviaMC"], 
+        "llama-3.1-8b-instruct": ["PopMC_0_difficulty_filtered"], 
         }
-    main(model_dataset_dict, temp=1.0)
+    # Use split="val" to load the validation split (data/PopMC_0_difficulty_filtered_val.jsonl)
+    # Use split=None or omit to load the default split (data/PopMC_0_difficulty_filtered.jsonl)
+    main(model_dataset_dict, temp=1.0, split="val")

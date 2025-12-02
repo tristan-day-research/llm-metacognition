@@ -474,7 +474,7 @@ def main(model_dataset_dict, temp, split=None):
             elif DATASET_NAME.startswith("GP"):
                 N_QUESTIONS = 447
             else:
-                N_QUESTIONS = 500  # Default sample size 
+                N_QUESTIONS = 250  # Default sample size 
             # Load questions first to get actual count
             SHUFFLE_ANSWERS = True  # Set to False to test without shuffling
             formatted_questions = load_and_format_dataset(DATASET_NAME, N_QUESTIONS, split=split, shuffle_answers=SHUFFLE_ANSWERS)

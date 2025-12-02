@@ -1,11 +1,98 @@
 import json
+import math
 import os
-import re
 import random
-import traceback
 from datetime import datetime, timezone
 from torch.utils.data import Dataset
 import torch
+from argparse import Namespace
+
+
+from finetune_data_handling import (
+    load_mcq_results_data,
+    collate_fn as data_collate_fn
+)
+
+def load_tokenizer(args):
+    """Load and configure tokenizer for causal LM."""
+    from transformers import AutoTokenizer
+
+    tokenizer = AutoTokenizer.from_pretrained(
+        args.model_name,
+        use_fast=False,
+        padding_side="left"
+    )
+
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    
+    tokenizer.truncation_side = "right"
+
+    return tokenizer
+
+
+def prepare_model_and_tokenizer(model, tokenizer):
+    """Sync model config with tokenizer."""
+    
+    # Ensure pad token exists
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    
+    # Sync model config
+    model.config.pad_token_id = tokenizer.pad_token_id
+    model.generation_config.pad_token_id = tokenizer.pad_token_id
+    model.generation_config.eos_token_id = tokenizer.eos_token_id
+    model.generation_config.bos_token_id = tokenizer.bos_token_id
+    
+    # Ensure padding settings (in case they were changed)
+    tokenizer.padding_side = "left"
+    tokenizer.truncation_side = "right"
+
+    return model, tokenizer
+
+
+def load_model_with_lora(args, tokenizer):
+    from transformers import AutoModelForCausalLM
+    from peft import LoraConfig, get_peft_model
+
+    model = AutoModelForCausalLM.from_pretrained(
+        args.model_name,
+        device_map="auto",
+        torch_dtype="auto"
+    )
+
+    # LoRA
+    lcfg = LoraConfig(
+        r=args.lora_r,
+        lora_alpha=args.lora_alpha,
+        lora_dropout=args.lora_dropout,
+        target_modules=args.lora_target_modules,
+        bias="none",
+        task_type="CAUSAL_LM"
+    )
+    model = get_peft_model(model, lcfg)
+
+    return model
+
+
+def parse_letter_from_model_text(model_text, valid_letters):
+    """Extract letter from generated text"""
+    if model_text is None:
+        return None
+
+    cleaned = model_text.upper().strip()
+    if len(cleaned) == 0:
+        return None
+
+    # Check first character
+    if cleaned[0] in valid_letters:
+        return cleaned[0]
+
+    # Check last character  
+    if cleaned[-1] in valid_letters:
+        return cleaned[-1]
+
+    return None
 
 
 def write_log(log_file_path, entry_dict):
@@ -23,919 +110,207 @@ def write_log(log_file_path, entry_dict):
             f.write(json.dumps(entry_dict, ensure_ascii=False) + '\n')
 
 
-def _get_log_file_path(log_dir, model_name, suffix):
-    """Helper function to create log file paths."""
-    os.makedirs(log_dir, exist_ok=True)
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d-%H-%M-%S")
-    model_name_safe = model_name.replace("/", "-").replace("_", "-")
-    return os.path.join(
-        log_dir, f"{model_name_safe}_{timestamp}_{suffix}.jsonl"
+# def _get_log_file_path(log_dir, model_name, suffix):
+#     """Helper function to create log file paths."""
+#     os.makedirs(log_dir, exist_ok=True)
+#     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d-%H-%M-%S")
+#     model_name_safe = model_name.replace("/", "-").replace("_", "-")
+#     return os.path.join(
+#         log_dir, f"{model_name_safe}_{timestamp}_{suffix}.jsonl"
+#     )
+
+
+# def get_letter_token_ids(tokenizer, letter: str) -> list:
+#     """
+#     Get all single-token IDs that represent a letter (with and without space).
+    
+#     Returns:
+#         List of token IDs (usually 1-2 tokens: bare letter and/or spaced letter)
+#     """
+#     token_ids = []
+    
+#     # Try with leading space
+#     ids = tokenizer.encode(" " + letter, add_special_tokens=False)
+#     if len(ids) == 1:
+#         token_ids.append(ids[0])
+    
+#     # Try bare letter
+#     ids = tokenizer.encode(letter, add_special_tokens=False)
+#     if len(ids) == 1 and ids[0] not in token_ids:  # Avoid duplicates
+#         token_ids.append(ids[0])
+    
+#     if not token_ids:
+#         raise ValueError(f"Could not find single-token encoding for {letter}")
+    
+#     return token_ids
+
+
+
+# def compute_ABCD_entropy(probs):
+#     """
+#     Compute entropy from probability distribution for A, B, C, D options.
+
+#     Args:
+#         probs: tensor, list, or dict - probabilities for A, B, C, D
+#                If dict, should have keys "A", "B", "C", "D"
+#                If list/tensor, should be in order [A, B, C, D]
+
+#     Returns:
+#         scalar entropy value
+#     """
+#     import torch
+    
+#     # Handle dictionary format (keys: "A", "B", "C", "D")
+#     if isinstance(probs, dict):
+#         probs = [
+#             probs.get("A", 0.0),
+#             probs.get("B", 0.0),
+#             probs.get("C", 0.0),
+#             probs.get("D", 0.0)
+#         ]
+
+#     # Convert to tensor if needed
+#     if not isinstance(probs, torch.Tensor):
+#         probs = torch.tensor(probs, dtype=torch.float32)
+
+#     # Ensure probabilities sum to 1
+#     probs = probs / (probs.sum() + 1e-12)
+
+#     # Compute entropy (natural logs)
+#     entropy = -(probs * torch.log(probs + 1e-12)).sum()
+#     return entropy
+
+
+def convert_entropy_to_soft_labels(entropy, sigma=10.0):
+    """
+    Convert entropy value to soft 8-bin confidence distribution.
+    Handles both Tensor inputs (training) and float inputs (evaluation).
+    """
+    # Fix: Ensure input is a tensor so we can access .device or operate on it
+    if not isinstance(entropy, torch.Tensor):
+        entropy = torch.tensor(entropy, dtype=torch.float32)
+
+    # Get device from entropy tensor (defaults to cpu if created from float)
+    device = entropy.device
+    
+    # Convert entropy to "confidence percentage"
+    # confidence = (1 - H/log(4)) * 100
+    confidence_percent = (1 - entropy / math.log(4)) * 100.0
+
+    # Bin midpoints + widths
+    bin_edges = torch.tensor(
+        [0, 5, 10, 20, 40, 60, 80, 90, 100],
+        dtype=torch.float32,
+        device=device
     )
-
-
-def validate_file_exists_and_not_empty(file_path, file_description="file"):
-    """
-    Validate that a file exists and is not empty.
-    
-    Args:
-        file_path: Path to the file to validate
-        file_description: Description of the file for error messages
-        
-    Raises:
-        FileNotFoundError: If file doesn't exist
-        ValueError: If file is empty
-    """
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(
-            f"{file_description.capitalize()} not found: {file_path}\n"
-            f"Please provide a valid path to your {file_description}."
-        )
-    
-    # Check if file is empty
-    file_size = os.path.getsize(file_path)
-    if file_size == 0:
-        raise ValueError(
-            f"{file_description.capitalize()} is empty: {file_path}\n"
-            f"The file exists but contains no data. Please check your {file_description} file."
-        )
-
-
-def build_multiple_choice_question_prompts(batch):
-    """
-    Builds direct MCQ prompts wrapped in FULL Llama-3 chat template including system prompt.
-    Matches explicit_confidence_task.py content but with proper chat formatting.
-    """
-    # Llama-3 Control Tokens
-    BOS = "<|begin_of_text|>"
-    SYSTEM_START = "<|start_header_id|>system<|end_header_id|>\n\n"
-    SYSTEM_CONTENT = "You are a helpful AI assistant."  # Standard Llama-3 system prompt
-    USER_START = "<|start_header_id|>user<|end_header_id|>\n\n"
-    EOT = "<|eot_id|>"
-    ASSISTANT_START = "<|start_header_id|>assistant<|end_header_id|>\n\n"
-    
-    setup_prompt = (
-        "I'm going to ask you a series of multiple-choice questions. For each one, "
-        "select the answer you think is best. Respond only with the letter of your choice; "
-        "do NOT output any other text."
+    bin_midpoints = torch.tensor(
+        [2.5, 7.5, 15, 30, 50, 70, 85, 95],
+        dtype=torch.float32,
+        device=device
     )
-    
-    prompts = []
-    for row in batch:
-        question = row["question"]
-        options = row["options"]
-        
-        # Structure matches BaseGameClass._present_question logic seen in logs
-        # Header: Question + Text
-        # Separator: 10 dashes
-        # Body: Indented Options
-        q_text = (
-            "------------------------------\n"
-            "Question:\n"
-            f"{question}\n"
-            "----------\n"
-        )
-        
-        # Options are indented by 2 spaces
-        for key in ["A", "B", "C", "D"]:
-            if key in options:
-                q_text += f"  {key}: {options[key]}\n"
-        
-        q_text += "------------------------------"
-        
-        # Full prompt assembly
-        llm_prompt = q_text + "\nYour choice (A, B, C, or D): "
-        user_content = setup_prompt + "\n\n" + llm_prompt
-        
-        # Apply FULL Llama-3 chat template WITH system prompt
-        # Format: BOS + SYSTEM + USER + ASSISTANT
-        full_prompt = f"{BOS}{SYSTEM_START}{SYSTEM_CONTENT}{EOT}{USER_START}{user_content}{EOT}{ASSISTANT_START}"
-        prompts.append(full_prompt)
-    
-    return prompts
+    bin_widths = bin_edges[1:] - bin_edges[:-1]
 
-
-def build_self_confidence_prompts(batch):
-    """
-    Builds self-confidence prompts wrapped in FULL Llama-3 chat template including system prompt.
-    Matches explicit_confidence_task.py content but with proper chat formatting.
-    """
-    # Llama-3 Control Tokens
-    BOS = "<|begin_of_text|>"
-    SYSTEM_START = "<|start_header_id|>system<|end_header_id|>\n\n"
-    SYSTEM_CONTENT = "You are a helpful AI assistant."  # Standard Llama-3 system prompt
-    USER_START = "<|start_header_id|>user<|end_header_id|>\n\n"
-    EOT = "<|eot_id|>"
-    ASSISTANT_START = "<|start_header_id|>assistant<|end_header_id|>\n\n"
-    
-    setup_prompt = (
-        "I'm going to show you a multiple-choice question, and I want you to tell me "
-        "your level of confidence that you would get the question right. Respond only "
-        "with the letter corresponding to the percentage range you choose; do NOT output "
-        "any other text."
-    )
-    
-    # Matching explicit_confidence_task.py (lines 88-90)
-    nested_option_dict = {
-        "A": "<5%", "B": "5-10%", "C": "10-20%", "D": "20-40%", 
-        "E": "40-60%", "F": "60-80%", "G": "80-90%", "H": ">90%"
-    }
-    nested_question_prompt = "How confident are you that you would get this question right?"
-    
-    prompts = []
-    for row in batch:
-        question = row["question"]
-        options = row["options"]
-        
-        # Structure matches BaseGameClass._present_nested_question logic
-        # Header: Nested Prompt
-        # Separator: 10 dashes
-        # Body: Question Text + Indented Options
-        # Separator: 10 dashes
-        # Nested Body: Indented Nested Options
-        q_text = (
-            "------------------------------\n"
-            f"{nested_question_prompt}\n"
-            "----------\n"
-            f"{question}\n"
-        )
-        
-        # Original Question Options
-        for key in ["A", "B", "C", "D"]:
-            if key in options:
-                q_text += f"  {key}: {options[key]}\n"
-        
-        q_text += "----------\n"
-        
-        # Confidence Options
-        for key in ["A", "B", "C", "D", "E", "F", "G", "H"]:
-            q_text += f"  {key}: {nested_option_dict[key]}\n"
-            
-        q_text += "------------------------------"
-        
-        # Full prompt assembly
-        options_str = "A, B, C, D, E, F, G, or H"
-        llm_prompt = q_text + f"\nYour choice ({options_str}): "
-        user_content = setup_prompt + "\n\n" + llm_prompt
-        
-        # Apply FULL Llama-3 chat template WITH system prompt
-        # Format: BOS + SYSTEM + USER + ASSISTANT
-        full_prompt = f"{BOS}{SYSTEM_START}{SYSTEM_CONTENT}{EOT}{USER_START}{user_content}{EOT}{ASSISTANT_START}"
-        prompts.append(full_prompt)
-        
-    return prompts
-
-
-def build_other_confidence_prompts(batch):
-    """
-    Builds other-confidence (college-educated) prompts wrapped in FULL Llama-3 chat template including system prompt.
-    Matches explicit_confidence_task.py content but with proper chat formatting.
-    """
-    # Llama-3 Control Tokens
-    BOS = "<|begin_of_text|>"
-    SYSTEM_START = "<|start_header_id|>system<|end_header_id|>\n\n"
-    SYSTEM_CONTENT = "You are a helpful AI assistant."  # Standard Llama-3 system prompt
-    USER_START = "<|start_header_id|>user<|end_header_id|>\n\n"
-    EOT = "<|eot_id|>"
-    ASSISTANT_START = "<|start_header_id|>assistant<|end_header_id|>\n\n"
-    
-    setup_prompt = (
-        "I want your help calibrating question difficulty. I'm going to show you a "
-        "multiple-choice question, and I want you to tell me approximately what "
-        "percentage of college-educated people you think would get it right. Respond "
-        "only with the letter corresponding to the percentage range you choose; do NOT "
-        "output any other text."
-    )
-    
-    # Matching explicit_confidence_task.py (lines 83-85)
-    nested_option_dict = {
-        "A": "<5%", "B": "5-10%", "C": "10-20%", "D": "20-40%", 
-        "E": "40-60%", "F": "60-80%", "G": "80-90%", "H": ">90%"
-    }
-    nested_question_prompt = "What percentage of college-educated people would get this question right?"
-    
-    prompts = []
-    for row in batch:
-        question = row["question"]
-        options = row["options"]
-        
-        # Structure matches BaseGameClass._present_nested_question logic
-        q_text = (
-            "------------------------------\n"
-            f"{nested_question_prompt}\n"
-            "----------\n"
-            f"{question}\n"
-        )
-        
-        # Original Question Options
-        for key in ["A", "B", "C", "D"]:
-            if key in options:
-                q_text += f"  {key}: {options[key]}\n"
-        
-        q_text += "----------\n"
-        
-        # Confidence Options
-        for key in ["A", "B", "C", "D", "E", "F", "G", "H"]:
-            q_text += f"  {key}: {nested_option_dict[key]}\n"
-            
-        q_text += "------------------------------"
-        
-        # Full prompt assembly
-        options_str = "A, B, C, D, E, F, G, or H"
-        llm_prompt = q_text + f"\nYour choice ({options_str}): "
-        user_content = setup_prompt + "\n\n" + llm_prompt
-        
-        # Apply FULL Llama-3 chat template WITH system prompt
-        # Format: BOS + SYSTEM + USER + ASSISTANT
-        full_prompt = f"{BOS}{SYSTEM_START}{SYSTEM_CONTENT}{EOT}{USER_START}{user_content}{EOT}{ASSISTANT_START}"
-        prompts.append(full_prompt)
-        
-    return prompts
-
-# ============================================================
-# Dataset: no logprobs needed, only the raw MCQ fields
-# ============================================================
-
-
-class MCQDataset(Dataset):
-    """Dataset for Multiple Choice Questions."""
-
-    def __init__(self, path):
-        """
-        Initialize MCQ dataset from JSONL file.
-
-        Args:
-            path: Path to JSONL file containing questions
-        """
-        with open(path, 'r', encoding='utf-8') as f:
-            self.rows = [json.loads(line) for line in f]
-
-    def __len__(self):
-        """Return number of questions in dataset."""
-        return len(self.rows)
-
-    def __getitem__(self, idx):
-        """
-        Get a single question from the dataset.
-
-        Args:
-            idx: Index of question to retrieve
-
-        Returns:
-            Dictionary with question, options, and correct answer
-        """
-        row = self.rows[idx]
-
-        question = row["question"]
-        correct = row["correct_answer"]
-        distractors = row["distractors"][:3]  # ensure 3
-
-        # No shuffling: fixed layout
-        options = [(correct, True)] + [(d, False) for d in distractors]
-
-        labeled = {}
-        correct_letter = None
-        for label, (text, is_correct) in zip("ABCD", options):
-            labeled[label] = text
-            if is_correct:
-                correct_letter = label
-
-        return {
-            "qid": row.get("qid", str(idx)),
-            "question": question,
-            "options": labeled,
-            "correct_letter": correct_letter,
-        }
-
-
-def normalize_text(s):
-    """Normalize text for comparison: lowercase, strip, normalize whitespace, remove trailing period."""
-    if not s:
-        return ""
-    s = str(s).strip().lower()
-    s = re.sub(r"\s+", " ", s)
-    s = s.rstrip(".")
-    return s
-
-
-def get_single_token_id(tokenizer, letter: str, context: str = None) -> int:
-    """
-    Find a single-token representation for a letter.
-    Try ' A' first (common for LLaMA), then 'A'.
-    
-    If context is provided, tokenize in that context to ensure we get the right token ID
-    that matches how the model will see it during inference.
-    """
-    if context is not None:
-        # Tokenize the context + letter, then extract just the letter's token ID
-        full_text = context + letter
-        ids = tokenizer.encode(full_text, add_special_tokens=False)
-        context_ids = tokenizer.encode(context, add_special_tokens=False)
-        if len(ids) == len(context_ids) + 1:
-            # The letter was tokenized as a single token
-            return ids[-1]
-        # Fallback to standard method if context doesn't help
-    
-    # Try with leading space (common SPM pattern)
-    ids = tokenizer.encode(" " + letter, add_special_tokens=False)
-    if len(ids) == 1:
-        return ids[0]
-    # Fallback: bare letter
-    ids = tokenizer.encode(letter, add_special_tokens=False)
-    if len(ids) == 1:
-        return ids[0]
-    raise ValueError(f"Could not find a single-token encoding for {letter}: got {ids}")
-
-
-def load_mcq_results_data(mcq_results_path, log_file_path=None):
-    """
-    Load MCQ results data from JSON or JSONL file.
-    Returns a dictionary mapping question ID to result data, plus a text-to-ID mapping.
-    
-    Structure:
-    - results_lookup: {qid: result_data} - primary storage by ID
-    - text_to_id: {normalized_text: qid} - mapping from text to ID for fallback lookup
-    """
-    if mcq_results_path is None:
-        print("mcq_results_path is None")
-        return None
-    
-    results_lookup = {}  # Primary storage: {qid: result_data}
-    text_to_id = {}  # Secondary mapping: {normalized_text: qid} for text-based lookup
-    unique_question_count = 0  # Track unique questions
-    
-    try:
-        # Try different encodings in case of BOM or encoding issues
-        encodings = ['utf-8', 'utf-8-sig', 'latin-1']
-        file_handle = None
-        
-        for encoding in encodings:
-            try:
-                file_handle = open(mcq_results_path, 'r', encoding=encoding)
-                # Read first few bytes to check format
-                first_bytes = file_handle.read(1024)
-                file_handle.seek(0)
-                
-                # Strip BOM if present
-                if first_bytes.startswith('\ufeff'):
-                    first_bytes = first_bytes[1:]
-                    file_handle.seek(1)
-                
-                first_char = first_bytes.strip()[0] if first_bytes.strip() else ''
-                break
-            except Exception as e:
-                if file_handle:
-                    file_handle.close()
-                continue
-        
-        if file_handle is None:
-            raise IOError(f"Could not open file with any encoding: {encodings}")
-        
-        try:
-            if first_char == '{':
-                # Likely JSON format - try to parse as single JSON object
-                print("Attempting to parse as JSON format...")
-                try:
-                    data = json.load(file_handle)
-                    if isinstance(data, dict) and "results" in data:
-                        # JSON format with results dictionary
-                        print(f"Found 'results' dictionary with {len(data['results'])} entries")
-                        for qid, result in data["results"].items():
-                            unique_question_count += 1
-                            question_data = result.get("question", {})
-                            question_id = question_data.get("id", qid)
-                            question_text = question_data.get("question", "")
-                            
-                            # Extract options from question_data if available
-                            options = question_data.get("options", {})
-                            
-                            # Store once by ID (preferred) or by text if no ID
-                            result_data = {
-                                "subject_answer": result.get("subject_answer"),
-                                "probs": result.get("probs", {}),
-                                "options": options
-                            }
-                            
-                            if question_id:
-                                results_lookup[str(question_id)] = result_data
-                                # Also create text-to-ID mapping for fallback lookup
-                                if question_text:
-                                    norm_text = normalize_text(question_text)
-                                    if norm_text:
-                                        text_to_id[norm_text] = str(question_id)
-                            elif question_text:
-                                # No ID available, use normalized text as key
-                                norm_text = normalize_text(question_text)
-                                if norm_text:
-                                    results_lookup[norm_text] = result_data
-                    else:
-                        # Single result object, not wrapped in "results"
-                        unique_question_count += 1
-                        question_data = data.get("question", {})
-                        question_id = question_data.get("id")
-                        question_text = question_data.get("question", "")
-                        
-                        result_data = {
-                            "subject_answer": data.get("subject_answer"),
-                            "probs": data.get("probs", {})
-                        }
-                        
-                        if question_id:
-                            results_lookup[str(question_id)] = result_data
-                            if question_text:
-                                norm_text = normalize_text(question_text)
-                                if norm_text:
-                                    text_to_id[norm_text] = str(question_id)
-                        elif question_text:
-                            norm_text = normalize_text(question_text)
-                            if norm_text:
-                                results_lookup[norm_text] = result_data
-                except json.JSONDecodeError as json_err:
-                    print(f"JSON parsing error: {json_err}")
-                    error_pos = json_err.pos if hasattr(json_err, 'pos') else None
-                    print(f"Error at position {error_pos}")
-                    
-                    # Try to parse the results dictionary manually by extracting entries
-                    print("Attempting to extract results entries manually...")
-                    file_handle.seek(0)
-                    content = file_handle.read()
-                    
-                    # Try to find and parse the "results" dictionary
-                    # Look for the pattern: "results": {
-                    results_start = content.find('"results": {')
-                    if results_start != -1:
-                        # Find the opening brace of results
-                        brace_start = content.find(
-                            '{', results_start + len('"results": '))
-                        if brace_start != -1:
-                            # Try to extract individual entries
-                            # Pattern: "qid": { ... }
-                            # Match pattern: "key": { ... } where key is a question ID
-                            # This regex matches a quoted key followed by a JSON object
-                            pattern = r'"([^"]+)":\s*\{'
-                            matches = list(re.finditer(pattern, content[brace_start:]))
-                            
-                            print(f"Found {len(matches)} potential result entries")
-                            
-                            # Try to extract each entry
-                            for i, match in enumerate(matches):
-                                entry_start = brace_start + match.end() - 1  # -1 to include the {
-                                # Find the matching closing brace
-                                brace_count = 0
-                                entry_end = entry_start
-                                for j, char in enumerate(content[entry_start:], start=entry_start):
-                                    if char == '{':
-                                        brace_count += 1
-                                    elif char == '}':
-                                        brace_count -= 1
-                                        if brace_count == 0:
-                                            entry_end = j + 1
-                                            break
-                                
-                                if entry_end > entry_start:
-                                    try:
-                                        entry_json = content[entry_start:entry_end]
-                                        result = json.loads(entry_json)
-                                        
-                                        # Ensure result is a dictionary
-                                        if not isinstance(result, dict):
-                                            continue
-                                        
-                                        unique_question_count += 1
-                                        question_data = result.get("question", {})
-                                        
-                                        # Ensure question_data is a dictionary
-                                        if not isinstance(question_data, dict):
-                                            # If question_data is not a dict, try to use the match group as question_id
-                                            question_id = match.group(1)
-                                            question_text = ""
-                                        else:
-                                            question_id = question_data.get("id", match.group(1))
-                                            question_text = question_data.get("question", "")
-                                        
-                                        result_data = {
-                                            "subject_answer": result.get("subject_answer"),
-                                            "probs": result.get("probs", {})
-                                        }
-                                        
-                                        if question_id:
-                                            results_lookup[str(question_id)] = result_data
-                                            if question_text:
-                                                norm_text = normalize_text(question_text)
-                                                if norm_text:
-                                                    text_to_id[norm_text] = str(question_id)
-                                        elif question_text:
-                                            norm_text = normalize_text(question_text)
-                                            if norm_text:
-                                                results_lookup[norm_text] = result_data
-                                    except (json.JSONDecodeError, AttributeError, TypeError) as e:
-                                        # Skip this entry if it can't be parsed or has wrong structure
-                                        continue
-                                
-                                # Progress update
-                                if (i + 1) % 1000 == 0:
-                                    print(f"Processed {i + 1} entries, found {len(results_lookup)} valid results so far...")
-                            
-                            if len(results_lookup) > 0:
-                                print(f"Successfully extracted {len(results_lookup)} results from malformed JSON")
-                            else:
-                                print("Could not extract any results from malformed JSON")
-                                # Fall back to JSONL attempt
-                                print("Attempting to parse as JSONL format...")
-                                file_handle.seek(0)
-                                line_num = 0
-                                for line in file_handle:
-                                    line_num += 1
-                                    if line.strip():
-                                        try:
-                                            result = json.loads(line)
-                                            unique_question_count += 1
-                                            question_data = result.get("question", {})
-                                            question_id = question_data.get("id")
-                                            question_text = question_data.get("question", "")
-                                            
-                                            result_data = {
-                                                "subject_answer": result.get("subject_answer"),
-                                                "probs": result.get("probs", {})
-                                            }
-                                            
-                                            if question_id:
-                                                results_lookup[str(question_id)] = result_data
-                                                if question_text:
-                                                    norm_text = normalize_text(question_text)
-                                                    if norm_text:
-                                                        text_to_id[norm_text] = str(question_id)
-                                            elif question_text:
-                                                norm_text = normalize_text(question_text)
-                                                if norm_text:
-                                                    results_lookup[norm_text] = result_data
-                                        except json.JSONDecodeError as line_err:
-                                            if line_num <= 5:  # Only print first few errors
-                                                print(f"Warning: Failed to parse line {line_num}: {line_err}")
-                        else:
-                            print("Could not find results dictionary in file")
-                    else:
-                        print("Could not find 'results' key in file")
-                        # Fall back to JSONL attempt
-                        print("Attempting to parse as JSONL format...")
-                        file_handle.seek(0)
-                        line_num = 0
-                        for line in file_handle:
-                            line_num += 1
-                            if line.strip():
-                                try:
-                                    result = json.loads(line)
-                                    unique_question_count += 1
-                                    question_data = result.get("question", {})
-                                    question_id = question_data.get("id")
-                                    question_text = question_data.get("question", "")
-                                    
-                                    result_data = {
-                                        "subject_answer": result.get("subject_answer"),
-                                        "probs": result.get("probs", {})
-                                    }
-                                    
-                                    if question_id:
-                                        results_lookup[str(question_id)] = result_data
-                                        if question_text:
-                                            norm_text = normalize_text(question_text)
-                                            if norm_text:
-                                                text_to_id[norm_text] = str(question_id)
-                                    elif question_text:
-                                        norm_text = normalize_text(question_text)
-                                        if norm_text:
-                                            results_lookup[norm_text] = result_data
-                                except json.JSONDecodeError as line_err:
-                                    if line_num <= 5:  # Only print first few errors
-                                        print(f"Warning: Failed to parse line {line_num}: {line_err}")
-            else:
-                # Likely JSONL format - one JSON object per line
-                print("Attempting to parse as JSONL format...")
-                line_num = 0
-                for line in file_handle:
-                    line_num += 1
-                    if line.strip():
-                        try:
-                            result = json.loads(line)
-                            unique_question_count += 1
-                            question_data = result.get("question", {})
-                            question_id = question_data.get("id")
-                            question_text = question_data.get("question", "")
-                            
-                            # Extract options from question_data if available
-                            options = question_data.get("options", {})
-                            
-                            result_data = {
-                                "subject_answer": result.get("subject_answer"),
-                                "probs": result.get("probs", {}),
-                                "options": options
-                            }
-                            
-                            if question_id:
-                                results_lookup[str(question_id)] = result_data
-                                if question_text:
-                                    norm_text = normalize_text(question_text)
-                                    if norm_text:
-                                        text_to_id[norm_text] = str(question_id)
-                            elif question_text:
-                                norm_text = normalize_text(question_text)
-                                if norm_text:
-                                    results_lookup[norm_text] = result_data
-                        except json.JSONDecodeError as line_err:
-                            if line_num <= 5:  # Only print first few errors
-                                print(f"Warning: Failed to parse line {line_num}: {line_err}")
-        finally:
-            file_handle.close()
-            
-    except Exception as e:
-        print(f"Warning: Failed to load MCQ results data from "
-              f"{mcq_results_path}: {e}")
-        print(f"Traceback: {traceback.format_exc()}")
-        return None
-    
-    # Attach text-to-ID mapping to the lookup dict for use in verify_and_resolve_options
-    # We'll use a special key that won't conflict with question IDs
-    results_lookup["__text_to_id__"] = text_to_id
-    
-    # Report loading statistics
-    if unique_question_count > 0:
-        print(f"Loaded {unique_question_count} unique questions")
-        print(f"  Created {len(results_lookup) - 1} primary lookup entries (stored by ID, with text-to-ID mapping for fallback)")
+    # Gaussian kernel in percentage space
+    # Handle broadcasting for both scalar [1] and batched [B] inputs
+    if entropy.ndim > 0:
+        distances = (bin_midpoints.unsqueeze(0) - confidence_percent.unsqueeze(-1)) ** 2
+        weights = torch.exp(-distances / (2 * sigma * sigma)) * bin_widths.unsqueeze(0)
     else:
-        print(f"Loaded {len(results_lookup) - 1 if '__text_to_id__' in results_lookup else len(results_lookup)} MCQ lookup entries")
+        # Scalar case (often hits here during simple eval loops)
+        distances = (bin_midpoints - confidence_percent) ** 2
+        weights = torch.exp(-distances / (2 * sigma * sigma)) * bin_widths
+
+    # Normalize along the last dimension
+    return weights / weights.sum(dim=-1, keepdim=True)
+
+
+# def shuffle_options_and_update_correct_letter(row):
+#     """
+#     Shuffle the options (A, B, C, D) and update the correct_letter accordingly.
     
-    if log_file_path:
-        write_log(log_file_path, {
-            "message": f"Loaded {unique_question_count} unique questions",
-            "lookup_entries": len(results_lookup) - 1 if '__text_to_id__' in results_lookup else len(results_lookup),
-            "text_to_id_mappings": len(text_to_id),
-            "note": "Questions stored once by ID, with text-to-ID mapping for flexible lookup"
-        })
-
-    return results_lookup
-
-
-def compute_ABCD_entropy(probs):
-    """
-    Compute entropy from probability distribution for A, B, C, D options.
-
-    Args:
-        probs: tensor, list, or dict - probabilities for A, B, C, D
-               If dict, should have keys "A", "B", "C", "D"
-               If list/tensor, should be in order [A, B, C, D]
-
-    Returns:
-        scalar entropy value
-    """
-    import torch
+#     This ensures the correct answer isn't always in position A, preventing
+#     position bias in the model.
     
-    # Handle dictionary format (keys: "A", "B", "C", "D")
-    if isinstance(probs, dict):
-        probs = [
-            probs.get("A", 0.0),
-            probs.get("B", 0.0),
-            probs.get("C", 0.0),
-            probs.get("D", 0.0)
-        ]
-
-    # Convert to tensor if needed
-    if not isinstance(probs, torch.Tensor):
-        probs = torch.tensor(probs, dtype=torch.float32)
-
-    # Ensure probabilities sum to 1
-    probs = probs / (probs.sum() + 1e-12)
-
-    # Compute entropy (natural logs)
-    entropy = -(probs * torch.log(probs + 1e-12)).sum()
-    return entropy
-
-
-def shuffle_options_and_update_correct_letter(row):
-    """
-    Shuffle the options (A, B, C, D) and update the correct_letter accordingly.
-    
-    This ensures the correct answer isn't always in position A, preventing
-    position bias in the model.
-    
-    Args:
-        row: Dictionary with "options" (dict with keys A, B, C, D) and "correct_letter"
+#     Args:
+#         row: Dictionary with "options" (dict with keys A, B, C, D) and "correct_letter"
         
-    Returns:
-        row: Modified row with shuffled options and updated correct_letter
-    """
-    if "options" not in row or "correct_letter" not in row:
-        return row
+#     Returns:
+#         row: Modified row with shuffled options and updated correct_letter
+#     """
+#     if "options" not in row or "correct_letter" not in row:
+#         return row
     
-    options = row["options"]
-    correct_letter = row["correct_letter"]
+#     options = row["options"]
+#     correct_letter = row["correct_letter"]
     
-    # Get the correct answer text
-    correct_answer_text = options.get(correct_letter, "")
+#     # Get the correct answer text
+#     correct_answer_text = options.get(correct_letter, "")
     
-    # Create list of (letter, text) pairs
-    option_pairs = [(letter, options[letter]) for letter in "ABCD" if letter in options]
+#     # Create list of (letter, text) pairs
+#     option_pairs = [(letter, options[letter]) for letter in "ABCD" if letter in options]
     
-    # Shuffle the pairs
-    random.shuffle(option_pairs)
+#     # Shuffle the pairs
+#     random.shuffle(option_pairs)
     
-    # Rebuild options dict with new letter assignments
-    new_options = {}
-    new_correct_letter = None
-    for new_letter, (old_letter, text) in zip("ABCD", option_pairs):
-        new_options[new_letter] = text
-        if old_letter == correct_letter:
-            new_correct_letter = new_letter
+#     # Rebuild options dict with new letter assignments
+#     new_options = {}
+#     new_correct_letter = None
+#     for new_letter, (old_letter, text) in zip("ABCD", option_pairs):
+#         new_options[new_letter] = text
+#         if old_letter == correct_letter:
+#             new_correct_letter = new_letter
     
-    # Update row
-    row["options"] = new_options
-    row["correct_letter"] = new_correct_letter
+#     # Update row
+#     row["options"] = new_options
+#     row["correct_letter"] = new_correct_letter
     
-    return row
+#     return row
 
 
-def verify_and_resolve_options(row, mcq_results_lookup, log_file_path=None):
-    """
-    Resolve the correct option set for the batch question.
-
-    Checks top-level keys created by the loader above.
-
-    Args:
-        row: Dictionary with question data
-        mcq_results_lookup: Lookup dictionary for recorded results
-        log_file_path: Path for logging (optional)
-
-    Returns:
-        Tuple of (result_data, options)
-    """
-    qid = row.get("qid")
-    batch_question = row["question"]
-    # These are the raw/shuffled ones from dataset
-    batch_opts = row["options"]
-
-    # Default: use batch opts
-    if not mcq_results_lookup:
-        return None, batch_opts
-
-    # ---------- 1. Lookup ----------
-    result_data = None
-    
-    # Extract text-to-ID mapping if available
-    text_to_id = mcq_results_lookup.get("__text_to_id__", {})
-    
-    # Try QID match first
-    if qid is not None and str(qid) in mcq_results_lookup:
-        result_data = mcq_results_lookup[str(qid)]
-    
-    # Try Text match if QID failed - use text-to-ID mapping to find the ID, then look up by ID
-    if result_data is None:
-        norm_text = normalize_text(batch_question)
-        if norm_text in text_to_id:
-            # Found text mapping, look up by the mapped ID
-            mapped_id = text_to_id[norm_text]
-            if mapped_id in mcq_results_lookup:
-                result_data = mcq_results_lookup[mapped_id]
-        elif norm_text in mcq_results_lookup:
-            # Fallback: text might be stored directly (for questions without IDs)
-            result_data = mcq_results_lookup[norm_text]
-
-    # Nothing found → fallback
-    if result_data is None:
-        if log_file_path:
-            write_log(log_file_path, {
-                "type": "verification_no_lookup_found",
-                "qid": qid,
-                "question_snippet": batch_question[:50],
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            })
-        return None, batch_opts
-
-    # ---------- 2. Extract Fields (Robustly) ----------
-    # The loader puts these at the top level now
-    rec_opts = result_data.get("options")
-    rec_q_text = result_data.get("question_text")
-
-    # If missing options, we can't proceed
-    if not rec_opts:
-        if log_file_path:
-            write_log(log_file_path, {
-                "type": "verification_missing_options_in_record",
-                "qid": qid,
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            })
-        return None, batch_opts
-
-    # ---------- 3. Verify Question Text ----------
-    # Only verify if we successfully captured text in the loader
-    if rec_q_text:
-        if normalize_text(batch_question) != normalize_text(rec_q_text):
-            if log_file_path:
-                write_log(log_file_path, {
-                    "type": "verification_question_text_mismatch",
-                    "qid": qid,
-                    "batch": batch_question,
-                    "recorded": rec_q_text,
-                    "timestamp": datetime.now(timezone.utc).isoformat()
-                })
-            return None, batch_opts
-
-    # ---------- 4. Verify/Sync Options ----------
-    # We rely on the recorded options (rec_opts) as the truth.
-    # We just ensure the batch *contains* the same keys so we don't crash.
-    for letter in ["A", "B", "C", "D"]:
-        if letter not in rec_opts:
-            # If the recorded data is missing a letter (rare, but possible in broken data)
-            return None, batch_opts
-
-        # Optional: Verify content matches if you suspect the dataset changed
-        # This might fail if "options" in batch are shuffled vs "options" in record
-        # Since we want to FORCE the record, we often skip checking the content 
-        # unless we are unsure if it's the same question.
-        # Given we checked QID and Text above, we trust rec_opts.
-
-    # Verification passed - log success
-    if log_file_path:
-        write_log(log_file_path, {
-            "type": "verification_passed",
-            "qid": qid,
-            "question_snippet": batch_question[:50],
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        })
-    
-    return result_data, rec_opts
+# Data loading functions moved to finetune_data_handling.py
 
 
-def verify_model_answer_match(pred_probs, result_data, qid=None,
-                               log_file_path=None):
-    """
-    Check whether the model's predicted answer matches pre-recorded answer.
+# def verify_model_answer_match(pred_probs, result_data, qid=None,
+#                                log_file_path=None):
+#     """
+#     Check whether the model's predicted answer matches pre-recorded answer.
 
-    Args:
-        pred_probs: tensor of shape [4] - probs for A,B,C,D in order
-        result_data: dict containing "subject_answer"
-        qid: question ID
-        log_file_path: path for write_log()
-    """
-    if result_data is None:
-        return
+#     Args:
+#         pred_probs: tensor of shape [4] - probs for A,B,C,D in order
+#         result_data: dict containing "subject_answer"
+#         qid: question ID
+#         log_file_path: path for write_log()
+#     """
+#     if result_data is None:
+#         return
 
-    rec_ans = result_data.get("subject_answer")
-    if rec_ans is None:
-        return
+#     rec_ans = result_data.get("subject_answer")
+#     if rec_ans is None:
+#         return
 
-    # model's predicted answer letter
-    pred_idx = pred_probs.argmax().item()
-    pred_letter = "ABCD"[pred_idx]
+#     # model's predicted answer letter
+#     pred_idx = pred_probs.argmax().item()
+#     pred_letter = "ABCD"[pred_idx]
 
-    # match?
-    matched = (pred_letter == rec_ans)
+#     # match?
+#     matched = (pred_letter == rec_ans)
 
-    if log_file_path:
-        write_log(log_file_path, {
-            "type": ("model_answer_match" if matched
-                     else "model_answer_mismatch"),
-            "qid": qid,
-            "predicted_answer": pred_letter,
-            "recorded_answer": rec_ans,
-            "predicted_probs": pred_probs.tolist(),
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        })
+#     if log_file_path:
+#         write_log(log_file_path, {
+#             "type": ("model_answer_match" if matched
+#                      else "model_answer_mismatch"),
+#             "qid": qid,
+#             "predicted_answer": pred_letter,
+#             "recorded_answer": rec_ans,
+#             "predicted_probs": pred_probs.tolist(),
+#             "timestamp": datetime.now(timezone.utc).isoformat()
+#         })
+
 
 
 # ============================================================
 # Weights & Biases and HuggingFace Hub utilities
 # ============================================================
-
-
-def init_wandb(project, run_name=None, config=None, tags=None, notes=None,
-               script_path=None):
-    """
-    Initialize Weights & Biases logging.
-
-    Args:
-        project: W&B project name
-        run_name: W&B run name (auto-generated if None)
-        config: Dictionary of configuration parameters
-        tags: List of tags for the run
-        notes: Notes/description for the run
-        script_path: Path to training script to save for reproducibility
-    """
-    try:
-        import wandb
-        wandb.init(
-            project=project,
-            name=run_name,
-            config=config or {},
-            tags=tags if tags else None,
-            notes=notes if notes else None,
-        )
-        if script_path:
-            wandb.save(
-                script_path,
-                base_path=os.path.dirname(os.path.abspath(script_path))
-            )
-        return wandb
-    except ImportError:
-        print("Warning: wandb not installed, skipping W&B logging")
-        return None
 
 
 def log_wandb_metrics(metrics, step=None):
@@ -961,57 +336,6 @@ def log_wandb_config(updates, allow_val_change=False):
         pass
 
 
-def log_device_info(device):
-    """Log device information to W&B."""
-    try:
-        import wandb
-        import torch
-        log_wandb_config({"actual_device": device})
-        if device == "cuda" and torch.cuda.is_available():
-            log_wandb_config({
-                "cuda_device": torch.cuda.get_device_name(0),
-                "cuda_memory_gb": (
-                    torch.cuda.get_device_properties(0).total_memory / 1e9
-                )
-            })
-    except (ImportError, AttributeError):
-        pass
-
-
-def save_hf_checkpoint(model, tokenizer, checkpoint_repo, step,
-                       private=False):
-    """
-    Save checkpoint to HuggingFace Hub.
-
-    Args:
-        model: Model to save
-        tokenizer: Tokenizer to save
-        checkpoint_repo: Repository name for checkpoint
-        step: Training step number
-        private: Whether to make the repo private
-
-    Returns:
-        True if successful, False otherwise
-    """
-    try:
-        checkpoint_name = f"{checkpoint_repo}-step-{step}"
-        model.push_to_hub(
-            checkpoint_name,
-            private=private,
-            commit_message=f"Checkpoint at step {step}"
-        )
-        tokenizer.push_to_hub(
-            checkpoint_name,
-            private=private,
-            commit_message=f"Tokenizer checkpoint at step {step}"
-        )
-        log_wandb_metrics({"checkpoint/hf_repo": checkpoint_name}, step=step)
-        return True
-    except Exception as e:
-        print(f"Warning: Failed to save checkpoint to HuggingFace Hub: {e}")
-        return False
-
-
 def save_model_final(model, tokenizer, output_dir, hf_repo=None,
                       hf_private=False, save_wandb_artifact=False):
     """
@@ -1028,9 +352,35 @@ def save_model_final(model, tokenizer, output_dir, hf_repo=None,
     Returns:
         True if successful, False otherwise
     """
+    # Ensure output directory exists
+    os.makedirs(output_dir, exist_ok=True)
+    
     # Save locally
-    model.save_pretrained(output_dir)
-    print(f"Model saved to {output_dir}")
+    try:
+        model.save_pretrained(output_dir)
+        tokenizer.save_pretrained(output_dir)
+        
+        # Verify files were created
+        adapter_config_path = os.path.join(output_dir, "adapter_config.json")
+        adapter_model_path = os.path.join(output_dir, "adapter_model.safetensors")
+        tokenizer_config_path = os.path.join(output_dir, "tokenizer_config.json")
+        
+        files_exist = (
+            os.path.exists(adapter_config_path) or 
+            os.path.exists(adapter_model_path) or
+            os.path.exists(os.path.join(output_dir, "adapter_model.bin"))
+        ) and os.path.exists(tokenizer_config_path)
+        
+        if files_exist:
+            print(f"✓ Model and tokenizer saved to {output_dir}")
+        else:
+            print(f"⚠️  Warning: Model save may have failed. Check {output_dir}")
+            return False
+    except Exception as e:
+        print(f"❌ Error saving model to {output_dir}: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
 
     # Save as W&B artifact
     if save_wandb_artifact:
@@ -1046,9 +396,13 @@ def save_model_final(model, tokenizer, output_dir, hf_repo=None,
             )
             artifact.add_dir(output_dir)
             wandb.log_artifact(artifact)
-            print(f"Model saved as wandb artifact: {artifact.name}")
-        except (ImportError, AttributeError):
-            print("Warning: Could not save W&B artifact")
+            print(f"✓ Model saved as wandb artifact: {artifact.name}")
+        except (ImportError, AttributeError) as e:
+            print(f"⚠️  Warning: Could not save W&B artifact (wandb not available): {e}")
+        except Exception as e:
+            print(f"⚠️  Warning: Failed to save W&B artifact: {e}")
+            import traceback
+            traceback.print_exc()
 
     # Push to HuggingFace Hub
     if hf_repo:
@@ -1056,13 +410,119 @@ def save_model_final(model, tokenizer, output_dir, hf_repo=None,
             model.push_to_hub(hf_repo, private=hf_private)
             tokenizer.push_to_hub(hf_repo, private=hf_private)
             log_wandb_config({"hf_repo": hf_repo})
-            print(f"Model and tokenizer pushed to HuggingFace Hub: {hf_repo}")
+            print(f"✓ Model and tokenizer pushed to HuggingFace Hub: {hf_repo}")
             return True
         except Exception as e:
-            print(f"Warning: Failed to push to HuggingFace Hub: {e}")
+            print(f"⚠️  Warning: Failed to push to HuggingFace Hub: {e}")
+            import traceback
+            traceback.print_exc()
             return False
 
     return True
+
+
+def save_training_parameters(args, checkpoint_base_dir):
+    """
+    Save all training parameters/arguments to a JSON file in the checkpoint directory.
+    
+    Args:
+        args: argparse.Namespace or similar object with training parameters
+        checkpoint_base_dir: Directory where parameters should be saved
+    """
+    params_file = os.path.join(checkpoint_base_dir, "training_parameters.json")
+    
+    # Convert args to dictionary, handling non-serializable values
+    params_dict = {}
+    if isinstance(args, Namespace):
+        args_dict = vars(args)
+    elif isinstance(args, dict):
+        args_dict = args
+    else:
+        args_dict = args.__dict__ if hasattr(args, '__dict__') else {}
+    
+    # Convert to JSON-serializable format
+    for key, value in args_dict.items():
+        # Skip private attributes and non-serializable objects
+        if key.startswith('_'):
+            continue
+        try:
+            # Try to serialize the value
+            json.dumps(value)
+            params_dict[key] = value
+        except (TypeError, ValueError):
+            # Convert non-serializable values to strings
+            params_dict[key] = str(value)
+    
+    # Add timestamp
+    params_dict['_saved_at'] = datetime.now(timezone.utc).isoformat()
+    
+    try:
+        with open(params_file, 'w', encoding='utf-8') as f:
+            json.dump(params_dict, f, indent=2, ensure_ascii=False)
+        print(f"✓ Training parameters saved to: {os.path.abspath(params_file)}")
+    except Exception as e:
+        print(f"⚠️  Warning: Failed to save training parameters: {e}")
+
+
+def save_checkpoint(model, tokenizer, checkpoint_base_dir, step, 
+                    save_hf_checkpoints=False, hf_checkpoint_repo=None, 
+                    hf_checkpoint_private=False):
+    """
+    Save a training checkpoint locally and optionally to HuggingFace Hub.
+    
+    Args:
+        model: Model to save
+        tokenizer: Tokenizer to save
+        checkpoint_base_dir: Base directory for checkpoints (e.g., 'local_checkpoints/2025-01-01-12-00-00_checkpoints')
+        step: Training step number
+        save_hf_checkpoints: Whether to push to HuggingFace Hub
+        hf_checkpoint_repo: Base HF repo name for checkpoints (e.g., 'username/model-name')
+        hf_checkpoint_private: Whether to make HF checkpoint repos private
+    
+    Returns:
+        True if successful, False otherwise
+    """
+    ckpt_dir = os.path.join(checkpoint_base_dir, f"ckpt_step_{step}")
+    ckpt_dir_abs = os.path.abspath(ckpt_dir)
+    os.makedirs(ckpt_dir, exist_ok=True)
+    
+    print(f"\n{'='*60}")
+    print(f"Saving checkpoint at step {step}")
+    print(f"Local path: {ckpt_dir_abs}")
+    print(f"{'='*60}")
+    
+    try:
+        # Save locally
+        model.save_pretrained(ckpt_dir)
+        tokenizer.save_pretrained(ckpt_dir)
+        print(f"✓ Checkpoint saved locally to: {ckpt_dir_abs}")
+        
+        # Optionally push to HuggingFace Hub
+        if save_hf_checkpoints and hf_checkpoint_repo:
+            # Create separate repo for each checkpoint
+            # Format: {hf_checkpoint_repo}-step-{step}
+            # Note: hf_checkpoint_repo should already include timestamp if you want to group by run
+            # Example: "username/model-name-2025-01-15-12-30-45-step-200"
+            hf_ckpt_repo = f"{hf_checkpoint_repo}-step-{step}"
+            print(f"Pushing checkpoint to HuggingFace Hub: {hf_ckpt_repo}")
+            try:
+                model.push_to_hub(hf_ckpt_repo, private=hf_checkpoint_private)
+                tokenizer.push_to_hub(hf_ckpt_repo, private=hf_checkpoint_private)
+                print(f"✓ Checkpoint pushed to HuggingFace Hub: {hf_ckpt_repo}")
+            except Exception as e:
+                print(f"⚠️  Warning: Failed to push checkpoint to HF Hub: {e}")
+                import traceback
+                traceback.print_exc()
+        elif save_hf_checkpoints:
+            print("⚠️  Warning: --save_hf_checkpoints is set but --hf_checkpoint_repo is not specified. Skipping HF Hub upload.")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error saving checkpoint: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
 
 
 def finish_wandb():
@@ -1072,404 +532,3 @@ def finish_wandb():
         wandb.finish()
     except (ImportError, AttributeError):
         pass
-
-
-def check_and_clear_gpu_memory(device, min_free_gb=5.0):
-    """
-    Check GPU memory status and clear cache if needed.
-    
-    Args:
-        device: Device string ("cuda" or "cpu")
-        min_free_gb: Minimum free memory in GB to warn about
-        
-    Returns:
-        dict with memory info if CUDA, None otherwise
-    """
-    if device == "cuda":
-        try:
-            import torch
-            if not torch.cuda.is_available():
-                return None
-                
-            # Clear any cached memory from previous runs
-            torch.cuda.empty_cache()
-            torch.cuda.synchronize()
-            
-            # Get memory info
-            total_memory = torch.cuda.get_device_properties(0).total_memory
-            allocated = torch.cuda.memory_allocated(0)
-            reserved = torch.cuda.memory_reserved(0)
-            free_memory = total_memory - reserved
-            
-            total_memory_gb = total_memory / (1024**3)
-            allocated_gb = allocated / (1024**3)
-            reserved_gb = reserved / (1024**3)
-            free_memory_gb = free_memory / (1024**3)
-            
-            print(f"GPU Memory Status (after cache clear):")
-            print(f"  Total: {total_memory_gb:.2f} GB")
-            print(f"  Allocated: {allocated_gb:.2f} GB")
-            print(f"  Reserved: {reserved_gb:.2f} GB")
-            print(f"  Free: {free_memory_gb:.2f} GB")
-            
-            # Warn if memory is low
-            if free_memory_gb < min_free_gb:
-                print(f"\n⚠️  WARNING: Low GPU memory ({free_memory_gb:.2f} GB free)")
-                print("   Llama-3-8B needs ~16GB to load. This may cause out-of-memory errors.")
-                print("\n   Solutions:")
-                print("   1. Restart Python/Python process to clear reserved memory")
-                print("   2. Run: python -c 'import torch; torch.cuda.empty_cache()' in another terminal")
-                print("   3. Restart the vast.ai instance to fully clear GPU memory")
-                print("   4. Check for zombie processes: ps aux | grep python")
-            
-            return {
-                "total_gb": total_memory_gb,
-                "allocated_gb": allocated_gb,
-                "reserved_gb": reserved_gb,
-                "free_gb": free_memory_gb
-            }
-        except Exception:
-            return None
-    return None
-
-
-def load_model_with_error_handling(model_name, device):
-    """
-    Load model with memory-efficient settings and proper error handling.
-    
-    Args:
-        model_name: HuggingFace model name or path
-        device: Device to load model on ("cuda" or "cpu")
-        
-    Returns:
-        Loaded model
-        
-    Raises:
-        torch.cuda.OutOfMemoryError: If GPU out of memory with helpful message
-    """
-    import torch
-    from transformers import AutoModelForCausalLM
-    
-    try:
-        # Use low_cpu_mem_usage to reduce peak memory during loading
-        model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            torch_dtype=torch.bfloat16 if device == "cuda" else torch.float32,
-            low_cpu_mem_usage=True,
-            device_map=None
-        )
-        
-        # Move to device after loading
-        if device == "cuda":
-            torch.cuda.empty_cache()
-            model = model.to(device)
-        else:
-            model = model.to(device)
-            
-        return model
-    except torch.cuda.OutOfMemoryError as e:
-        print("\n❌ CUDA Out of Memory Error!")
-        print("The GPU does not have enough free memory to load the model.")
-        print("\nCurrent GPU memory status:")
-        if torch.cuda.is_available():
-            total = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-            allocated = torch.cuda.memory_allocated(0) / (1024**3)
-            reserved = torch.cuda.memory_reserved(0) / (1024**3)
-            free = total - reserved
-            print(f"  Total: {total:.2f} GB")
-            print(f"  Allocated: {allocated:.2f} GB")
-            print(f"  Reserved: {reserved:.2f} GB")
-            print(f"  Free: {free:.2f} GB")
-        print("\n🔍 Check what's using GPU memory:")
-        print("   nvidia-smi")
-        print("\n💡 Solutions (try in order):")
-        print("1. Kill other processes using the GPU:")
-        print("   nvidia-smi  # Find PIDs")
-        print("   kill <PID>  # Kill processes")
-        print("\n2. Try setting expandable_segments to reduce fragmentation:")
-        print("   export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True")
-        print("   # Then re-run your script")
-        print("\n3. Restart the vast.ai instance to fully clear GPU memory")
-        print("\n4. Use a GPU with more memory or reduce model size")
-        raise
-
-
-def setup_tokenizer(model_name):
-    """
-    Load and configure tokenizer for causal LM.
-    
-    Args:
-        model_name: HuggingFace model name or path
-        
-    Returns:
-        Configured tokenizer
-    """
-    from transformers import AutoTokenizer
-    
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    # Set pad_token if it doesn't exist (common for Llama models)
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.padding_side = "right"  # Standard for causal LMs
-    return tokenizer
-
-
-def validate_and_load_dataset(data_path, dataset_type="training"):
-    """
-    Validate and load a dataset file.
-    
-    Args:
-        data_path: Path to JSONL dataset file
-        dataset_type: Type of dataset ("training" or "validation")
-        
-    Returns:
-        MCQDataset instance
-        
-    Raises:
-        FileNotFoundError: If file doesn't exist
-        ValueError: If dataset is empty
-    """
-    if not os.path.exists(data_path):
-        raise FileNotFoundError(
-            f"{dataset_type.capitalize()} data file not found: {data_path}\n"
-            f"Please provide a valid path to your {dataset_type} dataset."
-        )
-    
-    dataset = MCQDataset(data_path)
-    if len(dataset) == 0:
-        raise ValueError(
-            f"{dataset_type.capitalize()} dataset is empty: {data_path}\n"
-            f"The file exists but contains no data. Please check your dataset file."
-        )
-    
-    return dataset
-
-
-def resolve_file_path(file_path, search_dirs=None):
-    """
-    Try to find a file in common locations if it doesn't exist at the given path.
-    
-    Args:
-        file_path: Original file path
-        search_dirs: List of additional directories to search (optional)
-        
-    Returns:
-        Resolved file path if found, original path otherwise
-        
-    Raises:
-        FileNotFoundError: If file cannot be found in any location
-    """
-    if os.path.exists(file_path):
-        return file_path
-    
-    file_path = file_path.strip()
-    basename = os.path.basename(file_path)
-    
-    # Default search directories
-    default_search_dirs = [
-        "data",
-        "explicit_confidence_task_logs",
-        "capabilities_test_logs",
-    ]
-    
-    if search_dirs:
-        search_dirs = list(search_dirs) + default_search_dirs
-    else:
-        search_dirs = default_search_dirs
-    
-    # Build possible paths
-    possible_paths = [file_path]
-    for search_dir in search_dirs:
-        possible_paths.append(os.path.join(search_dir, basename))
-    possible_paths.append(os.path.join(os.getcwd(), file_path))
-    
-    # Try each path
-    for path in possible_paths:
-        if os.path.exists(path):
-            return path
-    
-    # If not found, raise error with helpful message
-    error_msg = (
-        f"Error: Could not find file. "
-        f"Tried the following paths:\n"
-        + "\n".join(f"  - {path}" for path in possible_paths)
-        + f"\n\nOriginal path: {file_path}"
-        + f"\nCurrent working directory: {os.getcwd()}"
-    )
-    raise FileNotFoundError(error_msg)
-
-
-def validate_training_files(args):
-    """
-    Validate all input files for training, with automatic path resolution.
-    
-    This function validates:
-    - Training data file (required)
-    - Validation data file (optional)
-    - Test data file (optional, with path resolution)
-    - MCQ results file (optional, with path resolution)
-    
-    Args:
-        args: Argument object with the following attributes:
-            - train_data_path: Path to training data (required)
-            - val_data_path: Path to validation data (optional)
-            - test_data_path: Path to test data (optional)
-            - mcq_results_data: Path to MCQ results (optional)
-            
-    Modifies args in place by resolving paths for test_data_path and mcq_results_data.
-    
-    Raises:
-        FileNotFoundError: If any required file is not found
-        ValueError: If any file is empty
-    """
-    print("\n=== Validating input files ===")
-    
-    # Validate training data file (required)
-    validate_file_exists_and_not_empty(args.train_data_path, "training data file")
-    print(f"✓ Training data file exists and is not empty: {args.train_data_path}")
-    
-    # Validate validation data file (optional)
-    if args.val_data_path:
-        validate_file_exists_and_not_empty(args.val_data_path, "validation data file")
-        print(f"✓ Validation data file exists and is not empty: {args.val_data_path}")
-    
-    # Validate test data file (optional, with path resolution)
-    if args.test_data_path:
-        try:
-            args.test_data_path = resolve_file_path(
-                args.test_data_path,
-                search_dirs=["data"]  # Test files are typically in data/
-            )
-        except FileNotFoundError as e:
-            print(f"Test data file not found at: {args.test_data_path}")
-            print(f"Current working directory: {os.getcwd()}")
-            print("Attempting to find file...")
-            raise FileNotFoundError(
-                f"Test data file not found: {args.test_data_path}\n"
-                f"Please provide a valid path to the test data file."
-            ) from e
-        
-        validate_file_exists_and_not_empty(args.test_data_path, "test data file")
-        print(f"✓ Test data file exists and is not empty: {args.test_data_path}")
-    
-    # Validate MCQ results file (optional, with path resolution)
-    if args.mcq_results_data:
-        try:
-            args.mcq_results_data = resolve_file_path(
-                args.mcq_results_data,
-                search_dirs=["data", "explicit_confidence_task_logs", "capabilities_test_logs"]
-            )
-        except FileNotFoundError as e:
-            print(f"MCQ results file not found at: {args.mcq_results_data}")
-            print(f"Current working directory: {os.getcwd()}")
-            print("Attempting to find file...")
-            raise FileNotFoundError(
-                f"MCQ results file not found: {args.mcq_results_data}\n"
-                f"Please provide a valid path to the MCQ results file."
-            ) from e
-        
-        validate_file_exists_and_not_empty(args.mcq_results_data, "MCQ results file")
-        print(f"✓ MCQ results file exists and is not empty: {args.mcq_results_data}")
-    
-    print("=== File validation complete ===\n")
-
-
-def log_prompts_and_responses(step, prompt_log_file_path, answer_logits4, conf_logits8,
-                               batch, answer_prompts, confidence_prompts, soft_targets):
-    """
-    Log prompts and responses for first 2 steps.
-    
-    Args:
-        step: Current training step
-        prompt_log_file_path: Path to log file for prompts
-        answer_logits4: Logits for MCQ answers [B, 4]
-        conf_logits8: Logits for confidence bins [B, 8]
-        batch: Batch of question data
-        answer_prompts: List of MCQ prompts
-        confidence_prompts: List of confidence prompts
-        soft_targets: Soft target distributions [B, 8]
-    """
-    # if step is not None and step < 3 and prompt_log_file_path:
-    #     # Compute probabilities and predictions for logging
-    #     with torch.no_grad():
-    #         # First forward pass: MCQ answer probabilities
-    #         mcq_probs = torch.softmax(answer_logits4, dim=-1)  # [B, 4]
-    #         mcq_predicted = mcq_probs.argmax(dim=-1)  # [B]
-            
-    #         # Second forward pass: Confidence bin probabilities
-    #         conf_probs = torch.softmax(conf_logits8, dim=-1)  # [B, 8]
-    #         conf_predicted = conf_probs.argmax(dim=-1)  # [B]
-        
-    #     for i in range(len(batch)):
-    #         # Convert predictions to letters
-    #         mcq_pred_letter = "ABCD"[mcq_predicted[i].item()]
-    #         conf_pred_letter = "ABCDEFGH"[conf_predicted[i].item()]
-            
-    #         log_entry = {
-    #             "type": "prompt_and_response_pair",
-    #             "step": step,
-    #             "batch_index": i,
-    #             "qid": batch[i].get("qid"),
-    #             "mcq_prompt": answer_prompts[i],
-    #             "mcq_response": {
-    #                 "logits": answer_logits4[i].cpu().tolist(),
-    #                 "probabilities": mcq_probs[i].cpu().tolist(),
-    #                 "predicted_answer": mcq_pred_letter,
-    #                 "probabilities_dict": {
-    #                     "A": float(mcq_probs[i][0].item()),
-    #                     "B": float(mcq_probs[i][1].item()),
-    #                     "C": float(mcq_probs[i][2].item()),
-    #                     "D": float(mcq_probs[i][3].item()),
-    #                 }
-    #             },
-    #             "confidence_prompt": confidence_prompts[i],
-    #             "confidence_response": {
-    #                 "logits": conf_logits8[i].cpu().tolist(),
-    #                 "probabilities": conf_probs[i].cpu().tolist(),
-    #                 "predicted_bin": conf_pred_letter,
-    #                 "probabilities_dict": {
-    #                     "A": float(conf_probs[i][0].item()),
-    #                     "B": float(conf_probs[i][1].item()),
-    #                     "C": float(conf_probs[i][2].item()),
-    #                     "D": float(conf_probs[i][3].item()),
-    #                     "E": float(conf_probs[i][4].item()),
-    #                     "F": float(conf_probs[i][5].item()),
-    #                     "G": float(conf_probs[i][6].item()),
-    #                     "H": float(conf_probs[i][7].item()),
-    #                 }
-    #             },
-    #             "soft_targets": soft_targets[i].cpu().tolist(),
-    #             "timestamp": datetime.now(timezone.utc).isoformat()
-    #         }
-    #         write_log(prompt_log_file_path, log_entry)
-            
-    #         # Also print to console
-    #         print(f"\n{'='*80}")
-    #         print(f"STEP {step} | BATCH INDEX {i} | QID: {batch[i].get('qid')}")
-    #         print(f"{'='*80}")
-    #         print(f"\nMCQ PROMPT (First forward pass):")
-    #         print(f"{'-'*80}")
-    #         print(answer_prompts[i])
-    #         print(f"\nMCQ RESPONSE:")
-    #         print(f"{'-'*80}")
-    #         print(f"  Predicted Answer: {mcq_pred_letter}")
-    #         print(f"  Probabilities: A={mcq_probs[i][0]:.4f}, B={mcq_probs[i][1]:.4f}, "
-    #               f"C={mcq_probs[i][2]:.4f}, D={mcq_probs[i][3]:.4f}")
-    #         print(f"  Logits: {answer_logits4[i].cpu().tolist()}")
-    #         print(f"\nCONFIDENCE PROMPT (Second forward pass - separate context):")
-    #         print(f"{'-'*80}")
-    #         print(confidence_prompts[i])
-    #         print(f"\nCONFIDENCE RESPONSE:")
-    #         print(f"{'-'*80}")
-    #         print(f"  Predicted Bin: {conf_pred_letter}")
-    #         conf_bin_labels = ["A: <5%", "B: 5-10%", "C: 10-20%", "D: 20-40%",
-    #                           "E: 40-60%", "F: 60-80%", "G: 80-90%", "H: >90%"]
-    #         print(f"  Probabilities:")
-    #         for j, label in enumerate(conf_bin_labels):
-    #             print(f"    {label}: {conf_probs[i][j]:.4f}")
-    #         print(f"  Logits: {conf_logits8[i].cpu().tolist()}")
-    #         print(f"\nSOFT TARGETS (Training target):")
-    #         print(f"{'-'*80}")
-    #         print(f"  {soft_targets[i].cpu().tolist()}")
-    #         print(f"{'='*80}\n")
-

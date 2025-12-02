@@ -18,6 +18,8 @@ build/
 # Data
 .data/
 data/
+.checkpoints/
+checkpoints/
 
 # Jupyter
 .ipynb_checkpoints/

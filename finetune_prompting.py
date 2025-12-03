@@ -29,7 +29,6 @@ def get_letter_token_ids(tokenizer, letter: str) -> list:
     
 
 def build_multiple_choice_question_prompts(batch, tokenizer):
-    """Match mentor's exact prompt structure."""
     
     setup_prompt = (
         "I'm going to ask you a series of multiple-choice questions. "
@@ -209,7 +208,7 @@ def build_other_confidence_prompts(batch, tokenizer):
 
 
 def run_mcq_forward_pass(model, tokenizer, prompts, device="cuda", temperature=0.0, requires_grad=False):
-    """MCQ pass using logits only - matches mentor's approach."""
+ 
     enc = tokenizer(prompts, return_tensors="pt", padding=True).to(device)
 
     if requires_grad:

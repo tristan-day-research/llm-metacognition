@@ -12,8 +12,12 @@ import wandb
 
 from finetune_utils import (
     write_log,
+    prepare_model_and_tokenizer,
+    validate_eval_dataset
+)
+from finetune_loss import (
     convert_entropy_to_soft_labels,
-    prepare_model_and_tokenizer
+    compute_loss
 )
 from finetune_prompting import (
     build_multiple_choice_question_prompts,
@@ -46,9 +50,14 @@ def run_evaluation(
     log_file_path=None,
     step=None,
     mcq_results_lookup=None,
+    train_dataset_qids=None,
+    train_dataset_questions=None,
 ):
     """
     Evaluation loop:
+    
+    CRITICAL: This function should ONLY receive val_dataset (or test_dataset).
+    Never pass train_dataset to this function.
 
     For each sample:
         1. Run MCQ pass (extract predicted letter + entropy)
@@ -64,16 +73,30 @@ def run_evaluation(
         - Compute average loss
         - Compute model answer distribution
         - Compute correct answer distribution
+    
+    Args:
+        val_dataset: Validation or test dataset (NEVER train_dataset)
+        train_dataset_qids: Set of qids from train_dataset for validation (optional)
+        train_dataset_questions: Set of normalized question texts from train_dataset (optional)
     """
-
+    # Defensive check: ensure we're in eval mode
     model.eval()
+    
+    # Additional defensive check: verify dataset is not empty
+    if len(val_dataset) == 0:
+        raise ValueError("run_evaluation() received empty dataset - this should not happen")
+    
+    # Defensive check: Verify val_dataset doesn't contain any train_dataset questions
+    validate_eval_dataset(val_dataset, train_dataset_qids, train_dataset_questions, function_name="run_evaluation")
 
     # ===========================================================
     # Select samples
     # ===========================================================
     # Use seeded RNG for reproducible sample selection
-    # This ensures alignment_corr is computed on the same samples across runs
-    eval_rng = np.random.default_rng(42)
+    # CRITICAL: Use a different seed (999) than training RNG (42) to ensure
+    # complete independence between train and eval sampling
+    # This ensures self_live_corr is computed on the same samples across runs
+    eval_rng = np.random.default_rng(999)
     if num_samples is not None:
         idxs = eval_rng.choice(len(val_dataset), size=num_samples, replace=False)
     else:
@@ -94,7 +117,8 @@ def run_evaluation(
     loss_values = []
     predicted_letters = []
     correct_letters = []
-    predicted_confidence_letters = []  # A-H confidence predictions
+    predicted_confidence_letters = []  # A-H confidence predictions (self)
+    predicted_other_confidence_letters = []  # A-H confidence predictions (other)
     prerecorded_entropy_values = []  # Pre-recorded entropy from mcq_results_data
 
     # ==================== MAIN LOOP ==========================
@@ -200,13 +224,28 @@ def run_evaluation(
         )
 
         expected_other_confidence_value = other_conf_out["expected_conf"][0].item()
+        predicted_other_confidence_letter = other_conf_out["pred_bins"][0]  # A-H
         expected_other_conf_values.append(expected_other_confidence_value)
+        predicted_other_confidence_letters.append(predicted_other_confidence_letter)
 
         # ==================================================
         # 4. Loss
         # ==================================================
-        log_probs = torch.log_softmax(logits8, dim=-1)
-        loss_value = -(soft_targets * log_probs).sum().item()
+        # Prepare inputs based on loss type
+        if args.loss_type == 'scalar_confidence_mse':
+            # For scalar_confidence_mse, pass entropy directly
+            # logits8 is [8], need to unsqueeze to [1, 8] for batch dimension
+            logits8_batch = logits8.unsqueeze(0) if logits8.ndim == 1 else logits8
+            entropy_tensor = torch.tensor([entropy_value], dtype=torch.float32, device=device)
+            loss = compute_loss(logits8_batch, entropy=entropy_tensor, loss_type=args.loss_type, reduction='mean')
+            loss_value = loss.item()
+        else:
+            # For gaussian_soft_bin_ce, pass soft_targets
+            # logits8 is [8], need to unsqueeze to [1, 8] for batch dimension
+            logits8_batch = logits8.unsqueeze(0) if logits8.ndim == 1 else logits8
+            soft_targets_batch = soft_targets.unsqueeze(0) if soft_targets.ndim == 1 else soft_targets
+            loss = compute_loss(logits8_batch, soft_targets=soft_targets_batch, loss_type=args.loss_type, reduction='mean')
+            loss_value = loss.item()
         loss_values.append(loss_value)
 
         # ==================================================
@@ -265,11 +304,25 @@ def run_evaluation(
 
     # Pretty print confidence distribution
     print("\n============================================================")
-    print(f"{step_name.upper()} — Confidence Prediction Distributions")
+    print(f"{step_name.upper()} — Self Confidence Prediction Distributions")
     print("============================================================")
-    print("Model Confidence Prediction Distribution (A-H):")
+    print("Model Self Confidence Prediction Distribution (A-H):")
     for k in "ABCDEFGH":
         print(f"  {k}: {conf_dist[k]:4d}  ({conf_dist_pct[k]:6.2f}%)")
+
+    # ===========================================================
+    # OTHER CONFIDENCE DISTRIBUTION STATS (A–H)
+    # ===========================================================
+    other_conf_dist = count_dist(predicted_other_confidence_letters, "ABCDEFGH")
+    other_conf_dist_pct = {k: (v / n) * 100.0 for k, v in other_conf_dist.items()}
+
+    # Pretty print other confidence distribution
+    print("\n============================================================")
+    print(f"{step_name.upper()} — Other Confidence Prediction Distributions")
+    print("============================================================")
+    print("Model Other Confidence Prediction Distribution (A-H):")
+    for k in "ABCDEFGH":
+        print(f"  {k}: {other_conf_dist[k]:4d}  ({other_conf_dist_pct[k]:6.2f}%)")
 
     # ===========================================================
     # FINAL METRICS
@@ -287,6 +340,8 @@ def run_evaluation(
         "predicted_answer_distribution_pct": pred_dist_pct,
         "predicted_confidence_distribution_raw": conf_dist,
         "predicted_confidence_distribution_pct": conf_dist_pct,
+        "predicted_other_confidence_distribution_raw": other_conf_dist,
+        "predicted_other_confidence_distribution_pct": other_conf_dist_pct,
     }
 
     # Compute additional metrics for wandb
@@ -300,27 +355,32 @@ def run_evaluation(
     std_other_conf = float(np.std(other_conf_arr)) if len(other_conf_arr) > 1 else 0.0
     std_entropy = float(np.std(entropy_arr)) if len(entropy_arr) > 1 else 0.0
     
-    # Alignment: correlation between entropy and confidence (should be negative)
-    alignment_corr = 0.0
+    # Self live correlation: entropy from live model's output logits correlated with 
+    # live model's prediction of its own confidence
+    self_live_corr = 0.0
     if len(conf_arr) > 1 and std_conf > 0.001:
         try:
-            alignment_corr, _ = pearsonr(entropy_arr, conf_arr)
-            alignment_corr = float(alignment_corr)
+            self_live_corr, _ = pearsonr(entropy_arr, conf_arr)
+            self_live_corr = float(self_live_corr)
         except Exception:
-            alignment_corr = 0.0
+            self_live_corr = 0.0
     
-    # Other confidence correlations: correlation between entropy and other confidence
-    live_entropy_other_conf_corr = 0.0
+    # Other live correlation: entropy from live model's output logits correlated with 
+    # live model's prediction of 'other's' accuracy on the question
+    other_live_corr = 0.0
     if len(other_conf_arr) > 1 and std_other_conf > 0.001:
         try:
-            live_entropy_other_conf_corr, _ = pearsonr(entropy_arr, other_conf_arr)
-            live_entropy_other_conf_corr = float(live_entropy_other_conf_corr)
+            other_live_corr, _ = pearsonr(entropy_arr, other_conf_arr)
+            other_live_corr = float(other_live_corr)
         except Exception:
-            live_entropy_other_conf_corr = 0.0
+            other_live_corr = 0.0
     
-    # Pre-recorded entropy correlation: correlation between pre-recorded entropy and model confidence
-    prerecorded_alignment_corr = 0.0
-    prerecorded_entropy_other_conf_corr = 0.0
+    # Self frozen correlation: entropy from pre-recorded output logits correlated with 
+    # live model's prediction of its own confidence
+    # Other frozen correlation: entropy from pre-recorded output logits correlated with 
+    # live model's prediction of 'other's' accuracy on the question
+    self_frozen_corr = 0.0
+    other_frozen_corr = 0.0
     avg_prerecorded_entropy = None
     std_prerecorded_entropy = None
     if mcq_results_lookup is not None and len(prerecorded_entropy_values) > 0:
@@ -345,18 +405,18 @@ def run_evaluation(
             
             if std_prerecorded_entropy > 0.001 and std_conf_prerecorded > 0.001 and len(conf_arr_prerecorded) > 1:
                 try:
-                    prerecorded_alignment_corr, _ = pearsonr(prerecorded_arr, conf_arr_prerecorded)
-                    prerecorded_alignment_corr = float(prerecorded_alignment_corr)
+                    self_frozen_corr, _ = pearsonr(prerecorded_arr, conf_arr_prerecorded)
+                    self_frozen_corr = float(self_frozen_corr)
                 except Exception:
-                    prerecorded_alignment_corr = 0.0
+                    self_frozen_corr = 0.0
             
             # Correlation between pre-recorded entropy and other confidence
             if std_prerecorded_entropy > 0.001 and std_other_conf_prerecorded > 0.001 and len(other_conf_arr_prerecorded) > 1:
                 try:
-                    prerecorded_entropy_other_conf_corr, _ = pearsonr(prerecorded_arr, other_conf_arr_prerecorded)
-                    prerecorded_entropy_other_conf_corr = float(prerecorded_entropy_other_conf_corr)
+                    other_frozen_corr, _ = pearsonr(prerecorded_arr, other_conf_arr_prerecorded)
+                    other_frozen_corr = float(other_frozen_corr)
                 except Exception:
-                    prerecorded_entropy_other_conf_corr = 0.0
+                    other_frozen_corr = 0.0
     
     # Calibration: correlation between confidence and correctness
     calibration_corr = 0.0
@@ -391,8 +451,8 @@ def run_evaluation(
                 f"{prefix}/std_confidence": std_conf,
                 f"{prefix}/std_other_confidence": std_other_conf,
                 f"{prefix}/std_entropy": std_entropy,
-                f"{prefix}/alignment_corr": alignment_corr,
-                f"{prefix}/live_entropy_other_conf_corr": live_entropy_other_conf_corr,
+                f"{prefix}/self_live_corr": self_live_corr,
+                f"{prefix}/other_live_corr": other_live_corr,
                 f"{prefix}/calibration_corr": calibration_corr,
                 f"{prefix}/n_samples": n,
             }
@@ -401,17 +461,21 @@ def run_evaluation(
             if avg_prerecorded_entropy is not None:
                 wandb_metrics[f"{prefix}/prerecorded_entropy"] = avg_prerecorded_entropy
                 wandb_metrics[f"{prefix}/std_prerecorded_entropy"] = std_prerecorded_entropy
-                wandb_metrics[f"{prefix}/prerecorded_alignment_corr"] = prerecorded_alignment_corr
-                wandb_metrics[f"{prefix}/prerecorded_entropy_other_conf_corr"] = prerecorded_entropy_other_conf_corr
+                wandb_metrics[f"{prefix}/self_frozen_corr"] = self_frozen_corr
+                wandb_metrics[f"{prefix}/other_frozen_corr"] = other_frozen_corr
             
             # Add answer distribution percentages
             for letter in "ABCD":
                 wandb_metrics[f"{prefix}/pred_dist_{letter}_pct"] = pred_dist_pct[letter]
                 wandb_metrics[f"{prefix}/correct_dist_{letter}_pct"] = gold_dist_pct[letter]
             
-            # Add confidence distribution percentages (A-H)
+            # Add self confidence distribution percentages (A-H)
             for letter in "ABCDEFGH":
-                wandb_metrics[f"{prefix}/conf_dist_{letter}_pct"] = conf_dist_pct[letter]
+                wandb_metrics[f"{prefix}/self_conf_{letter}"] = conf_dist_pct[letter]
+            
+            # Add other confidence distribution percentages (A-H)
+            for letter in "ABCDEFGH":
+                wandb_metrics[f"{prefix}/other_conf_{letter}"] = other_conf_dist_pct[letter]
             
             # Add step if provided
             if step is not None:

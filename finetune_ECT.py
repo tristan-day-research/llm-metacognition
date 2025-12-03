@@ -1,5 +1,4 @@
 import argparse
-import math
 import numpy as np
 import os
 import torch
@@ -18,8 +17,12 @@ from finetune_utils import (
     save_training_parameters,
     load_tokenizer,
     load_model_with_lora,
+    prepare_model_and_tokenizer,
+    validate_train_batch
+)
+from finetune_loss import (
     convert_entropy_to_soft_labels,
-    prepare_model_and_tokenizer
+    compute_loss
 )
 from finetune_prompting import (
     build_self_confidence_prompts,
@@ -32,76 +35,45 @@ from finetune_data_handling import (
     get_batch,
     load_jsonl_dataset,
     filter_dataset_by_mcq_results,
-    collate_fn
+    validate_datasets_separate
 )
-
-
-
-# ============================================================
-# Entropy → scalar confidence → soft labels
-# ============================================================
-
-def compute_soft_labels(logits4, sigma=10.0):
-    """
-    Convert 4-way answer logits into soft 8-bin confidence distribution.
-
-    Uses percentage-based Gaussian kernel to create soft labels.
-
-    Args:
-        logits4: tensor of shape [4] with logits for A, B, C, D
-        sigma: Gaussian width in percentage space (default: 10)
-
-    Returns:
-        tensor of shape [8] with soft label distribution
-    """
-    # 1. Softmax over the 4 MCQ options
-    probs = torch.softmax(logits4, dim=0)
-
-    # 2. Entropy (natural logs)
-    entropy = -(probs * torch.log(probs + 1e-12)).sum()
-
-    # 3. Convert entropy to "confidence percentage"
-    #    confidence = (1 - H/log(4)) * 100
-    confidence_percent = (1 - entropy / math.log(4)) * 100.0
-
-    # 4. Bin midpoints + widths (exact values from your colleague)
-    bin_edges = torch.tensor([0, 5, 10, 20, 40, 60, 80, 90, 100],
-                             dtype=torch.float32,
-                             device=logits4.device)
-    bin_midpoints = torch.tensor([2.5, 7.5, 15, 30, 50, 70, 85, 95],
-                                 dtype=torch.float32,
-                                 device=logits4.device)
-    bin_widths = bin_edges[1:] - bin_edges[:-1]   # shape [8]
-
-    # 5. Gaussian kernel in percentage space
-    distances = (bin_midpoints - confidence_percent)**2
-    weights = torch.exp(-distances / (2 * sigma * sigma)) * bin_widths
-
-    return weights / weights.sum()
 
 
 # ------------------------------------------------------------------
 # Training Step
 # ------------------------------------------------------------------
 
-def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=None):
+def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=None, 
+               train_dataset_qids=None, train_dataset_questions=None):
     """
     Train step with support for frozen teacher (pre-recorded) or dynamic teacher.
     
+    CRITICAL: This function should ONLY receive batches from train_dataset.
+    Never pass validation data to this function.
+    
     Args:
+        batch: Batch from train_dataset (list of question dicts)
         mcq_results_lookup: Dict from load_mcq_results_data() or None
+        train_dataset_qids: Set of qids from train_dataset for validation (optional)
+        train_dataset_questions: Set of normalized question texts from train_dataset (optional)
     
     Returns:
         loss tensor, or None if batch should be skipped
     """
+    # Defensive check: Verify batch contains only questions from train_dataset
+    validate_train_batch(batch, train_dataset_qids, train_dataset_questions, function_name="train_step")
+    
+    # Ensure model is in training mode (set it explicitly to handle cases where
+    # model might be in eval mode from previous evaluation)
     model.train()
 
     # ----------------------------------------------
-    # 1. Get entropy (frozen vs dynamic teacher)
+    # 1. Get entropy, either from frozen or dynamic teacher)
     # ----------------------------------------------
 
     # ----------------------------------------------
-    # If using frozen teacher
+    # If using frozen teacher. Gets multiple choice answers and the output logit entroy form pre-recorded responses
+    # Welected with --no_use_recorded_responses flag when running this file
     # ----------------------------------------------
 
     if args.use_recorded_responses:
@@ -136,7 +108,8 @@ def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=
         entropy = torch.tensor(entropies, dtype=torch.float32, device=device)
 
     # ----------------------------------------------
-    # If using dynamic teacher: compute entropy from current model
+    # If using dynamic teacher: compute entropy live from current model
+    # selected with --use_recorded_responses flag when  running this file
     # ----------------------------------------------
 
     else:
@@ -176,8 +149,7 @@ def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=
     # ----------------------------------------------
     # 3. Compute loss
     # ----------------------------------------------
-    log_p = torch.log_softmax(logits8, dim=-1)
-    loss = -(soft * log_p).sum(dim=-1).mean()
+    loss = compute_loss(logits8, soft_targets=soft, entropy=entropy, loss_type=args.loss_type, reduction='mean')
 
     # ----------------------------------------------
     # 4. Backprop
@@ -212,30 +184,20 @@ def train(args):
     # Canonicalize model/tokenizer setup (fix pad_token warnings)
     model, tokenizer = prepare_model_and_tokenizer(model, tokenizer)
 
+    # Setup log file path early (needed for duplicate removal logging)
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d-%H-%M-%S")
+    log_dir = "finetune_logs"
+    os.makedirs(log_dir, exist_ok=True)
+    model_name_safe = args.model_name.replace("/", "-").replace("_", "-")
+    log_file_path = os.path.join(log_dir, f"{timestamp}_{model_name_safe}_evaluation_metrics.jsonl")
+
     # Dataset loading ------------------------------------------------
-    train_dataset = load_jsonl_dataset(args.train_data_path)
-    val_dataset   = load_jsonl_dataset(args.val_data_path)
+    # CRITICAL: Load train and val datasets separately to prevent any mixing
+    train_dataset = load_jsonl_dataset(args.train_data_path, dataset_type="train")
+    val_dataset   = load_jsonl_dataset(args.val_data_path, dataset_type="val")
 
     print(f"✓ Training dataset loaded: {len(train_dataset)} samples")
     print(f"✓ Validation dataset loaded: {len(val_dataset)} samples")
-    # print(f"  Validation will run every {args.val_interval} steps")
-
-    # Check if option A is somehow special
-    # print("\nDEBUG: Checking first 50 questions:")
-    # for i in range(50):
-    #     q = val_dataset[i]
-    #     print(f"Q{i}: correct={q.get('correct_letter')}, A={q['options']['A'][:40]}")
-    
-    # # Load pre-recorded MCQ results if using frozen teacher
-    # mcq_results_lookup = None
-    # if args.use_recorded_responses:
-    #     if args.mcq_results_data is None:
-    #         raise ValueError(
-    #             "--use_recorded_responses requires --mcq_results_data to be specified"
-    #         )
-    #     mcq_results_lookup = load_mcq_results_data(args.mcq_results_data)
-    #     if mcq_results_lookup is None:
-    #         raise ValueError(f"Failed to load MCQ results from {args.mcq_results_data}")
 
     # Load pre-recorded MCQ results if using frozen teacher OR if provided for evaluation
     mcq_results_lookup = None
@@ -263,6 +225,65 @@ def train(args):
     print(f"\n✓ Training dataset loaded: {len(train_dataset)} samples")
     print(f"✓ Validation dataset loaded: {len(val_dataset)} samples")
     
+    # Initialize validation sets (will be None if checks are disabled)
+    train_dataset_qids = None
+    train_dataset_questions = None
+    
+    # CRITICAL: Validate that train and val datasets are completely separate
+    # This checks for duplicates by BOTH qid and question text
+    # Location: finetune_data_handling.py:validate_datasets_separate()
+    # - Line 642: Checks for overlapping qids
+    # - Line 652: Checks for overlapping question text (normalized)
+    if args.enable_data_leakage_checks:
+        try:
+            validate_datasets_separate(train_dataset, val_dataset, "train", "val")
+        except ValueError as e:
+            # If validation fails, offer to auto-fix by removing duplicates from train set
+            error_msg = str(e)
+            if "DATA LEAKAGE DETECTED" in error_msg:
+                print("\n" + "="*70)
+                print("DATA LEAKAGE DETECTED - Attempting automatic fix...")
+                print("="*70)
+                print(f"Error triggered at: finetune_data_handling.py:validate_datasets_separate()")
+                print(f"  - Checks for overlapping qids (line ~642)")
+                print(f"  - Checks for overlapping question text (line ~652)")
+                print("="*70)
+                
+                from finetune_data_handling import find_and_remove_duplicates
+                
+                # Use the evaluation log file if available, otherwise None
+                removal_summary, train_dataset_cleaned = find_and_remove_duplicates(
+                    train_dataset, val_dataset, remove_from="train", log_file_path=log_file_path
+                )
+                
+                if removal_summary["total_removed"] > 0:
+                    train_dataset = train_dataset_cleaned
+                    print(f"\n✓ Automatically removed {removal_summary['total_removed']} duplicate(s) from training dataset")
+                    print(f"  Breakdown: {removal_summary['by_qid_only']} by qid, "
+                          f"{removal_summary['by_text_only']} by text, "
+                          f"{removal_summary['by_both']} by both")
+                    print(f"  Training dataset: {len(train_dataset)} samples")
+                    
+                    # Re-validate to ensure fix worked
+                    print("\nRe-validating dataset separation...")
+                    validate_datasets_separate(train_dataset, val_dataset, "train", "val")
+                    print("✓ Dataset separation validated after auto-fix")
+                else:
+                    # If auto-fix didn't work, re-raise the original error
+                    raise e
+            else:
+                # Re-raise if it's a different ValueError
+                raise e
+        
+        # Build sets for runtime validation (both qids and normalized question text)
+        # Do this AFTER validation/auto-fix to ensure we have the final train_dataset
+        from finetune_data_handling import normalize_text
+        train_dataset_qids = {str(row.get("qid")) for row in train_dataset if row.get("qid")}
+        train_dataset_questions = {normalize_text(row.get("question", "")) for row in train_dataset if row.get("question")}
+        print(f"✓ Built train_dataset validation sets: {len(train_dataset_qids)} qids, {len(train_dataset_questions)} questions")
+        print(f"✓ Runtime leakage checks ENABLED: train_step() and run_evaluation() will validate every batch/sample")
+    else:
+        print(f"⚠️  Data leakage checks DISABLED (not recommended)")
 
     if args.use_recorded_responses:
         print(f"✓ Using FROZEN TEACHER (pre-recorded responses)")
@@ -289,19 +310,12 @@ def train(args):
     os.makedirs(output_dir, exist_ok=True)
 
     # Setup checkpoint directory with datetime
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d-%H-%M-%S")
     checkpoint_base_dir = os.path.join("local_checkpoints", f"{timestamp}_checkpoints")
     os.makedirs(checkpoint_base_dir, exist_ok=True)
     print(f"✓ Checkpoints will be saved to: {os.path.abspath(checkpoint_base_dir)}")
     
     # Save training parameters to checkpoint directory
     save_training_parameters(args, checkpoint_base_dir)
-
-    # Setup evaluation log file path
-    log_dir = "finetune_logs"
-    os.makedirs(log_dir, exist_ok=True)
-    model_name_safe = args.model_name.replace("/", "-").replace("_", "-")
-    log_file_path = os.path.join(log_dir, f"{timestamp}_{model_name_safe}_evaluation_metrics.jsonl")
 
     # ============================================================
     # Baseline evaluation BEFORE training
@@ -330,6 +344,8 @@ def train(args):
         log_file_path=log_file_path,
         step=0,
         mcq_results_lookup=mcq_results_lookup,
+        train_dataset_qids=train_dataset_qids,
+        train_dataset_questions=train_dataset_questions,
     )
 
     print(f"\nBaseline Accuracy: {baseline_metrics['mcq_accuracy']:.4f}")
@@ -337,17 +353,17 @@ def train(args):
     print(f"Baseline Avg Confidence: {baseline_metrics['avg_confidence']:.4f}")
     print(f"- samples: {baseline_metrics['n_samples']}\n")
 
+
     # ============================================================
     # TRAINING LOOP
     # ============================================================
-
-
 
     step = 0
     losses = []
 
     while step < args.max_steps:
-        batch = get_batch(train_dataset, args.batch_size)
+        # CRITICAL: Only use train_dataset for training batches
+        batch = get_batch(train_dataset, args.batch_size, is_training=True)
 
         # -----------------------------
         # Train step 
@@ -361,6 +377,8 @@ def train(args):
             device=device,
             args=args,
             mcq_results_lookup=mcq_results_lookup,
+            train_dataset_qids=train_dataset_qids,
+            train_dataset_questions=train_dataset_questions,
         )
         
         # Skip optimizer step if batch was skipped
@@ -394,6 +412,8 @@ def train(args):
                 log_file_path=log_file_path,
                 step=step,
                 mcq_results_lookup=mcq_results_lookup,
+                train_dataset_qids=train_dataset_qids,
+                train_dataset_questions=train_dataset_questions,
             )
 
             print(f"Val Accuracy: {val_metrics['mcq_accuracy']:.4f}")
@@ -441,6 +461,8 @@ def train(args):
         log_file_path=log_file_path,
         step=step,
         mcq_results_lookup=mcq_results_lookup,
+        train_dataset_qids=train_dataset_qids,
+        train_dataset_questions=train_dataset_questions,
     )
 
     print(f"\nFinal Accuracy:  {final_metrics['mcq_accuracy']:.4f}")
@@ -533,6 +555,9 @@ def parse_args():
                         help="Number of random questions to sample from validation dataset for validation steps (default: 500)")
     parser.add_argument("--sigma", type=float, default=10.0,
                         help="Sigma parameter for soft label distribution")
+    parser.add_argument("--loss_type", type=str, required=True,
+                        choices=["gaussian_soft_bin_ce", "scalar_confidence_mse"],
+                        help="Type of loss function to use: 'gaussian_soft_bin_ce' or 'scalar_confidence_mse'")
     parser.add_argument("--temperature", type=float, default=0.0,
                         help="Temperature for sampling predictions (0.0 = deterministic/argmax, >0 = sampling)")
     parser.add_argument(
@@ -549,6 +574,17 @@ def parse_args():
         action="store_false",
         help=("Disable using recorded responses, use dynamic teacher "
               "(current model logits) instead.")
+    )
+    
+    parser.add_argument(
+        "--enable_data_leakage_checks", action="store_true", default=True,
+        help="Enable data leakage checks to ensure train/val separation (enabled by default)"
+    )
+    
+    parser.add_argument(
+        "--disable_data_leakage_checks", dest="enable_data_leakage_checks",
+        action="store_false",
+        help="Disable data leakage checks (not recommended)"
     )
 
 

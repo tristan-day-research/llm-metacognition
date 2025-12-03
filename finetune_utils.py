@@ -1,5 +1,4 @@
 import json
-import math
 import os
 import random
 from datetime import datetime, timezone
@@ -10,7 +9,8 @@ from argparse import Namespace
 
 from finetune_data_handling import (
     load_mcq_results_data,
-    collate_fn as data_collate_fn
+    collate_fn as data_collate_fn,
+    normalize_text
 )
 
 def load_tokenizer(args):
@@ -108,204 +108,6 @@ def write_log(log_file_path, entry_dict):
     if log_file_path:
         with open(log_file_path, 'a', encoding='utf-8') as f:
             f.write(json.dumps(entry_dict, ensure_ascii=False) + '\n')
-
-
-# def _get_log_file_path(log_dir, model_name, suffix):
-#     """Helper function to create log file paths."""
-#     os.makedirs(log_dir, exist_ok=True)
-#     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d-%H-%M-%S")
-#     model_name_safe = model_name.replace("/", "-").replace("_", "-")
-#     return os.path.join(
-#         log_dir, f"{model_name_safe}_{timestamp}_{suffix}.jsonl"
-#     )
-
-
-# def get_letter_token_ids(tokenizer, letter: str) -> list:
-#     """
-#     Get all single-token IDs that represent a letter (with and without space).
-    
-#     Returns:
-#         List of token IDs (usually 1-2 tokens: bare letter and/or spaced letter)
-#     """
-#     token_ids = []
-    
-#     # Try with leading space
-#     ids = tokenizer.encode(" " + letter, add_special_tokens=False)
-#     if len(ids) == 1:
-#         token_ids.append(ids[0])
-    
-#     # Try bare letter
-#     ids = tokenizer.encode(letter, add_special_tokens=False)
-#     if len(ids) == 1 and ids[0] not in token_ids:  # Avoid duplicates
-#         token_ids.append(ids[0])
-    
-#     if not token_ids:
-#         raise ValueError(f"Could not find single-token encoding for {letter}")
-    
-#     return token_ids
-
-
-
-# def compute_ABCD_entropy(probs):
-#     """
-#     Compute entropy from probability distribution for A, B, C, D options.
-
-#     Args:
-#         probs: tensor, list, or dict - probabilities for A, B, C, D
-#                If dict, should have keys "A", "B", "C", "D"
-#                If list/tensor, should be in order [A, B, C, D]
-
-#     Returns:
-#         scalar entropy value
-#     """
-#     import torch
-    
-#     # Handle dictionary format (keys: "A", "B", "C", "D")
-#     if isinstance(probs, dict):
-#         probs = [
-#             probs.get("A", 0.0),
-#             probs.get("B", 0.0),
-#             probs.get("C", 0.0),
-#             probs.get("D", 0.0)
-#         ]
-
-#     # Convert to tensor if needed
-#     if not isinstance(probs, torch.Tensor):
-#         probs = torch.tensor(probs, dtype=torch.float32)
-
-#     # Ensure probabilities sum to 1
-#     probs = probs / (probs.sum() + 1e-12)
-
-#     # Compute entropy (natural logs)
-#     entropy = -(probs * torch.log(probs + 1e-12)).sum()
-#     return entropy
-
-
-def convert_entropy_to_soft_labels(entropy, sigma=10.0):
-    """
-    Convert entropy value to soft 8-bin confidence distribution.
-    Handles both Tensor inputs (training) and float inputs (evaluation).
-    """
-    # Fix: Ensure input is a tensor so we can access .device or operate on it
-    if not isinstance(entropy, torch.Tensor):
-        entropy = torch.tensor(entropy, dtype=torch.float32)
-
-    # Get device from entropy tensor (defaults to cpu if created from float)
-    device = entropy.device
-    
-    # Convert entropy to "confidence percentage"
-    # confidence = (1 - H/log(4)) * 100
-    confidence_percent = (1 - entropy / math.log(4)) * 100.0
-
-    # Bin midpoints + widths
-    bin_edges = torch.tensor(
-        [0, 5, 10, 20, 40, 60, 80, 90, 100],
-        dtype=torch.float32,
-        device=device
-    )
-    bin_midpoints = torch.tensor(
-        [2.5, 7.5, 15, 30, 50, 70, 85, 95],
-        dtype=torch.float32,
-        device=device
-    )
-    bin_widths = bin_edges[1:] - bin_edges[:-1]
-
-    # Gaussian kernel in percentage space
-    # Handle broadcasting for both scalar [1] and batched [B] inputs
-    if entropy.ndim > 0:
-        distances = (bin_midpoints.unsqueeze(0) - confidence_percent.unsqueeze(-1)) ** 2
-        weights = torch.exp(-distances / (2 * sigma * sigma)) * bin_widths.unsqueeze(0)
-    else:
-        # Scalar case (often hits here during simple eval loops)
-        distances = (bin_midpoints - confidence_percent) ** 2
-        weights = torch.exp(-distances / (2 * sigma * sigma)) * bin_widths
-
-    # Normalize along the last dimension
-    return weights / weights.sum(dim=-1, keepdim=True)
-
-
-# def shuffle_options_and_update_correct_letter(row):
-#     """
-#     Shuffle the options (A, B, C, D) and update the correct_letter accordingly.
-    
-#     This ensures the correct answer isn't always in position A, preventing
-#     position bias in the model.
-    
-#     Args:
-#         row: Dictionary with "options" (dict with keys A, B, C, D) and "correct_letter"
-        
-#     Returns:
-#         row: Modified row with shuffled options and updated correct_letter
-#     """
-#     if "options" not in row or "correct_letter" not in row:
-#         return row
-    
-#     options = row["options"]
-#     correct_letter = row["correct_letter"]
-    
-#     # Get the correct answer text
-#     correct_answer_text = options.get(correct_letter, "")
-    
-#     # Create list of (letter, text) pairs
-#     option_pairs = [(letter, options[letter]) for letter in "ABCD" if letter in options]
-    
-#     # Shuffle the pairs
-#     random.shuffle(option_pairs)
-    
-#     # Rebuild options dict with new letter assignments
-#     new_options = {}
-#     new_correct_letter = None
-#     for new_letter, (old_letter, text) in zip("ABCD", option_pairs):
-#         new_options[new_letter] = text
-#         if old_letter == correct_letter:
-#             new_correct_letter = new_letter
-    
-#     # Update row
-#     row["options"] = new_options
-#     row["correct_letter"] = new_correct_letter
-    
-#     return row
-
-
-# Data loading functions moved to finetune_data_handling.py
-
-
-# def verify_model_answer_match(pred_probs, result_data, qid=None,
-#                                log_file_path=None):
-#     """
-#     Check whether the model's predicted answer matches pre-recorded answer.
-
-#     Args:
-#         pred_probs: tensor of shape [4] - probs for A,B,C,D in order
-#         result_data: dict containing "subject_answer"
-#         qid: question ID
-#         log_file_path: path for write_log()
-#     """
-#     if result_data is None:
-#         return
-
-#     rec_ans = result_data.get("subject_answer")
-#     if rec_ans is None:
-#         return
-
-#     # model's predicted answer letter
-#     pred_idx = pred_probs.argmax().item()
-#     pred_letter = "ABCD"[pred_idx]
-
-#     # match?
-#     matched = (pred_letter == rec_ans)
-
-#     if log_file_path:
-#         write_log(log_file_path, {
-#             "type": ("model_answer_match" if matched
-#                      else "model_answer_mismatch"),
-#             "qid": qid,
-#             "predicted_answer": pred_letter,
-#             "recorded_answer": rec_ans,
-#             "predicted_probs": pred_probs.tolist(),
-#             "timestamp": datetime.now(timezone.utc).isoformat()
-#         })
-
 
 
 # ============================================================
@@ -532,3 +334,85 @@ def finish_wandb():
         wandb.finish()
     except (ImportError, AttributeError):
         pass
+
+
+# ============================================================
+# Data Leakage Prevention - Defensive Checks
+# ============================================================
+
+def validate_train_batch(batch, train_dataset_qids=None, train_dataset_questions=None, function_name="train_step"):
+    """
+    Defensive check: Verify batch contains only questions from train_dataset.
+    Check both qid and question text to catch any leakage.
+    
+    Args:
+        batch: Batch from train_dataset (list of question dicts)
+        train_dataset_qids: Set of qids from train_dataset for validation (optional)
+        train_dataset_questions: Set of normalized question texts from train_dataset (optional)
+        function_name: Name of the calling function for error messages
+    
+    Raises:
+        ValueError: If any question in batch is not in train_dataset
+    """
+    if train_dataset_qids is None and train_dataset_questions is None:
+        return  # No validation sets provided, skip check
+    
+    for row in batch:
+        qid = row.get("qid")
+        question = row.get("question", "")
+        
+        # Check qid if available
+        if train_dataset_qids is not None and qid:
+            if str(qid) not in train_dataset_qids:
+                raise ValueError(
+                    f"DATA LEAKAGE DETECTED: {function_name}() received a question with qid={qid} "
+                    f"that is not in train_dataset. This should never happen!"
+                )
+        
+        # Check question text if available
+        if train_dataset_questions is not None and question:
+            norm_q = normalize_text(question)
+            if norm_q not in train_dataset_questions:
+                raise ValueError(
+                    f"DATA LEAKAGE DETECTED: {function_name}() received a question with text='{question[:50]}...' "
+                    f"that is not in train_dataset. This should never happen!"
+                )
+
+
+def validate_eval_dataset(val_dataset, train_dataset_qids=None, train_dataset_questions=None, function_name="run_evaluation"):
+    """
+    Defensive check: Verify val_dataset doesn't contain any train_dataset questions.
+    Check both qid and question text to catch any leakage.
+    
+    Args:
+        val_dataset: Validation or test dataset (NEVER train_dataset)
+        train_dataset_qids: Set of qids from train_dataset for validation (optional)
+        train_dataset_questions: Set of normalized question texts from train_dataset (optional)
+        function_name: Name of the calling function for error messages
+    
+    Raises:
+        ValueError: If any question in val_dataset is also in train_dataset
+    """
+    if train_dataset_qids is None and train_dataset_questions is None:
+        return  # No validation sets provided, skip check
+    
+    for row in val_dataset:
+        qid = row.get("qid")
+        question = row.get("question", "")
+        
+        # Check qid if available
+        if train_dataset_qids is not None and qid:
+            if str(qid) in train_dataset_qids:
+                raise ValueError(
+                    f"DATA LEAKAGE DETECTED: {function_name}() received a question with qid={qid} "
+                    f"that is in train_dataset. This should never happen!"
+                )
+        
+        # Check question text if available
+        if train_dataset_questions is not None and question:
+            norm_q = normalize_text(question)
+            if norm_q in train_dataset_questions:
+                raise ValueError(
+                    f"DATA LEAKAGE DETECTED: {function_name}() received a question with text='{question[:50]}...' "
+                    f"that is in train_dataset. This should never happen!"
+                )

@@ -8,11 +8,25 @@ from datetime import datetime, timezone
 from torch.utils.data import Dataset
 
 
+# Separate RNGs for training and evaluation to prevent any shared state
+# Training uses seed 42, evaluation uses seed 999 to ensure complete separation
+_train_rng = np.random.default_rng(42)
+_eval_rng = np.random.default_rng(999)
 
-seed_value = 42
-rng = np.random.default_rng(seed_value)
-
-def get_batch(dataset, batch_size):
+def get_batch(dataset, batch_size, is_training=True):
+    """
+    Get a random batch from the dataset.
+    
+    Args:
+        dataset: The dataset to sample from
+        batch_size: Number of samples to return
+        is_training: If True, use training RNG; if False, use evaluation RNG.
+                    This ensures train and val sampling are completely independent.
+    
+    Returns:
+        List of dataset samples
+    """
+    rng = _train_rng if is_training else _eval_rng
     idxs = rng.choice(len(dataset), size=batch_size, replace=False)
     return [dataset[i] for i in idxs]
 
@@ -21,53 +35,25 @@ def write_jsonl(path, obj):
     with open(path, "a") as f:
         f.write(json.dumps(obj) + "\n")
 
-        
-# def load_jsonl_dataset(path):
-#     """
-#     Load the PopMC dataset and convert each entry into the canonical MCQ format:
-#         - options: A, B, C, D
-#         - correct_letter: 'A' … 'D'
-#     """
-#     out = []
-#     with open(path, "r") as f:
-#         for line in f:
-#             row = json.loads(line)
 
-#             question = row["question"]
-#             correct = row["correct_answer"]
-#             distractors = row["distractors"]
-
-#             # Build 4-option MCQ set
-#             opts = [correct] + distractors
-#             if len(opts) != 4:
-#                 # Skip malformed items
-#                 continue
-
-#             # Shuffle + keep track of correct letter
-#             letters = ["A", "B", "C", "D"]
-#             paired = list(zip(letters, opts))
-#             random.shuffle(paired)
-
-#             shuffled_letters, shuffled_opts = zip(*paired)
-#             options = {L: O for L, O in paired}
-
-#             # Find which letter contains the correct answer
-#             for L, O in options.items():
-#                 if O == correct:
-#                     correct_letter = L
-#                     break
-
-#             out.append({
-#                 "qid": row.get("qid"),
-#                 "question": question,
-#                 "options": options,
-#                 "correct_letter": correct_letter,
-#             })
-
-#     return out
-
-def load_jsonl_dataset(path):
-    """Load dataset with proper shuffling."""
+def load_jsonl_dataset(path, dataset_type="unknown"):
+    """
+    Load dataset with proper shuffling.
+    
+    Args:
+        path: Path to JSONL file
+        dataset_type: Type of dataset ("train", "val", "test", etc.) for logging
+    
+    Returns:
+        List of question dictionaries
+    """
+    # Use a seeded RNG for deterministic option shuffling per dataset
+    # Different seeds for different dataset types to ensure independence
+    dataset_seed = hash(path) % (2**31)  # Deterministic seed based on path
+    local_rng = np.random.default_rng(dataset_seed)
+    # Also seed Python's random for shuffle() calls
+    random.seed(dataset_seed)
+    
     out = []
     with open(path, "r") as f:
         for line in f:
@@ -82,7 +68,8 @@ def load_jsonl_dataset(path):
             if len(opts) != 4:
                 continue
 
-            # Shuffle options
+            # Shuffle options using seeded RNG for reproducibility
+            # Note: random.shuffle() uses Python's global random state, which we seeded above
             random.shuffle(opts)
             
             # Assign to letters and find correct letter
@@ -564,4 +551,251 @@ def validate_training_files(args):
 def collate_fn(batch):
     """Custom collate function that returns a list of dictionaries."""
     return batch
+
+
+def validate_datasets_separate(train_dataset, val_dataset, dataset_name_train="train", dataset_name_val="val"):
+    """
+    Validate that train and validation datasets are completely separate.
+    
+    Checks for:
+    1. Overlapping question IDs (qid)
+    2. Overlapping question text (normalized)
+    
+    Args:
+        train_dataset: Training dataset (list of dicts)
+        val_dataset: Validation dataset (list of dicts)
+        dataset_name_train: Name for error messages
+        dataset_name_val: Name for error messages
+    
+    Raises:
+        ValueError: If any overlap is detected
+    """
+    # Extract all qids from both datasets
+    train_qids = set()
+    val_qids = set()
+    
+    train_questions = set()
+    val_questions = set()
+    
+    for row in train_dataset:
+        qid = row.get("qid")
+        if qid:
+            train_qids.add(str(qid))
+        question = row.get("question", "")
+        if question:
+            train_questions.add(normalize_text(question))
+    
+    for row in val_dataset:
+        qid = row.get("qid")
+        if qid:
+            val_qids.add(str(qid))
+        question = row.get("question", "")
+        if question:
+            val_questions.add(normalize_text(question))
+    
+    # Check for overlapping qids
+    overlapping_qids = train_qids & val_qids
+    if overlapping_qids:
+        raise ValueError(
+            f"DATA LEAKAGE DETECTED: {len(overlapping_qids)} question IDs appear in both "
+            f"{dataset_name_train} and {dataset_name_val} datasets. "
+            f"Sample overlapping qids: {list(overlapping_qids)[:5]}"
+        )
+    
+    # Check for overlapping question text
+    overlapping_questions = train_questions & val_questions
+    if overlapping_questions:
+        # This is also data leakage - same question in both train and val
+        # Even if qids differ, the model would see the same question during training and evaluation
+        sample_questions = list(overlapping_questions)[:5]
+        sample_str = "\n".join([f"    - {q[:100]}..." for q in sample_questions])
+        
+        # Find the actual qids for the overlapping questions to help with debugging
+        overlapping_qids_info = []
+        for norm_q in sample_questions:
+            # Find qids in train dataset
+            train_qids_for_q = [row.get("qid") for row in train_dataset 
+                               if normalize_text(row.get("question", "")) == norm_q]
+            # Find qids in val dataset
+            val_qids_for_q = [row.get("qid") for row in val_dataset 
+                             if normalize_text(row.get("question", "")) == norm_q]
+            if train_qids_for_q or val_qids_for_q:
+                overlapping_qids_info.append(
+                    f"    Question: {norm_q[:80]}...\n"
+                    f"      Train qids: {train_qids_for_q[:3]}{'...' if len(train_qids_for_q) > 3 else ''}\n"
+                    f"      Val qids: {val_qids_for_q[:3]}{'...' if len(val_qids_for_q) > 3 else ''}"
+                )
+        
+        qids_info_str = "\n\n".join(overlapping_qids_info) if overlapping_qids_info else sample_str
+        
+        raise ValueError(
+            f"DATA LEAKAGE DETECTED: {len(overlapping_questions)} questions with identical text "
+            f"appear in both {dataset_name_train} and {dataset_name_val} datasets. "
+            f"This means the model will see the same questions during training and evaluation, "
+            f"which invalidates the evaluation.\n\n"
+            f"Overlapping questions with their qids:\n{qids_info_str}\n\n"
+            f"Please remove these questions from one of the datasets (preferably from {dataset_name_train}) "
+            f"to ensure proper train/val separation."
+        )
+    
+    print(f"✓ Dataset separation validated: {len(train_qids)} train qids, {len(val_qids)} val qids, no overlap")
+
+
+def find_and_remove_duplicates(train_dataset, val_dataset, remove_from="train", log_file_path=None):
+    """
+    Find questions that appear in both datasets and remove them from the specified dataset.
+    
+    Checks for duplicates by BOTH:
+    1. Question ID (qid) - exact match
+    2. Question text (normalized) - text content match
+    
+    This is a utility function to help fix data leakage issues detected by validate_datasets_separate().
+    
+    Args:
+        train_dataset: Training dataset (list of dicts)
+        val_dataset: Validation dataset (list of dicts) - used for comparison only
+        remove_from: Which dataset to remove duplicates from ("train" or "val")
+                    Default "train" removes from training set (recommended)
+        log_file_path: Optional path to log file for detailed logging
+    
+    Returns:
+        Tuple of (removal_summary, updated_dataset)
+        - removal_summary: Dict with counts and details of removals
+        - updated_dataset: The dataset with duplicates removed (new list, not modified in place)
+    """
+    from finetune_utils import write_log
+    
+    # Build lookup sets from validation dataset
+    val_qids = set()
+    val_questions_normalized = set()
+    val_qid_to_question = {}  # Map qid to question text for logging
+    
+    for row in val_dataset:
+        qid = row.get("qid")
+        question = row.get("question", "")
+        if qid:
+            val_qids.add(str(qid))
+            val_qid_to_question[str(qid)] = question
+        if question:
+            val_questions_normalized.add(normalize_text(question))
+    
+    # Determine which dataset to filter
+    if remove_from == "train":
+        dataset_to_filter = train_dataset
+        other_dataset_name = "validation"
+    elif remove_from == "val":
+        dataset_to_filter = val_dataset
+        other_dataset_name = "training"
+    else:
+        raise ValueError(f"remove_from must be 'train' or 'val', got '{remove_from}'")
+    
+    # Track removals by match type
+    removed_by_qid = []
+    removed_by_text = []
+    removed_by_both = []  # Matched by both qid and text
+    
+    # Filter out duplicates
+    filtered_dataset = []
+    
+    for row in dataset_to_filter:
+        qid = row.get("qid")
+        question = row.get("question", "")
+        norm_q = normalize_text(question) if question else ""
+        
+        # Check for matches
+        matched_by_qid = qid and str(qid) in val_qids
+        matched_by_text = norm_q and norm_q in val_questions_normalized
+        
+        if matched_by_qid or matched_by_text:
+            # Determine match type for logging
+            if matched_by_qid and matched_by_text:
+                match_type = "both_qid_and_text"
+                removed_by_both.append({
+                    "qid": qid,
+                    "question": question[:100] + "..." if len(question) > 100 else question,
+                    "match_method": "both_qid_and_text"
+                })
+            elif matched_by_qid:
+                match_type = "qid_only"
+                removed_by_qid.append({
+                    "qid": qid,
+                    "question": question[:100] + "..." if len(question) > 100 else question,
+                    "match_method": "qid_only"
+                })
+            else:  # matched_by_text
+                match_type = "text_only"
+                removed_by_text.append({
+                    "qid": qid,
+                    "question": question[:100] + "..." if len(question) > 100 else question,
+                    "match_method": "text_only"
+                })
+            
+            # Log individual removal
+            if log_file_path:
+                write_log(log_file_path, {
+                    "type": "duplicate_removed",
+                    "removed_from": remove_from,
+                    "qid": qid,
+                    "question_snippet": question[:200] if question else None,
+                    "match_method": match_type,
+                    "matched_by_qid": matched_by_qid,
+                    "matched_by_text": matched_by_text,
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                })
+        else:
+            # Keep this row - no match found
+            filtered_dataset.append(row)
+    
+    # Build summary
+    total_removed = len(removed_by_qid) + len(removed_by_text) + len(removed_by_both)
+    
+    removal_summary = {
+        "total_removed": total_removed,
+        "removed_from": remove_from,
+        "by_qid_only": len(removed_by_qid),
+        "by_text_only": len(removed_by_text),
+        "by_both": len(removed_by_both),
+        "details": {
+            "qid_only": removed_by_qid[:10],  # Limit details
+            "text_only": removed_by_text[:10],
+            "both": removed_by_both[:10]
+        }
+    }
+    
+    # Print summary
+    if total_removed > 0:
+        print(f"\n🔧 Removed {total_removed} duplicate question(s) from {remove_from} dataset:")
+        print(f"   - {len(removed_by_qid)} matched by qid only")
+        print(f"   - {len(removed_by_text)} matched by question text only")
+        print(f"   - {len(removed_by_both)} matched by both qid and text")
+        print(f"\n   Match method breakdown:")
+        print(f"     • QID match: Questions with same question ID (qid) in both datasets")
+        print(f"     • Text match: Questions with identical normalized text (even if qids differ)")
+        print(f"     • Both: Questions matching by both qid and text")
+        
+        # Show samples
+        all_removed = removed_by_qid + removed_by_text + removed_by_both
+        print(f"\n   Sample removed questions (showing up to 5):")
+        for i, item in enumerate(all_removed[:5], 1):
+            print(f"     {i}. qid={item['qid']}, match_method={item['match_method']}")
+            print(f"        question={item['question']}")
+        if len(all_removed) > 5:
+            print(f"     ... and {len(all_removed) - 5} more")
+        
+        print(f"\n✓ {remove_from} dataset: {len(dataset_to_filter)} → {len(filtered_dataset)} samples "
+              f"(removed {total_removed} duplicates)")
+        
+        # Log summary
+        if log_file_path:
+            write_log(log_file_path, {
+                "type": "duplicate_removal_summary",
+                **removal_summary,
+                "original_size": len(dataset_to_filter),
+                "final_size": len(filtered_dataset),
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            })
+    else:
+        print(f"✓ No duplicates found to remove from {remove_from} dataset")
+    
+    return removal_summary, filtered_dataset
 

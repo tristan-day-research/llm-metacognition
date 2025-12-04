@@ -1,5 +1,4 @@
 import torch
-
 from finetune_utils import parse_letter_from_model_text
 
 
@@ -301,3 +300,27 @@ def run_confidence_forward_pass(
         "expected_conf": expected_conf,
         "pred_bins": pred_bins,
     }
+
+
+def get_letter_token_ids(tokenizer, letter: str) -> list:
+    """
+    Get all single-token IDs that represent a letter (with and without space).
+    """
+    token_ids = []
+    
+    # Try with leading space
+    ids = tokenizer.encode(" " + letter, add_special_tokens=False)
+    if len(ids) == 1:
+        token_ids.append(ids[0])
+    
+    # Try bare letter
+    ids = tokenizer.encode(letter, add_special_tokens=False)
+    if len(ids) == 1 and ids[0] not in token_ids:  # Avoid duplicates
+        token_ids.append(ids[0])
+    
+    if not token_ids:
+        # Fallback for some tokenizers: try just the byte
+        print(f"Warning: Could not find single-token encoding for '{letter}' via standard encode.")
+    
+    return token_ids
+

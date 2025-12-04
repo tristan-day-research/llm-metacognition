@@ -298,12 +298,21 @@ def train(args):
     )
 
     # Logging --------------------------------------------------------
+    # Capture WandB run info for checkpoint naming
+    wandb_run = None
+    wandb_run_id = None
+    wandb_run_name = None
+    wandb_init_timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    
     if args.save_wandb_artifact:
-        wandb.init(
+        wandb_run = wandb.init(
             project=args.wandb_project,
             name=args.wandb_run_name,
             config=vars(args)
         )
+        wandb_run_id = wandb_run.id
+        wandb_run_name = wandb_run.name
+        print(f"✓ WandB run initialized: {wandb_run_name} (ID: {wandb_run_id})")
 
     # Output / checkpoints
     output_dir = args.output_dir
@@ -426,10 +435,8 @@ def train(args):
         # Periodic checkpointing
         # -----------------------------
         if (step % args.checkpoint_steps) == 0 and step > 0:
-            # Include timestamp in repo name so each training run gets its own repo
-            hf_checkpoint_repo_with_timestamp = None
-            if args.save_hf_checkpoints and args.hf_checkpoint_repo:
-                hf_checkpoint_repo_with_timestamp = f"{args.hf_checkpoint_repo}-{timestamp}"
+            # Generate timestamp for this checkpoint
+            checkpoint_timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
             
             save_checkpoint(
                 model=model,
@@ -437,8 +444,11 @@ def train(args):
                 checkpoint_base_dir=checkpoint_base_dir,
                 step=step,
                 save_hf_checkpoints=args.save_hf_checkpoints,
-                hf_checkpoint_repo=hf_checkpoint_repo_with_timestamp,
-                hf_checkpoint_private=args.hf_checkpoint_private
+                hf_checkpoint_repo=args.hf_checkpoint_repo,
+                hf_checkpoint_private=args.hf_checkpoint_private,
+                wandb_run_name=wandb_run_name,
+                wandb_run_id=wandb_run_id,
+                checkpoint_timestamp=checkpoint_timestamp
             )
 
         step += 1
@@ -469,6 +479,9 @@ def train(args):
     print(f"Final Loss:      {final_metrics['avg_loss']:.4f}")
     print(f"Final Confidence:{final_metrics['avg_confidence']:.4f}")
 
+    # Generate timestamp for final model save
+    final_timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    
     if args.save_wandb_artifact:
         wandb.finish()
 
@@ -479,7 +492,11 @@ def train(args):
         output_dir=args.output_dir,
         hf_repo=args.hf_repo if args.save_hf else None,
         hf_private=args.hf_checkpoint_private,
-        save_wandb_artifact=args.save_wandb_artifact
+        save_wandb_artifact=args.save_wandb_artifact,
+        wandb_run_name=wandb_run_name,
+        wandb_run_id=wandb_run_id,
+        step=step,
+        final_timestamp=final_timestamp
     )
     if success:
         print("✓ Model saved successfully!")

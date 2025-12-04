@@ -108,11 +108,14 @@ class BaseGameClass:
         if log_dir:
             os.makedirs(f"./{log_dir}", exist_ok=True)
             timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-            self.log_base_name = f"./{log_dir}/{self.subject_id}_{timestamp}"
+            # Sanitize subject_id to avoid path issues (remove slashes, etc.)
+            safe_subject_id = self.subject_id.replace("/", "-").replace("\\", "-")
+            self.log_base_name = f"./{log_dir}/{safe_subject_id}_{timestamp}"
             self.log_filename = f"{self.log_base_name}.log"
             self.game_data_filename = f"{self.log_base_name}_game_data.json"
         else:
             self.log_filename = None
+            self.game_data_filename = None
 
     def _log(self, message):
         """Write to log file and console."""

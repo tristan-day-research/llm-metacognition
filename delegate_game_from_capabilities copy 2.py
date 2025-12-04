@@ -53,9 +53,10 @@ class DelegateGameFromCapabilities(BaseGameClass):
         include_question_num=False,
         include_total_questions=False,
         decision_only=False,
-        alternate_decision_mapping=True
+        alternate_decision_mapping=True,
+        log_dir="delegate_game_logs"  # Allow override
     ):
-        super().__init__(subject_id, subject_name, is_human_player, "delegate_game_logs")
+        super().__init__(subject_id, subject_name, is_human_player, log_dir)
 
         # Seed RNG
         self.seed = seed

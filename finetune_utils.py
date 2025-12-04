@@ -114,6 +114,84 @@ def write_log(log_file_path, entry_dict):
 # Weights & Biases and HuggingFace Hub utilities
 # ============================================================
 
+def generate_checkpoint_tag(run_name, run_id, step, timestamp=None):
+    """
+    Generate a checkpoint tag that maps 1:1 to WandB run.
+    
+    Format: {run_name}-runid-{run_id}-step-{step}-{timestamp}
+    
+    Args:
+        run_name: WandB run name (human-readable)
+        run_id: WandB run ID (unique stable ID)
+        step: Training step number (int or string like "final")
+        timestamp: Optional timestamp string (YYYYMMDD-HHMMSS format). 
+                   If None, generates current timestamp.
+    
+    Returns:
+        Checkpoint tag string
+    """
+    if timestamp is None:
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    
+    # Sanitize run_name for use in repo names (replace spaces/special chars with hyphens)
+    safe_run_name = run_name.replace(" ", "-").replace("/", "-").replace("_", "-")
+    # Remove any consecutive hyphens
+    while "--" in safe_run_name:
+        safe_run_name = safe_run_name.replace("--", "-")
+    # Remove leading/trailing hyphens
+    safe_run_name = safe_run_name.strip("-")
+    
+    # Convert step to string for formatting
+    step_str = str(step)
+    
+    checkpoint_tag = f"{safe_run_name}-runid-{run_id}-step-{step_str}-{timestamp}"
+    return checkpoint_tag
+
+
+def build_structured_hf_repo_path(hf_checkpoint_repo, run_name, run_id, step, timestamp):
+    """
+    Build a structured HuggingFace repo path for checkpoints that maps 1:1 to WandB run.
+    
+    Format: {username}/llm_metacognition-{run_name}-runid-{run_id}-step-{step}-{timestamp}
+    
+    Note: HuggingFace Hub doesn't support nested paths in repo names, so we use
+    hyphens to create a flat but structured name that includes both run_name and run_id
+    for full traceability to WandB.
+    
+    Args:
+        hf_checkpoint_repo: Base HF repo name (e.g., 'username/model-name' or 'username/repo')
+        run_name: WandB run name (human-readable)
+        run_id: WandB run ID (unique stable ID)
+        step: Training step number (int or string like "final")
+        timestamp: Timestamp string (YYYYMMDD-HHMMSS format)
+    
+    Returns:
+        Full HF repo path string in format: username/llm_metacognition-{run_name}-runid-{run_id}-step-{step}-{timestamp}
+    """
+    # Extract username from base repo if provided
+    if hf_checkpoint_repo and "/" in hf_checkpoint_repo:
+        username = hf_checkpoint_repo.split("/")[0]
+    else:
+        # If no base repo provided, we can't determine username
+        # This shouldn't happen in practice, but handle gracefully
+        username = "checkpoints"
+    
+    # Sanitize run_name for use in repo names (replace spaces/special chars with hyphens)
+    safe_run_name = run_name.replace(" ", "-").replace("/", "-").replace("_", "-")
+    # Remove any consecutive hyphens
+    while "--" in safe_run_name:
+        safe_run_name = safe_run_name.replace("--", "-")
+    # Remove leading/trailing hyphens
+    safe_run_name = safe_run_name.strip("-")
+    
+    # Convert step to string
+    step_str = str(step)
+    
+    # Build flat structured path that includes both run_name and run_id for traceability
+    # Format: username/llm_metacognition-{run_name}-runid-{run_id}-step-{step}-{timestamp}
+    structured_path = f"{username}/llm_metacognition-{safe_run_name}-runid-{run_id}-step-{step_str}-{timestamp}"
+    return structured_path
+
 
 def log_wandb_metrics(metrics, step=None):
     """Log metrics to Weights & Biases."""
@@ -139,7 +217,9 @@ def log_wandb_config(updates, allow_val_change=False):
 
 
 def save_model_final(model, tokenizer, output_dir, hf_repo=None,
-                      hf_private=False, save_wandb_artifact=False):
+                      hf_private=False, save_wandb_artifact=False,
+                      wandb_run_name=None, wandb_run_id=None, step=None,
+                      final_timestamp=None):
     """
     Save final model locally and optionally to HuggingFace Hub.
 
@@ -147,9 +227,13 @@ def save_model_final(model, tokenizer, output_dir, hf_repo=None,
         model: Model to save
         tokenizer: Tokenizer to save
         output_dir: Local directory to save model
-        hf_repo: HuggingFace Hub repository name (optional)
+        hf_repo: HuggingFace Hub repository name (optional, base name)
         hf_private: Whether to make HF repo private
         save_wandb_artifact: Whether to save as W&B artifact
+        wandb_run_name: WandB run name (for checkpoint tagging)
+        wandb_run_id: WandB run ID (for checkpoint tagging)
+        step: Final training step number (for checkpoint tagging)
+        final_timestamp: Optional timestamp for final checkpoint tag (YYYYMMDD-HHMMSS format)
 
     Returns:
         True if successful, False otherwise
@@ -208,11 +292,60 @@ def save_model_final(model, tokenizer, output_dir, hf_repo=None,
 
     # Push to HuggingFace Hub
     if hf_repo:
+        # Generate checkpoint tag if WandB info is available
+        final_hf_repo = hf_repo
+        if wandb_run_name and wandb_run_id and step is not None:
+            checkpoint_tag = generate_checkpoint_tag(
+                wandb_run_name, wandb_run_id, step, final_timestamp
+            )
+            # Build structured repo path that includes run_name and run_id for traceability
+            final_hf_repo = build_structured_hf_repo_path(
+                hf_repo, wandb_run_name, wandb_run_id, step, final_timestamp
+            )
+            
+            # Log checkpoint identifier to WandB
+            # Note: Log without step parameter to avoid step ordering issues
+            try:
+                import wandb
+                wandb.log({"hf_checkpoint_name": checkpoint_tag})
+                log_wandb_config({"hf_repo": final_hf_repo})
+                # Store in run summary
+                wandb.run.summary["final_checkpoint_tag"] = checkpoint_tag
+                wandb.run.summary["final_hf_repo"] = final_hf_repo
+            except (ImportError, AttributeError):
+                pass  # Silently fail if wandb not available
+            
+            print(f"Final checkpoint tag: {checkpoint_tag}")
+        elif wandb_run_name and wandb_run_id:
+            # If step is not provided, use "final" as step identifier
+            checkpoint_tag = generate_checkpoint_tag(
+                wandb_run_name, wandb_run_id, "final", final_timestamp
+            )
+            # Build structured repo path that includes run_name and run_id for traceability
+            final_hf_repo = build_structured_hf_repo_path(
+                hf_repo, wandb_run_name, wandb_run_id, "final", final_timestamp
+            )
+            
+            # Log checkpoint identifier to WandB
+            try:
+                import wandb
+                wandb.log({"hf_checkpoint_name": checkpoint_tag})
+                log_wandb_config({"hf_repo": final_hf_repo})
+                # Store in run summary
+                wandb.run.summary["final_checkpoint_tag"] = checkpoint_tag
+                wandb.run.summary["final_hf_repo"] = final_hf_repo
+            except (ImportError, AttributeError):
+                pass
+            
+            print(f"Final checkpoint tag: {checkpoint_tag}")
+        else:
+            log_wandb_config({"hf_repo": final_hf_repo})
+            print("⚠️  Warning: WandB run info not available, using base repo name without checkpoint tag")
+        
         try:
-            model.push_to_hub(hf_repo, private=hf_private)
-            tokenizer.push_to_hub(hf_repo, private=hf_private)
-            log_wandb_config({"hf_repo": hf_repo})
-            print(f"✓ Model and tokenizer pushed to HuggingFace Hub: {hf_repo}")
+            model.push_to_hub(final_hf_repo, private=hf_private)
+            tokenizer.push_to_hub(final_hf_repo, private=hf_private)
+            print(f"✓ Model and tokenizer pushed to HuggingFace Hub: {final_hf_repo}")
             return True
         except Exception as e:
             print(f"⚠️  Warning: Failed to push to HuggingFace Hub: {e}")
@@ -268,7 +401,8 @@ def save_training_parameters(args, checkpoint_base_dir):
 
 def save_checkpoint(model, tokenizer, checkpoint_base_dir, step, 
                     save_hf_checkpoints=False, hf_checkpoint_repo=None, 
-                    hf_checkpoint_private=False):
+                    hf_checkpoint_private=False, wandb_run_name=None,
+                    wandb_run_id=None, checkpoint_timestamp=None):
     """
     Save a training checkpoint locally and optionally to HuggingFace Hub.
     
@@ -280,6 +414,9 @@ def save_checkpoint(model, tokenizer, checkpoint_base_dir, step,
         save_hf_checkpoints: Whether to push to HuggingFace Hub
         hf_checkpoint_repo: Base HF repo name for checkpoints (e.g., 'username/model-name')
         hf_checkpoint_private: Whether to make HF checkpoint repos private
+        wandb_run_name: WandB run name (for checkpoint tagging)
+        wandb_run_id: WandB run ID (for checkpoint tagging)
+        checkpoint_timestamp: Optional timestamp for checkpoint tag (YYYYMMDD-HHMMSS format)
     
     Returns:
         True if successful, False otherwise
@@ -300,23 +437,64 @@ def save_checkpoint(model, tokenizer, checkpoint_base_dir, step,
         print(f"✓ Checkpoint saved locally to: {ckpt_dir_abs}")
         
         # Optionally push to HuggingFace Hub
-        if save_hf_checkpoints and hf_checkpoint_repo:
-            # Create separate repo for each checkpoint
-            # Format: {hf_checkpoint_repo}-step-{step}
-            # Note: hf_checkpoint_repo should already include timestamp if you want to group by run
-            # Example: "username/model-name-2025-01-15-12-30-45-step-200"
-            hf_ckpt_repo = f"{hf_checkpoint_repo}-step-{step}"
-            print(f"Pushing checkpoint to HuggingFace Hub: {hf_ckpt_repo}")
-            try:
-                model.push_to_hub(hf_ckpt_repo, private=hf_checkpoint_private)
-                tokenizer.push_to_hub(hf_ckpt_repo, private=hf_checkpoint_private)
-                print(f"✓ Checkpoint pushed to HuggingFace Hub: {hf_ckpt_repo}")
-            except Exception as e:
-                print(f"⚠️  Warning: Failed to push checkpoint to HF Hub: {e}")
-                import traceback
-                traceback.print_exc()
-        elif save_hf_checkpoints:
-            print("⚠️  Warning: --save_hf_checkpoints is set but --hf_checkpoint_repo is not specified. Skipping HF Hub upload.")
+        if save_hf_checkpoints:
+            # Generate checkpoint tag if WandB info is available
+            if wandb_run_name and wandb_run_id:
+                checkpoint_tag = generate_checkpoint_tag(
+                    wandb_run_name, wandb_run_id, step, checkpoint_timestamp
+                )
+                
+                # Build structured repo path that includes run_name and run_id for traceability
+                if hf_checkpoint_repo:
+                    hf_ckpt_repo = build_structured_hf_repo_path(
+                        hf_checkpoint_repo, wandb_run_name, wandb_run_id, step, checkpoint_timestamp
+                    )
+                else:
+                    # If no base repo provided, use a default structure
+                    safe_run_name = wandb_run_name.replace(" ", "-").replace("/", "-").replace("_", "-")
+                    while "--" in safe_run_name:
+                        safe_run_name = safe_run_name.replace("--", "-")
+                    safe_run_name = safe_run_name.strip("-")
+                    hf_ckpt_repo = f"checkpoints/llm_metacognition-{safe_run_name}-runid-{wandb_run_id}-step-{step}-{checkpoint_timestamp}"
+                    print("⚠️  Warning: --hf_checkpoint_repo not specified, using default path structure")
+                
+                # Log checkpoint identifier to WandB
+                # Note: Log without step parameter to avoid step ordering issues
+                # Checkpoint names are metadata, not step-aligned metrics
+                try:
+                    import wandb
+                    wandb.log({"hf_checkpoint_name": checkpoint_tag})
+                    # Store checkpoint info in summary with step-specific key
+                    wandb.run.summary[f"checkpoint_step_{step}"] = checkpoint_tag
+                    wandb.run.summary[f"checkpoint_hf_repo_step_{step}"] = hf_ckpt_repo
+                except (ImportError, AttributeError):
+                    pass  # Silently fail if wandb not available
+                
+                print(f"Pushing checkpoint to HuggingFace Hub: {hf_ckpt_repo}")
+                print(f"Checkpoint tag: {checkpoint_tag}")
+                try:
+                    model.push_to_hub(hf_ckpt_repo, private=hf_checkpoint_private)
+                    tokenizer.push_to_hub(hf_ckpt_repo, private=hf_checkpoint_private)
+                    print(f"✓ Checkpoint pushed to HuggingFace Hub: {hf_ckpt_repo}")
+                except Exception as e:
+                    print(f"⚠️  Warning: Failed to push checkpoint to HF Hub: {e}")
+                    import traceback
+                    traceback.print_exc()
+            elif hf_checkpoint_repo:
+                # Fallback to old format if WandB info not available
+                hf_ckpt_repo = f"{hf_checkpoint_repo}-step-{step}"
+                print(f"Pushing checkpoint to HuggingFace Hub: {hf_ckpt_repo}")
+                print("⚠️  Warning: WandB run info not available, using fallback naming")
+                try:
+                    model.push_to_hub(hf_ckpt_repo, private=hf_checkpoint_private)
+                    tokenizer.push_to_hub(hf_ckpt_repo, private=hf_checkpoint_private)
+                    print(f"✓ Checkpoint pushed to HuggingFace Hub: {hf_ckpt_repo}")
+                except Exception as e:
+                    print(f"⚠️  Warning: Failed to push checkpoint to HF Hub: {e}")
+                    import traceback
+                    traceback.print_exc()
+            else:
+                print("⚠️  Warning: --save_hf_checkpoints is set but --hf_checkpoint_repo is not specified and WandB info is not available. Skipping HF Hub upload.")
         
         return True
         

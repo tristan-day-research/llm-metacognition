@@ -38,6 +38,107 @@ from finetune_data_handling import collate_fn
 # Validation and Test Evaluation Functions
 # ============================================================
 
+def evaluate_model(
+    model,
+    tokenizer,
+    dataset,
+    compute_confidence=True,
+    compute_other_confidence=True,
+    loss_type="gaussian_soft_bin_ce",
+    temperature=0.0,
+    num_samples=None,
+    log_file_path=None,
+    use_wandb=False,
+    wandb_project=None,
+    wandb_run_name=None,
+    log_prefix="",
+):
+    """
+    Simplified evaluation function for arbitrary datasets.
+    
+    Wrapper around run_evaluation() that provides a simpler interface
+    without requiring a full args object or training-specific parameters.
+    
+    This is the standalone evaluation function for use outside of training loops.
+    For training-time evaluation, use run_evaluation() instead.
+    
+    WORKFLOW REPLICATION:
+    This function ensures perfect replication of the evaluation workflow from
+    finetune_ECT.py by:
+    - Using the same run_evaluation() function
+    - Using the same prompt building functions (build_multiple_choice_question_prompts, etc.)
+    - Using the same forward pass functions (run_mcq_forward_pass, run_confidence_forward_pass)
+    - Using the same default parameters (temperature=0.0, loss_type defaults, etc.)
+    - Creating a SimpleArgs object that matches the args structure used in training
+    
+    Args:
+        model: Loaded model (can be base model or LoRA-finetuned)
+        tokenizer: Tokenizer for the model
+        dataset: List of dicts with 'question', 'options' (or 'choices'), and 'correct_letter'
+        compute_confidence: If True, compute self-confidence predictions
+        compute_other_confidence: If True, compute other-confidence predictions
+        loss_type: Loss type for evaluation ('gaussian_soft_bin_ce' or 'scalar_confidence_mse')
+        temperature: Temperature for confidence forward pass
+        num_samples: Optional limit on number of samples to evaluate
+        log_file_path: Optional path to log file for per-sample results
+        use_wandb: If True, log results to Weights & Biases (default: False)
+        wandb_project: WandB project name (only used if use_wandb=True)
+        wandb_run_name: WandB run name (only used if use_wandb=True)
+        log_prefix: Prefix to add to log entry "type" field (e.g., "base_" or "finetuned_")
+    
+    Returns:
+        results: dict with evaluation metrics (mcq_accuracy, avg_entropy, etc.)
+    """
+    # Auto-detect device
+    device = next(model.parameters()).device
+    
+    # Initialize WandB if requested
+    if use_wandb:
+        try:
+            import wandb
+            # Check if wandb is already initialized
+            if wandb.run is None:
+                wandb.init(
+                    project=wandb_project or "llm-evaluation",
+                    name=wandb_run_name,
+                    job_type="evaluation"
+                )
+        except (ImportError, AttributeError) as e:
+            print(f"Warning: WandB requested but not available: {e}")
+            use_wandb = False
+    
+    # Create a simple namespace object to pass to run_evaluation()
+    class SimpleArgs:
+        def __init__(self):
+            self.loss_type = loss_type
+            self.temperature = temperature
+            self.save_wandb_artifact = use_wandb
+            self.shuffle_options = False  # Not used in evaluation, but needed for args
+            self.compute_confidence = compute_confidence
+            self.compute_other_confidence = compute_other_confidence
+    
+    args = SimpleArgs()
+    
+    # Note: We skip train_dataset validation checks since this is for arbitrary datasets
+    # Pass None for train_dataset_qids and train_dataset_questions
+    results = run_evaluation(
+        model=model,
+        tokenizer=tokenizer,
+        val_dataset=dataset,
+        device=device,
+        args=args,
+        step_name="evaluation",
+        num_samples=num_samples,
+        log_file_path=log_file_path,
+        step=None,
+        mcq_results_lookup=None,
+        train_dataset_qids=None,  # Skip train dataset validation
+        train_dataset_questions=None,  # Skip train dataset validation
+        log_prefix=log_prefix,
+    )
+    
+    return results
+
 
 def run_evaluation(
     model,
@@ -52,6 +153,7 @@ def run_evaluation(
     mcq_results_lookup=None,
     train_dataset_qids=None,
     train_dataset_questions=None,
+    log_prefix="",
 ):
     """
     Evaluation loop:
@@ -122,7 +224,12 @@ def run_evaluation(
     prerecorded_entropy_values = []  # Pre-recorded entropy from mcq_results_data
 
     # ==================== MAIN LOOP ==========================
-    for i in idxs:
+    total_samples = len(idxs)
+    for idx_in_loop, i in enumerate(idxs):
+        # Progress marker every 100 questions
+        if (idx_in_loop + 1) % 100 == 0:
+            print(f"  Progress: {idx_in_loop + 1}/{total_samples} questions evaluated ({100.0 * (idx_in_loop + 1) / total_samples:.1f}%)")
+        
         batch = val_dataset[i:i+1]    # single-sample batch (list of 1 dict)
 
         # 0. Look up pre-recorded entropy if available (before any option changes)
@@ -191,69 +298,88 @@ def run_evaluation(
         soft_targets = convert_entropy_to_soft_labels(entropy_value).to(device)
 
         # ==================================================
-        # 3. Self Confidence pass
+        # 3. Self Confidence pass (optional)
         # ==================================================
-        conf_prompts = build_self_confidence_prompts(batch, tokenizer)
+        compute_confidence = getattr(args, 'compute_confidence', True)
+        compute_other_confidence = getattr(args, 'compute_other_confidence', True)
+        
+        if compute_confidence:
+            conf_prompts = build_self_confidence_prompts(batch, tokenizer)
 
-        conf_out = run_confidence_forward_pass(
-            model=model,
-            tokenizer=tokenizer,
-            prompts=conf_prompts,
-            device=device,
-            temperature=args.temperature,
-        )
+            conf_out = run_confidence_forward_pass(
+                model=model,
+                tokenizer=tokenizer,
+                prompts=conf_prompts,
+                device=device,
+                temperature=args.temperature,
+            )
 
-        logits8 = conf_out["logits8"][0]
-        expected_confidence_value = conf_out["expected_conf"][0].item()
-        predicted_confidence_letter = conf_out["pred_bins"][0]  # A-H
+            logits8 = conf_out["logits8"][0]
+            expected_confidence_value = conf_out["expected_conf"][0].item()
+            predicted_confidence_letter = conf_out["pred_bins"][0]  # A-H
+        else:
+            # Skip confidence computation - use dummy values
+            logits8 = None
+            expected_confidence_value = 0.0
+            predicted_confidence_letter = None
 
         expected_conf_values.append(expected_confidence_value)
         predicted_confidence_letters.append(predicted_confidence_letter)
 
         # ==================================================
-        # 3.5. Other confidence pass
+        # 3.5. Other confidence pass (optional)
         # ==================================================
-        other_conf_prompts = build_other_confidence_prompts(batch, tokenizer)
+        if compute_other_confidence:
+            other_conf_prompts = build_other_confidence_prompts(batch, tokenizer)
 
-        other_conf_out = run_confidence_forward_pass(
-            model=model,
-            tokenizer=tokenizer,
-            prompts=other_conf_prompts,
-            device=device,
-            temperature=args.temperature,
-        )
+            other_conf_out = run_confidence_forward_pass(
+                model=model,
+                tokenizer=tokenizer,
+                prompts=other_conf_prompts,
+                device=device,
+                temperature=args.temperature,
+            )
 
-        expected_other_confidence_value = other_conf_out["expected_conf"][0].item()
-        predicted_other_confidence_letter = other_conf_out["pred_bins"][0]  # A-H
+            expected_other_confidence_value = other_conf_out["expected_conf"][0].item()
+            predicted_other_confidence_letter = other_conf_out["pred_bins"][0]  # A-H
+        else:
+            # Skip other confidence computation - use dummy values
+            expected_other_confidence_value = 0.0
+            predicted_other_confidence_letter = None
+            
         expected_other_conf_values.append(expected_other_confidence_value)
         predicted_other_confidence_letters.append(predicted_other_confidence_letter)
 
         # ==================================================
-        # 4. Loss
+        # 4. Loss (only if confidence was computed)
         # ==================================================
-        # Prepare inputs based on loss type
-        if args.loss_type == 'scalar_confidence_mse':
-            # For scalar_confidence_mse, pass entropy directly
-            # logits8 is [8], need to unsqueeze to [1, 8] for batch dimension
-            logits8_batch = logits8.unsqueeze(0) if logits8.ndim == 1 else logits8
-            entropy_tensor = torch.tensor([entropy_value], dtype=torch.float32, device=device)
-            loss = compute_loss(logits8_batch, entropy=entropy_tensor, loss_type=args.loss_type, reduction='mean')
-            loss_value = loss.item()
+        if compute_confidence and logits8 is not None:
+            # Prepare inputs based on loss type
+            if args.loss_type == 'scalar_confidence_mse':
+                # For scalar_confidence_mse, pass entropy directly
+                # logits8 is [8], need to unsqueeze to [1, 8] for batch dimension
+                logits8_batch = logits8.unsqueeze(0) if logits8.ndim == 1 else logits8
+                entropy_tensor = torch.tensor([entropy_value], dtype=torch.float32, device=device)
+                loss = compute_loss(logits8_batch, entropy=entropy_tensor, loss_type=args.loss_type, reduction='mean')
+                loss_value = loss.item()
+            else:
+                # For gaussian_soft_bin_ce, pass soft_targets
+                # logits8 is [8], need to unsqueeze to [1, 8] for batch dimension
+                logits8_batch = logits8.unsqueeze(0) if logits8.ndim == 1 else logits8
+                soft_targets_batch = soft_targets.unsqueeze(0) if soft_targets.ndim == 1 else soft_targets
+                loss = compute_loss(logits8_batch, soft_targets=soft_targets_batch, loss_type=args.loss_type, reduction='mean')
+                loss_value = loss.item()
+            loss_values.append(loss_value)
         else:
-            # For gaussian_soft_bin_ce, pass soft_targets
-            # logits8 is [8], need to unsqueeze to [1, 8] for batch dimension
-            logits8_batch = logits8.unsqueeze(0) if logits8.ndim == 1 else logits8
-            soft_targets_batch = soft_targets.unsqueeze(0) if soft_targets.ndim == 1 else soft_targets
-            loss = compute_loss(logits8_batch, soft_targets=soft_targets_batch, loss_type=args.loss_type, reduction='mean')
-            loss_value = loss.item()
-        loss_values.append(loss_value)
+            # Skip loss computation if confidence was not computed
+            loss_values.append(0.0)
 
         # ==================================================
         # 5. Optional per-sample logging
         # ==================================================
         if log_file_path is not None:
             log_entry = {
-                "type": "eval_sample",
+                "type": f"{log_prefix}eval_sample" if log_prefix else "eval_sample",
                 "qid": batch[0].get("qid"),
                 "question": batch[0]["question"],
                 "model_answer": predicted_answer_letter,
@@ -297,32 +423,43 @@ def run_evaluation(
         print(f"  {k}: {pred_dist[k]:4d}  ({pred_dist_pct[k]:6.2f}%)")
 
     # ===========================================================
-    # CONFIDENCE DISTRIBUTION STATS (A–H)
+    # CONFIDENCE DISTRIBUTION STATS (A–H) - only if computed
     # ===========================================================
-    conf_dist = count_dist(predicted_confidence_letters, "ABCDEFGH")
-    conf_dist_pct = {k: (v / n) * 100.0 for k, v in conf_dist.items()}
+    compute_confidence = getattr(args, 'compute_confidence', True)
+    compute_other_confidence = getattr(args, 'compute_other_confidence', True)
+    
+    if compute_confidence:
+        conf_dist = count_dist([l for l in predicted_confidence_letters if l is not None], "ABCDEFGH")
+        conf_dist_pct = {k: (v / n) * 100.0 for k, v in conf_dist.items()}
 
-    # Pretty print confidence distribution
-    print("\n============================================================")
-    print(f"{step_name.upper()} — Self Confidence Prediction Distributions")
-    print("============================================================")
-    print("Model Self Confidence Prediction Distribution (A-H):")
-    for k in "ABCDEFGH":
-        print(f"  {k}: {conf_dist[k]:4d}  ({conf_dist_pct[k]:6.2f}%)")
+        # Pretty print confidence distribution
+        print("\n============================================================")
+        print(f"{step_name.upper()} — Self Confidence Prediction Distributions")
+        print("============================================================")
+        print("Model Self Confidence Prediction Distribution (A-H):")
+        for k in "ABCDEFGH":
+            print(f"  {k}: {conf_dist[k]:4d}  ({conf_dist_pct[k]:6.2f}%)")
+    else:
+        conf_dist = {k: 0 for k in "ABCDEFGH"}
+        conf_dist_pct = {k: 0.0 for k in "ABCDEFGH"}
 
     # ===========================================================
-    # OTHER CONFIDENCE DISTRIBUTION STATS (A–H)
+    # OTHER CONFIDENCE DISTRIBUTION STATS (A–H) - only if computed
     # ===========================================================
-    other_conf_dist = count_dist(predicted_other_confidence_letters, "ABCDEFGH")
-    other_conf_dist_pct = {k: (v / n) * 100.0 for k, v in other_conf_dist.items()}
+    if compute_other_confidence:
+        other_conf_dist = count_dist([l for l in predicted_other_confidence_letters if l is not None], "ABCDEFGH")
+        other_conf_dist_pct = {k: (v / n) * 100.0 for k, v in other_conf_dist.items()}
 
-    # Pretty print other confidence distribution
-    print("\n============================================================")
-    print(f"{step_name.upper()} — Other Confidence Prediction Distributions")
-    print("============================================================")
-    print("Model Other Confidence Prediction Distribution (A-H):")
-    for k in "ABCDEFGH":
-        print(f"  {k}: {other_conf_dist[k]:4d}  ({other_conf_dist_pct[k]:6.2f}%)")
+        # Pretty print other confidence distribution
+        print("\n============================================================")
+        print(f"{step_name.upper()} — Other Confidence Prediction Distributions")
+        print("============================================================")
+        print("Model Other Confidence Prediction Distribution (A-H):")
+        for k in "ABCDEFGH":
+            print(f"  {k}: {other_conf_dist[k]:4d}  ({other_conf_dist_pct[k]:6.2f}%)")
+    else:
+        other_conf_dist = {k: 0 for k in "ABCDEFGH"}
+        other_conf_dist_pct = {k: 0.0 for k in "ABCDEFGH"}
 
     # ===========================================================
     # FINAL METRICS
@@ -333,6 +470,7 @@ def run_evaluation(
         "avg_confidence": float(np.mean(expected_conf_values)),
         "avg_other_confidence": float(np.mean(expected_other_conf_values)),
         "avg_loss": float(np.mean(loss_values)),
+        "loss_type": args.loss_type,  # Log the loss type used for evaluation
         "n_samples": n,
         "correct_answer_distribution_raw": gold_dist,
         "correct_answer_distribution_pct": gold_dist_pct,
@@ -347,18 +485,31 @@ def run_evaluation(
     # Compute additional metrics for wandb
     correctness_arr = np.array(correctness_flags)
     entropy_arr = np.array(entropy_values)
-    conf_arr = np.array(expected_conf_values)
-    other_conf_arr = np.array(expected_other_conf_values)
     
-    # Standard deviation of confidence (mode collapse check)
-    std_conf = float(np.std(conf_arr)) if len(conf_arr) > 1 else 0.0
-    std_other_conf = float(np.std(other_conf_arr)) if len(other_conf_arr) > 1 else 0.0
+    # Only compute confidence metrics if confidence was computed
+    compute_confidence = getattr(args, 'compute_confidence', True)
+    compute_other_confidence = getattr(args, 'compute_other_confidence', True)
+    
+    if compute_confidence:
+        conf_arr = np.array(expected_conf_values)
+        std_conf = float(np.std(conf_arr)) if len(conf_arr) > 1 else 0.0
+    else:
+        conf_arr = np.array([0.0] * len(expected_conf_values))
+        std_conf = 0.0
+    
+    if compute_other_confidence:
+        other_conf_arr = np.array(expected_other_conf_values)
+        std_other_conf = float(np.std(other_conf_arr)) if len(other_conf_arr) > 1 else 0.0
+    else:
+        other_conf_arr = np.array([0.0] * len(expected_other_conf_values))
+        std_other_conf = 0.0
+    
     std_entropy = float(np.std(entropy_arr)) if len(entropy_arr) > 1 else 0.0
     
     # Self live correlation: entropy from live model's output logits correlated with 
     # live model's prediction of its own confidence
     self_live_corr = 0.0
-    if len(conf_arr) > 1 and std_conf > 0.001:
+    if compute_confidence and len(conf_arr) > 1 and std_conf > 0.001:
         try:
             self_live_corr, _ = pearsonr(entropy_arr, conf_arr)
             self_live_corr = float(self_live_corr)
@@ -368,7 +519,7 @@ def run_evaluation(
     # Other live correlation: entropy from live model's output logits correlated with 
     # live model's prediction of 'other's' accuracy on the question
     other_live_corr = 0.0
-    if len(other_conf_arr) > 1 and std_other_conf > 0.001:
+    if compute_other_confidence and len(other_conf_arr) > 1 and std_other_conf > 0.001:
         try:
             other_live_corr, _ = pearsonr(entropy_arr, other_conf_arr)
             other_live_corr = float(other_live_corr)
@@ -391,36 +542,42 @@ def run_evaluation(
         for i, (prerec_ent, conf_val, other_conf_val) in enumerate(zip(prerecorded_entropy_values, expected_conf_values, expected_other_conf_values)):
             if prerec_ent is not None:
                 valid_prerecorded.append(prerec_ent)
-                valid_conf_for_prerecorded.append(conf_val)
-                valid_other_conf_for_prerecorded.append(other_conf_val)
+                if compute_confidence:
+                    valid_conf_for_prerecorded.append(conf_val)
+                if compute_other_confidence:
+                    valid_other_conf_for_prerecorded.append(other_conf_val)
         
         if len(valid_prerecorded) > 1:
             prerecorded_arr = np.array(valid_prerecorded)
-            conf_arr_prerecorded = np.array(valid_conf_for_prerecorded)
-            other_conf_arr_prerecorded = np.array(valid_other_conf_for_prerecorded)
             avg_prerecorded_entropy = float(np.mean(prerecorded_arr))
             std_prerecorded_entropy = float(np.std(prerecorded_arr)) if len(prerecorded_arr) > 1 else 0.0
-            std_conf_prerecorded = float(np.std(conf_arr_prerecorded)) if len(conf_arr_prerecorded) > 1 else 0.0
-            std_other_conf_prerecorded = float(np.std(other_conf_arr_prerecorded)) if len(other_conf_arr_prerecorded) > 1 else 0.0
             
-            if std_prerecorded_entropy > 0.001 and std_conf_prerecorded > 0.001 and len(conf_arr_prerecorded) > 1:
-                try:
-                    self_frozen_corr, _ = pearsonr(prerecorded_arr, conf_arr_prerecorded)
-                    self_frozen_corr = float(self_frozen_corr)
-                except Exception:
-                    self_frozen_corr = 0.0
+            if compute_confidence and len(valid_conf_for_prerecorded) > 1:
+                conf_arr_prerecorded = np.array(valid_conf_for_prerecorded)
+                std_conf_prerecorded = float(np.std(conf_arr_prerecorded)) if len(conf_arr_prerecorded) > 1 else 0.0
+                
+                if std_prerecorded_entropy > 0.001 and std_conf_prerecorded > 0.001 and len(conf_arr_prerecorded) > 1:
+                    try:
+                        self_frozen_corr, _ = pearsonr(prerecorded_arr, conf_arr_prerecorded)
+                        self_frozen_corr = float(self_frozen_corr)
+                    except Exception:
+                        self_frozen_corr = 0.0
             
             # Correlation between pre-recorded entropy and other confidence
-            if std_prerecorded_entropy > 0.001 and std_other_conf_prerecorded > 0.001 and len(other_conf_arr_prerecorded) > 1:
-                try:
-                    other_frozen_corr, _ = pearsonr(prerecorded_arr, other_conf_arr_prerecorded)
-                    other_frozen_corr = float(other_frozen_corr)
-                except Exception:
-                    other_frozen_corr = 0.0
+            if compute_other_confidence and len(valid_other_conf_for_prerecorded) > 1:
+                other_conf_arr_prerecorded = np.array(valid_other_conf_for_prerecorded)
+                std_other_conf_prerecorded = float(np.std(other_conf_arr_prerecorded)) if len(other_conf_arr_prerecorded) > 1 else 0.0
+                
+                if std_prerecorded_entropy > 0.001 and std_other_conf_prerecorded > 0.001 and len(other_conf_arr_prerecorded) > 1:
+                    try:
+                        other_frozen_corr, _ = pearsonr(prerecorded_arr, other_conf_arr_prerecorded)
+                        other_frozen_corr = float(other_frozen_corr)
+                    except Exception:
+                        other_frozen_corr = 0.0
     
     # Calibration: correlation between confidence and correctness
     calibration_corr = 0.0
-    if len(conf_arr) > 1 and std_conf > 0.001:
+    if compute_confidence and len(conf_arr) > 1 and std_conf > 0.001:
         try:
             calibration_corr, _ = pearsonr(conf_arr, correctness_arr)
             calibration_corr = float(calibration_corr)
@@ -430,7 +587,7 @@ def run_evaluation(
     # Log the summary as one blob
     if log_file_path is not None:
         write_jsonl(log_file_path, {
-            "type": "eval_summary",
+            "type": f"{log_prefix}eval_summary" if log_prefix else "eval_summary",
             **results
         })
 

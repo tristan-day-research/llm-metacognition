@@ -1,0 +1,6 @@
+================================================================================
+OUTPUT FILE: finetune_evals/2025-12-05-05-06-43_meta-llama-Meta-Llama-3.1-8B-Instruct_llm_metacognition-wbtl9xqu-step-1280-20251203-224144_random_letters_PopMC_0_difficulty_filtered_test_all_tests_n500.txt
+DETAILED LOG FILE: finetune_evals/2025-12-05-05-06-43_meta-llama-Meta-Llama-3.1-8B-Instruct_llm_metacognition-wbtl9xqu-step-1280-20251203-224144_random_letters_PopMC_0_difficulty_filtered_test_all_tests_n500_detailed.jsonl
+================================================================================
+
+Loading dataset...

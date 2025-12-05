@@ -45,10 +45,14 @@ def compute_soft_labels(logits4, sigma=10.0):
     return weights / weights.sum()
 
 
-def convert_entropy_to_soft_labels(entropy, sigma=10.0):
+def convert_entropy_to_soft_labels(entropy, sigma):
     """
     Convert entropy value to soft 8-bin confidence distribution.
     Handles both Tensor inputs (training) and float inputs (evaluation).
+    
+    Args:
+        entropy: Entropy value (Tensor or float)
+        sigma: Gaussian width in percentage space (REQUIRED - no default to prevent silent errors)
     """
     # Fix: Ensure input is a tensor so we can access .device or operate on it
     if not isinstance(entropy, torch.Tensor):
@@ -163,7 +167,7 @@ def compute_scalar_confidence_mse_loss(logits8, entropy, reduction='mean'):
 
 
 def compute_loss(logits8, soft_targets=None, entropy=None,
-                 loss_type='gaussian_soft_bin_ce', reduction='mean'):
+                 loss_type=None, reduction='mean'):
     """
     Compute loss based on the specified loss type.
     
@@ -171,13 +175,20 @@ def compute_loss(logits8, soft_targets=None, entropy=None,
         logits8: Tensor of shape [B, 8] with logits for confidence bins A-H
         soft_targets: Tensor of shape [B, 8] with soft target distribution (required for gaussian_soft_bin_ce)
         entropy: Tensor of shape [B] with entropy values (required for scalar_confidence_mse)
-        loss_type: Type of loss to compute ('gaussian_soft_bin_ce' or 'scalar_confidence_mse')
+        loss_type: Type of loss to compute ('gaussian_soft_bin_ce' or 'scalar_confidence_mse') - REQUIRED, no default to prevent silent errors
         reduction: 'mean' to average over batch, 'none' to return per-sample losses, 
                   'sum' to sum over batch
     
     Returns:
         Loss tensor depending on reduction
     """
+    # CRITICAL: Require loss_type (no default to prevent silent errors)
+    if loss_type is None:
+        raise ValueError(
+            "loss_type parameter is REQUIRED for compute_loss(). "
+            "Must be either 'gaussian_soft_bin_ce' or 'scalar_confidence_mse'. "
+            "No default value to prevent silent training errors."
+        )
     if loss_type == 'gaussian_soft_bin_ce':
         if soft_targets is None:
             raise ValueError("soft_targets required for gaussian_soft_bin_ce")

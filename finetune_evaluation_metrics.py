@@ -42,6 +42,7 @@ def evaluate_model(
     model,
     tokenizer,
     dataset,
+    sigma,
     compute_confidence=True,
     compute_other_confidence=True,
     loss_type="gaussian_soft_bin_ce",
@@ -75,6 +76,7 @@ def evaluate_model(
         model: Loaded model (can be base model or LoRA-finetuned)
         tokenizer: Tokenizer for the model
         dataset: List of dicts with 'question', 'options' (or 'choices'), and 'correct_letter'
+        sigma: Gaussian width parameter for soft label conversion (REQUIRED - no default to prevent silent errors)
         compute_confidence: If True, compute self-confidence predictions
         compute_other_confidence: If True, compute other-confidence predictions
         loss_type: Loss type for evaluation ('gaussian_soft_bin_ce' or 'scalar_confidence_mse')
@@ -135,6 +137,7 @@ def evaluate_model(
         train_dataset_qids=None,  # Skip train dataset validation
         train_dataset_questions=None,  # Skip train dataset validation
         log_prefix=log_prefix,
+        sigma=sigma,
     )
     
     return results
@@ -154,6 +157,7 @@ def run_evaluation(
     train_dataset_qids=None,
     train_dataset_questions=None,
     log_prefix="",
+    sigma=None,
 ):
     """
     Evaluation loop:
@@ -180,6 +184,7 @@ def run_evaluation(
         val_dataset: Validation or test dataset (NEVER train_dataset)
         train_dataset_qids: Set of qids from train_dataset for validation (optional)
         train_dataset_questions: Set of normalized question texts from train_dataset (optional)
+        sigma: Gaussian width parameter for soft label conversion (REQUIRED - no default to prevent silent errors)
     """
     # Defensive check: ensure we're in eval mode
     model.eval()
@@ -187,6 +192,18 @@ def run_evaluation(
     # Additional defensive check: verify dataset is not empty
     if len(val_dataset) == 0:
         raise ValueError("run_evaluation() received empty dataset - this should not happen")
+    
+    # CRITICAL: Require sigma parameter (no default to prevent silent errors)
+    if sigma is None:
+        # Try to get from args if available
+        if hasattr(args, 'sigma') and args.sigma is not None:
+            sigma = args.sigma
+        else:
+            raise ValueError(
+                "sigma parameter is REQUIRED for run_evaluation(). "
+                "Either pass sigma directly or ensure args.sigma is set. "
+                "No default value to prevent silent training errors."
+            )
     
     # Defensive check: Verify val_dataset doesn't contain any train_dataset questions
     validate_eval_dataset(val_dataset, train_dataset_qids, train_dataset_questions, function_name="run_evaluation")
@@ -295,7 +312,7 @@ def run_evaluation(
         # ==================================================
         # 2. Soft targets
         # ==================================================
-        soft_targets = convert_entropy_to_soft_labels(entropy_value).to(device)
+        soft_targets = convert_entropy_to_soft_labels(entropy_value, sigma=sigma).to(device)
 
         # ==================================================
         # 3. Self Confidence pass (optional)

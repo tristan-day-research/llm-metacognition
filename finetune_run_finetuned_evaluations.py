@@ -51,6 +51,7 @@ def run_finetuned_evaluations(
     base_model: str,
     lora_repo: str,
     dataset_path: str,
+    sigma: float,
     merge: bool = False,
     max_samples: int = None,
     evaluate_base_first: bool = False,
@@ -69,6 +70,7 @@ def run_finetuned_evaluations(
         base_model:  Name of base Llama model.
         lora_repo:   HF repo containing LoRA weights.
         dataset_path: JSONL dataset of {'question','choices','answer'} items.
+        sigma: Gaussian width parameter for soft label conversion (REQUIRED - no default to prevent silent errors).
         merge:       If True, merges LoRA weights into base model.
         max_samples: Optional limit on evaluation samples.
         evaluate_base_first: If True, evaluate base model first, then finetuned model.
@@ -135,6 +137,7 @@ def run_finetuned_evaluations(
             model=base_model_obj,
             tokenizer=base_tokenizer,
             dataset=data,
+            sigma=sigma,
             compute_confidence=compute_confidence,
             compute_other_confidence=compute_other_confidence,
             loss_type=loss_type,
@@ -178,6 +181,7 @@ def run_finetuned_evaluations(
         model=model,
         tokenizer=tokenizer,
         dataset=data,
+        sigma=sigma,
         compute_confidence=compute_confidence,
         compute_other_confidence=compute_other_confidence,
         loss_type=loss_type,
@@ -221,6 +225,8 @@ if __name__ == "__main__":
     parser.add_argument("--loss_type", type=str, default="gaussian_soft_bin_ce",
                        choices=["gaussian_soft_bin_ce", "scalar_confidence_mse"],
                        help="Loss type for evaluation (default: gaussian_soft_bin_ce)")
+    parser.add_argument("--sigma", type=float, required=True,
+                       help="Gaussian width parameter for soft label conversion (REQUIRED - no default to prevent silent errors)")
     parser.add_argument("--log_dir", type=str, default="finetuned_evals",
                        help="Directory to save evaluation logs (default: finetuned_evals)")
 
@@ -230,6 +236,7 @@ if __name__ == "__main__":
         base_model=args.base_model,
         lora_repo=args.lora_repo,
         dataset_path=args.dataset,
+        sigma=args.sigma,
         merge=args.merge,
         max_samples=args.max_samples,
         evaluate_base_first=args.evaluate_base_first,

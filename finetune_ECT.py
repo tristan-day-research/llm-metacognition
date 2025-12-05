@@ -127,7 +127,7 @@ def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=
         entropy = mcq_out["entropy"]  # [B]
 
     # Convert to soft labels
-    soft = convert_entropy_to_soft_labels(entropy)  # [B,8]
+    soft = convert_entropy_to_soft_labels(entropy, sigma=sigma)  # [B,8]
 
     # ----------------------------------------------
     # 2. Confidence forward pass
@@ -355,6 +355,7 @@ def train(args):
         mcq_results_lookup=mcq_results_lookup,
         train_dataset_qids=train_dataset_qids,
         train_dataset_questions=train_dataset_questions,
+        sigma=args.sigma,
     )
 
     print(f"\nBaseline Accuracy: {baseline_metrics['mcq_accuracy']:.4f}")
@@ -423,6 +424,7 @@ def train(args):
                 mcq_results_lookup=mcq_results_lookup,
                 train_dataset_qids=train_dataset_qids,
                 train_dataset_questions=train_dataset_questions,
+                sigma=args.sigma,
             )
 
             print(f"Val Accuracy: {val_metrics['mcq_accuracy']:.4f}")
@@ -473,6 +475,7 @@ def train(args):
         mcq_results_lookup=mcq_results_lookup,
         train_dataset_qids=train_dataset_qids,
         train_dataset_questions=train_dataset_questions,
+        sigma=args.sigma,
     )
 
     print(f"\nFinal Accuracy:  {final_metrics['mcq_accuracy']:.4f}")

@@ -72,8 +72,8 @@ def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=
     # ----------------------------------------------
 
     # ----------------------------------------------
-    # If using frozen teacher. Gets multiple choice answers and the output logit entroy form pre-recorded responses
-    # Welected with --no_use_recorded_responses flag when running this file
+    # If using frozen teacher, gets multiple choice answers and the output logit entroy form pre-recorded responses
+    # This is selected with --no_use_recorded_responses flag when running this file
     # ----------------------------------------------
 
     if args.use_recorded_responses:
@@ -109,7 +109,7 @@ def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=
 
     # ----------------------------------------------
     # If using dynamic teacher: compute entropy live from current model
-    # selected with --use_recorded_responses flag when  running this file
+    # This is  selected with --use_recorded_responses flag when  running this file
     # ----------------------------------------------
 
     else:

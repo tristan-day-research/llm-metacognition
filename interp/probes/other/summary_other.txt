@@ -1,0 +1,35 @@
+================================================================================
+IMPROVED LAYERWISE PROBING - SUMMARY
+================================================================================
+Question Type: other
+
+
+ENTROPY PROBE:
+--------------------------------------------------------------------------------
+  Base Model:
+    Best R²: -0.458 at layer 15
+    Emergence layer: None
+  Finetuned Model:
+    Best R²: 0.028 at layer 18
+    Emergence layer: None
+
+ANSWER PROBE:
+--------------------------------------------------------------------------------
+  Base Model:
+    Best Accuracy: 0.685 at layer 28
+    Emergence layer: 0
+  Finetuned Model:
+    Best Accuracy: 0.700 at layer 20
+    Emergence layer: 0
+    Emergence shift: +0 layers
+
+CORRECTNESS PROBE:
+--------------------------------------------------------------------------------
+  Base Model:
+    Best Accuracy: 0.575 at layer 24
+    Emergence layer: None
+  Finetuned Model:
+    Best Accuracy: 0.580 at layer 27
+    Emergence layer: None
+
+================================================================================

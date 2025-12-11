@@ -20,6 +20,8 @@ build/
 data/
 .checkpoints/
 checkpoints/
+.interp/acvitavations/
+interp/activations/
 
 # Jupyter
 .ipynb_checkpoints/

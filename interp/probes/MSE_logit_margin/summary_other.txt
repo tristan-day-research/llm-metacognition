@@ -1,0 +1,40 @@
+================================================================================
+IMPROVED LAYERWISE PROBING - SUMMARY
+================================================================================
+Question Type: other
+Regression Metric: mse
+
+
+LOGIT_MARGIN PROBE:
+--------------------------------------------------------------------------------
+  Base Model (MSE):
+    Best MSE: 0.087410 at layer 8
+    Emergence layer: None
+  Finetuned Model (MSE):
+    Best MSE: 0.036036 at layer 6
+    Emergence layer: None
+
+ANSWER PROBE:
+--------------------------------------------------------------------------------
+  Base Model:
+    Best Accuracy: 0.775 at layer 25
+    Emergence layer: 0
+    Class distribution (train): [47, 4, 591, 7, 0, 111, 38, 2]
+  Finetuned Model:
+    Best Accuracy: 0.670 at layer 16
+    Emergence layer: 0
+    Emergence shift: +0 layers
+    Class distribution (train): [0, 0, 2, 471, 114, 50, 79, 84]
+
+CORRECTNESS PROBE:
+--------------------------------------------------------------------------------
+  Base Model:
+    Best Accuracy: 0.605 at layer 9
+    Emergence layer: 9
+    Class distribution (train): [429, 371]
+  Finetuned Model:
+    Best Accuracy: 0.560 at layer 9
+    Emergence layer: None
+    Class distribution (train): [335, 465]
+
+================================================================================

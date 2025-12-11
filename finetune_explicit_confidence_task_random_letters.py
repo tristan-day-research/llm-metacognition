@@ -101,7 +101,7 @@ def get_letter_token_ids_simple(tokenizer, letter):
 
 def create_random_letter_mapping(num_letters=4, seed=None):
     """
-    Create a random mapping to N random letters.
+    Create a random mapping to N random letters from the entire alphabet (A-Z).
     
     Args:
         num_letters: 4 for MCQ (A/B/C/D), 8 for confidence (A-H)
@@ -115,16 +115,15 @@ def create_random_letter_mapping(num_letters=4, seed=None):
     
     if num_letters == 4:
         original = ['A', 'B', 'C', 'D']
-        # Exclude A/B/C/D to avoid confusion
-        available_letters = [c for c in 'EFGHIJKLMNOPQRSTUVWXYZ']
     elif num_letters == 8:
         original = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
-        # Exclude A-H to avoid confusion
-        available_letters = [c for c in 'IJKLMNOPQRSTUVWXYZ']
     else:
         raise ValueError(f"num_letters must be 4 or 8, got {num_letters}")
     
-    # Choose random letters
+    # Use all 26 letters of the alphabet
+    available_letters = [c for c in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ']
+    
+    # Choose random letters from the entire alphabet
     random_letters = random.sample(available_letters, num_letters)
     
     # Shuffle positions

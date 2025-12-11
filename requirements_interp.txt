@@ -1,0 +1,12 @@
+# Requirements for interp_collect_activations.py, interp_load_collected_data.py, and interp_inspect_collected_data.py
+
+# Core dependencies
+torch>=2.0.0
+numpy>=1.24.0
+tqdm>=4.65.0
+
+# HuggingFace ecosystem
+transformers>=4.30.0
+datasets>=2.14.0
+peft>=0.5.0
+huggingface-hub>=0.16.0

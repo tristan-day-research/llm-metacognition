@@ -17,7 +17,8 @@ from finetune_utils import (
 )
 from finetune_loss import (
     convert_entropy_to_soft_labels,
-    compute_loss
+    compute_loss,
+    build_soft_targets_from_entropy
 )
 from finetune_prompting import (
     build_multiple_choice_question_prompts,
@@ -158,6 +159,7 @@ def run_evaluation(
     train_dataset_questions=None,
     log_prefix="",
     sigma=None,
+    val_on_frozen=False,
 ):
     """
     Evaluation loop:
@@ -166,7 +168,7 @@ def run_evaluation(
     Never pass train_dataset to this function.
 
     For each sample:
-        1. Run MCQ pass (extract predicted letter + entropy)
+        1. Run MCQ pass (extract predicted letter + entropy) OR use frozen pre-recorded data
         2. Run confidence pass (A–H distribution)
         3. Compute soft targets from entropy
         4. Compute loss
@@ -185,6 +187,7 @@ def run_evaluation(
         train_dataset_qids: Set of qids from train_dataset for validation (optional)
         train_dataset_questions: Set of normalized question texts from train_dataset (optional)
         sigma: Gaussian width parameter for soft label conversion (REQUIRED - no default to prevent silent errors)
+        val_on_frozen: If True, use pre-recorded MCQ answers and entropy from mcq_results_lookup instead of live model
     """
     # Defensive check: ensure we're in eval mode
     model.eval()
@@ -203,6 +206,14 @@ def run_evaluation(
                 "sigma parameter is REQUIRED for run_evaluation(). "
                 "Either pass sigma directly or ensure args.sigma is set. "
                 "No default value to prevent silent training errors."
+            )
+    
+    # Validate val_on_frozen requirements
+    if val_on_frozen:
+        if mcq_results_lookup is None:
+            raise ValueError(
+                "val_on_frozen=True requires mcq_results_lookup to be provided. "
+                "Please provide --mcq_results_data when using --val_on_frozen."
             )
     
     # Defensive check: Verify val_dataset doesn't contain any train_dataset questions
@@ -282,24 +293,88 @@ def run_evaluation(
 
 
         # ==================================================
-        # 1. MCQ pass
+        # 1. MCQ pass (live or frozen)
         # ==================================================
-        mcq_prompts = build_multiple_choice_question_prompts(batch, tokenizer)
-
-        # print("DEBUG mcq_prompts", mcq_prompts)
-
-        mcq_out = run_mcq_forward_pass(
-            model=model,
-            tokenizer=tokenizer,
-            prompts=mcq_prompts,
-            device=device,
-            temperature=0.0,
-        )
-
-        predicted_answer_letter = mcq_out["pred_letters"][0]
-        entropy_value = mcq_out["entropy"][0].item()
-
         correct_answer_letter = batch[0]["correct_letter"]
+        
+        if val_on_frozen:
+            # Use pre-recorded frozen data from mcq_results_lookup
+            qid = batch[0].get("qid")
+            if qid and str(qid) in mcq_results_lookup:
+                frozen_data = mcq_results_lookup[str(qid)]
+                frozen_subject_answer_letter = frozen_data.get("subject_answer")
+                entropy_value = frozen_data.get("entropy")
+                frozen_options = frozen_data.get("options", {})
+                
+                # Validate that we have the required data
+                if frozen_subject_answer_letter is None:
+                    raise ValueError(
+                        f"val_on_frozen=True but missing 'subject_answer' for qid={qid} in mcq_results_lookup. "
+                        f"This should not happen if dataset was properly filtered."
+                    )
+                if entropy_value is None:
+                    raise ValueError(
+                        f"val_on_frozen=True but missing 'entropy' for qid={qid} in mcq_results_lookup. "
+                        f"This should not happen if dataset was properly filtered."
+                    )
+                
+                # CRITICAL: Map frozen answer letter to current option order
+                # The frozen subject_answer is a letter (A-D) that refers to the option order
+                # from when the data was recorded. We need to:
+                # 1. Get the actual option text that the frozen letter refers to
+                # 2. Find which letter that option text corresponds to in the current dataset's option order
+                if frozen_subject_answer_letter in frozen_options:
+                    frozen_answer_text = frozen_options[frozen_subject_answer_letter]
+                    # Find which letter this text corresponds to in the current batch's options
+                    current_options = batch[0]["options"]
+                    predicted_answer_letter = None
+                    for letter, option_text in current_options.items():
+                        if option_text == frozen_answer_text:
+                            predicted_answer_letter = letter
+                            break
+                    
+                    if predicted_answer_letter is None:
+                        # Fallback: if exact text match fails, try normalized comparison
+                        from finetune_data_handling import normalize_text
+                        frozen_answer_normalized = normalize_text(frozen_answer_text)
+                        for letter, option_text in current_options.items():
+                            if normalize_text(option_text) == frozen_answer_normalized:
+                                predicted_answer_letter = letter
+                                break
+                    
+                    if predicted_answer_letter is None:
+                        raise ValueError(
+                            f"val_on_frozen=True: Could not map frozen answer '{frozen_answer_text}' "
+                            f"(from letter '{frozen_subject_answer_letter}') to current options for qid={qid}. "
+                            f"Current options: {list(current_options.values())}"
+                        )
+                else:
+                    raise ValueError(
+                        f"val_on_frozen=True: Frozen subject_answer '{frozen_subject_answer_letter}' "
+                        f"not found in frozen_options for qid={qid}. Frozen options keys: {list(frozen_options.keys())}"
+                    )
+            else:
+                # This should not happen if dataset was properly filtered upfront
+                raise ValueError(
+                    f"val_on_frozen=True but no frozen data found for qid={qid} in mcq_results_lookup. "
+                    f"Dataset should have been filtered to only include questions with pre-recorded results."
+                )
+        else:
+            # Use live model (current behavior)
+            mcq_prompts = build_multiple_choice_question_prompts(batch, tokenizer)
+
+            # print("DEBUG mcq_prompts", mcq_prompts)
+
+            mcq_out = run_mcq_forward_pass(
+                model=model,
+                tokenizer=tokenizer,
+                prompts=mcq_prompts,
+                device=device,
+                temperature=0.0,
+            )
+
+            predicted_answer_letter = mcq_out["pred_letters"][0]
+            entropy_value = mcq_out["entropy"][0].item()
 
         predicted_letters.append(predicted_answer_letter)
         correct_letters.append(correct_answer_letter)
@@ -312,7 +387,12 @@ def run_evaluation(
         # ==================================================
         # 2. Soft targets
         # ==================================================
-        soft_targets = convert_entropy_to_soft_labels(entropy_value, sigma=sigma).to(device)
+        # entropy_value is a scalar float from MCQ evaluation or prerecorded data
+        # Convert to tensor and use the resolved sigma (from parameter or args.sigma)
+        entropy_tensor = torch.tensor([entropy_value], dtype=torch.float32, device=device)
+        soft_targets = build_soft_targets_from_entropy(entropy_tensor, sigma=sigma)
+ 
+
 
         # ==================================================
         # 3. Self Confidence pass (optional)

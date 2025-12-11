@@ -21,7 +21,7 @@ from finetune_utils import (
     validate_train_batch
 )
 from finetune_loss import (
-    convert_entropy_to_soft_labels,
+    build_soft_targets_from_entropy,
     compute_loss
 )
 from finetune_prompting import (
@@ -127,7 +127,9 @@ def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=
         entropy = mcq_out["entropy"]  # [B]
 
     # Convert to soft labels
-    soft = convert_entropy_to_soft_labels(entropy, sigma=sigma)  # [B,8]
+
+    soft = build_soft_targets_from_entropy(entropy, sigma=sigma)
+
 
     # ----------------------------------------------
     # 2. Confidence forward pass
@@ -140,7 +142,7 @@ def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=
         tokenizer=tokenizer,
         prompts=conf_prompts,
         device=device,
-        temperature=0.0,
+        temperature=args.temperature,
         requires_grad=True,  # Need gradients for training
     )
 
@@ -217,10 +219,23 @@ def train(args):
             val_dataset = filter_dataset_by_mcq_results(
                 val_dataset, mcq_results_lookup, dataset_name="validation"
             )
+        
+        # Filter validation dataset if using frozen validation
+        if args.val_on_frozen:
+            val_dataset = filter_dataset_by_mcq_results(
+                val_dataset, mcq_results_lookup, dataset_name="validation"
+            )
     elif args.use_recorded_responses:
         raise ValueError(
             "--use_recorded_responses requires --mcq_results_data to be specified"
         )
+    
+    # Validate val_on_frozen requirements
+    if args.val_on_frozen:
+        if args.mcq_results_data is None:
+            raise ValueError(
+                "--val_on_frozen requires --mcq_results_data to be specified"
+            )
 
     print(f"\n✓ Training dataset loaded: {len(train_dataset)} samples")
     print(f"✓ Validation dataset loaded: {len(val_dataset)} samples")
@@ -289,6 +304,11 @@ def train(args):
         print(f"✓ Using FROZEN TEACHER (pre-recorded responses)")
     else:
         print(f"✓ Using DYNAMIC TEACHER (current model)")
+    
+    if args.val_on_frozen:
+        print(f"✓ Validation mode: FROZEN (pre-recorded MCQ answers and entropy)")
+    else:
+        print(f"✓ Validation mode: LIVE (current model's MCQ answers and entropy)")
 
     # Optimizer ------------------------------------------------------
     optimizer = torch.optim.AdamW(
@@ -305,6 +325,14 @@ def train(args):
     wandb_init_timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     
     if args.save_wandb_artifact:
+        # Auto-generate run name with current date if not provided
+        if args.wandb_run_name is None:
+            model_name_safe = args.model_name.replace("/", "-").replace("_", "-")
+            args.wandb_run_name = f"{wandb_init_timestamp}_{model_name_safe}_ect"
+        else:
+            # Prepend date to provided name to ensure it's current
+            args.wandb_run_name = f"{wandb_init_timestamp}_{args.wandb_run_name}"
+        
         wandb_run = wandb.init(
             project=args.wandb_project,
             name=args.wandb_run_name,
@@ -356,6 +384,7 @@ def train(args):
         train_dataset_qids=train_dataset_qids,
         train_dataset_questions=train_dataset_questions,
         sigma=args.sigma,
+        val_on_frozen=args.val_on_frozen,
     )
 
     print(f"\nBaseline Accuracy: {baseline_metrics['mcq_accuracy']:.4f}")
@@ -379,6 +408,7 @@ def train(args):
         # Train step 
         # -----------------------------
         optimizer.zero_grad()
+
         loss = train_step(
             model=model,
             tokenizer=tokenizer,
@@ -425,6 +455,7 @@ def train(args):
                 train_dataset_qids=train_dataset_qids,
                 train_dataset_questions=train_dataset_questions,
                 sigma=args.sigma,
+                val_on_frozen=args.val_on_frozen,
             )
 
             print(f"Val Accuracy: {val_metrics['mcq_accuracy']:.4f}")
@@ -476,6 +507,7 @@ def train(args):
         train_dataset_qids=train_dataset_qids,
         train_dataset_questions=train_dataset_questions,
         sigma=args.sigma,
+        val_on_frozen=args.val_on_frozen,
     )
 
     print(f"\nFinal Accuracy:  {final_metrics['mcq_accuracy']:.4f}")
@@ -606,6 +638,17 @@ def parse_args():
         action="store_false",
         help="Disable data leakage checks (not recommended)"
     )
+    
+    parser.add_argument(
+        "--val_on_frozen", action="store_true", default=None,
+        help=("Use pre-recorded MCQ answers and entropy for validation "
+              "(frozen teacher validation).")
+    )
+    parser.add_argument(
+        "--val_on_live", action="store_true", default=None,
+        help=("Use live model's MCQ answers and entropy for validation "
+              "(dynamic teacher validation, default behavior).")
+    )
 
 
     # -----------------------
@@ -670,6 +713,21 @@ def parse_args():
             "Exactly one of --use_recorded_responses or --no_use_recorded_responses must be specified. "
             "You must explicitly choose whether to use recorded responses (frozen teacher) or live responses (dynamic teacher)."
         )
+    
+    # Validate that exactly one of --val_on_frozen or --val_on_live is set
+    if args.val_on_frozen is None and args.val_on_live is None:
+        parser.error(
+            "Exactly one of --val_on_frozen or --val_on_live must be specified. "
+            "You must explicitly choose whether to validate on frozen (pre-recorded) or live (current model) responses."
+        )
+    if args.val_on_frozen and args.val_on_live:
+        parser.error(
+            "Cannot specify both --val_on_frozen and --val_on_live. "
+            "You must choose exactly one validation mode."
+        )
+    
+    # Set val_on_frozen boolean for easier use
+    args.val_on_frozen = args.val_on_frozen if args.val_on_frozen else False
     
     return args
 

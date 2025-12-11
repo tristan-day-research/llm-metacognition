@@ -2,7 +2,7 @@
 run_finetuned_evaluations.py
 
 Utility script/module to:
-  ✓ Load Tristan's finetuned (LoRA) model using load_finetuned_model()
+  ✓ Load finetuned (LoRA) model using load_finetuned_model()
   ✓ Optionally evaluate base (un-finetuned) model first for comparison
   ✓ Run evaluate_model() from finetune_evaluation_metrics.py
   ✓ Evaluate any dataset in PopMC/SimpleMC/TriviaMC/DelegateGame format
@@ -24,7 +24,7 @@ Usage example:
 
     results = run_finetuned_evaluations(
         base_model="meta-llama/Meta-Llama-3.1-8B-Instruct",
-        lora_repo="Tristan-Day/llama_3.1_finetuned",
+        lora_repo="",
         dataset_path="data/SimpleMC.jsonl",
         merge=True,
         evaluate_base_first=True

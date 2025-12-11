@@ -1,14 +1,14 @@
 """
 finetuned_model_loader.py
 
-Reusable module for loading Tristan's LoRA-finetuned Llama models.
+Reusable module for loading LoRA-finetuned Llama models.
 
 This module provides clean, importable functions:
 
     from finetuned_model_loader import load_finetuned_model
     model, tokenizer = load_finetuned_model(
         base_model="meta-llama/Meta-Llama-3.1-8B-Instruct",
-        lora_repo="Tristan-Day/llama_3.1_finetuned",
+        lora_repo=",
         merge=True
     )
 
@@ -30,7 +30,7 @@ def load_finetuned_model(base_model: str, lora_repo: str, merge: bool = False):
     
     Supports both local paths and HuggingFace repositories:
     - Local path: e.g., "local_checkpoints/2025-12-03-22-26-59_checkpoints/ckpt_step_1280"
-    - HF repo: e.g., "Tristan-Day/llama_3.1_finetuned"
+    - HF repo: e.g., "USER/llama_3.1_finetuned"
     - Auto-detects by checking if path exists locally first
 
     Args:
@@ -181,7 +181,7 @@ def load_finetuned_checkpoint(base_model: str, lora_repo: str, checkpoint_folder
     Example:
         model, tokenizer = load_finetuned_checkpoint(
             base_model="meta-llama/Meta-Llama-3.1-8B-Instruct",
-            lora_repo="Tristan-Day/llama_3.1_finetuned",
+            lora_repo="",
             checkpoint_folder="step_2000",
             merge=True,
         )

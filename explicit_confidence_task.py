@@ -878,7 +878,7 @@ def main(model_dataset_dict, temp):
 if __name__ == "__main__":
     model_dataset_dict = {
         # "llama-3.3-70b-instruct": ["PopMC_0_difficulty_filtered"], # Don't forget PopMC_0_difficulty_filtered vs PopMC
-        "llama-3.1-8b-instruct": ["PopMC_0_difficulty_filtered"], # Don't forget PopMC_0_difficulty_filtered vs PopMC
+        "llama-3.3-70b-instruct": ["PopMC_0_difficulty_filtered"], # Don't forget PopMC_0_difficulty_filtered vs PopMC
 
         }
     main(model_dataset_dict, temp=1.0)

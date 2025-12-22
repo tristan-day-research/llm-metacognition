@@ -54,6 +54,8 @@ def evaluate_model(
     wandb_project=None,
     wandb_run_name=None,
     log_prefix="",
+    confidence_letter_scheme="A-H",
+    confidence_letter_random_seed=None,
 ):
     """
     Simplified evaluation function for arbitrary datasets.
@@ -88,6 +90,8 @@ def evaluate_model(
         wandb_project: WandB project name (only used if use_wandb=True)
         wandb_run_name: WandB run name (only used if use_wandb=True)
         log_prefix: Prefix to add to log entry "type" field (e.g., "base_" or "finetuned_")
+        confidence_letter_scheme: Letter scheme for confidence bins ('A-H', 'S-Z', or 'random', default: 'A-H')
+        confidence_letter_random_seed: Random seed for 'random' scheme (optional)
     
     Returns:
         results: dict with evaluation metrics (mcq_accuracy, avg_entropy, etc.)
@@ -119,8 +123,17 @@ def evaluate_model(
             self.shuffle_options = False  # Not used in evaluation, but needed for args
             self.compute_confidence = compute_confidence
             self.compute_other_confidence = compute_other_confidence
+            self.confidence_letter_scheme = confidence_letter_scheme
+            self.confidence_letter_random_seed = confidence_letter_random_seed
     
     args = SimpleArgs()
+    
+    # Generate confidence letter mapping
+    from finetune_prompting import get_confidence_letter_mapping
+    confidence_letter_mapping = get_confidence_letter_mapping(
+        confidence_letter_scheme,
+        seed=confidence_letter_random_seed
+    )
     
     # Note: We skip train_dataset validation checks since this is for arbitrary datasets
     # Pass None for train_dataset_qids and train_dataset_questions
@@ -139,6 +152,7 @@ def evaluate_model(
         train_dataset_questions=None,  # Skip train dataset validation
         log_prefix=log_prefix,
         sigma=sigma,
+        confidence_letter_mapping=confidence_letter_mapping,
     )
     
     return results
@@ -160,6 +174,7 @@ def run_evaluation(
     log_prefix="",
     sigma=None,
     val_on_frozen=False,
+    confidence_letter_mapping=None,
 ):
     """
     Evaluation loop:
@@ -188,6 +203,9 @@ def run_evaluation(
         train_dataset_questions: Set of normalized question texts from train_dataset (optional)
         sigma: Gaussian width parameter for soft label conversion (REQUIRED - no default to prevent silent errors)
         val_on_frozen: If True, use pre-recorded MCQ answers and entropy from mcq_results_lookup instead of live model
+        confidence_letter_mapping: Optional dict mapping A-H (internal) to display letters.
+                                  If None, will try to get from args.confidence_letter_mapping or
+                                  generate from args.confidence_letter_scheme.
     """
     # Defensive check: ensure we're in eval mode
     model.eval()
@@ -207,6 +225,21 @@ def run_evaluation(
                 "Either pass sigma directly or ensure args.sigma is set. "
                 "No default value to prevent silent training errors."
             )
+    
+    # Get confidence letter mapping from args if not provided
+    if confidence_letter_mapping is None:
+        if hasattr(args, 'confidence_letter_mapping') and args.confidence_letter_mapping is not None:
+            confidence_letter_mapping = args.confidence_letter_mapping
+        elif hasattr(args, 'confidence_letter_scheme') and args.confidence_letter_scheme is not None:
+            from finetune_prompting import get_confidence_letter_mapping
+            confidence_letter_mapping = get_confidence_letter_mapping(
+                args.confidence_letter_scheme,
+                seed=getattr(args, 'confidence_letter_random_seed', None)
+            )
+        else:
+            # Default to A-H if nothing specified
+            from finetune_prompting import get_confidence_letter_mapping
+            confidence_letter_mapping = get_confidence_letter_mapping("A-H")
     
     # Validate val_on_frozen requirements
     if val_on_frozen:
@@ -247,8 +280,8 @@ def run_evaluation(
     loss_values = []
     predicted_letters = []
     correct_letters = []
-    predicted_confidence_letters = []  # A-H confidence predictions (self)
-    predicted_other_confidence_letters = []  # A-H confidence predictions (other)
+    predicted_confidence_letters = []  # Display letter confidence predictions (self) (e.g., S-Z)
+    predicted_other_confidence_letters = []  # Display letter confidence predictions (other) (e.g., S-Z)
     prerecorded_entropy_values = []  # Pre-recorded entropy from mcq_results_data
 
     # ==================== MAIN LOOP ==========================
@@ -401,7 +434,7 @@ def run_evaluation(
         compute_other_confidence = getattr(args, 'compute_other_confidence', True)
         
         if compute_confidence:
-            conf_prompts = build_self_confidence_prompts(batch, tokenizer)
+            conf_prompts = build_self_confidence_prompts(batch, tokenizer, confidence_letter_mapping)
 
             conf_out = run_confidence_forward_pass(
                 model=model,
@@ -409,11 +442,12 @@ def run_evaluation(
                 prompts=conf_prompts,
                 device=device,
                 temperature=args.temperature,
+                confidence_letter_mapping=confidence_letter_mapping,
             )
 
             logits8 = conf_out["logits8"][0]
             expected_confidence_value = conf_out["expected_conf"][0].item()
-            predicted_confidence_letter = conf_out["pred_bins"][0]  # A-H
+            predicted_confidence_letter = conf_out["pred_bins"][0]  # Display letter (e.g., S-Z)
         else:
             # Skip confidence computation - use dummy values
             logits8 = None
@@ -427,7 +461,7 @@ def run_evaluation(
         # 3.5. Other confidence pass (optional)
         # ==================================================
         if compute_other_confidence:
-            other_conf_prompts = build_other_confidence_prompts(batch, tokenizer)
+            other_conf_prompts = build_other_confidence_prompts(batch, tokenizer, confidence_letter_mapping)
 
             other_conf_out = run_confidence_forward_pass(
                 model=model,
@@ -435,10 +469,11 @@ def run_evaluation(
                 prompts=other_conf_prompts,
                 device=device,
                 temperature=args.temperature,
+                confidence_letter_mapping=confidence_letter_mapping,
             )
 
             expected_other_confidence_value = other_conf_out["expected_conf"][0].item()
-            predicted_other_confidence_letter = other_conf_out["pred_bins"][0]  # A-H
+            predicted_other_confidence_letter = other_conf_out["pred_bins"][0]  # Display letter (e.g., S-Z)
         else:
             # Skip other confidence computation - use dummy values
             expected_other_confidence_value = 0.0
@@ -481,7 +516,7 @@ def run_evaluation(
                 "question": batch[0]["question"],
                 "model_answer": predicted_answer_letter,
                 "correct_answer": correct_answer_letter,
-                "predicted_confidence_letter": predicted_confidence_letter,  # A-H
+                "predicted_confidence_letter": predicted_confidence_letter,  # Display letter (e.g., S-Z)
                 "entropy": entropy_value,
                 "expected_confidence": expected_confidence_value,
                 "expected_other_confidence": expected_other_confidence_value,
@@ -520,43 +555,51 @@ def run_evaluation(
         print(f"  {k}: {pred_dist[k]:4d}  ({pred_dist_pct[k]:6.2f}%)")
 
     # ===========================================================
-    # CONFIDENCE DISTRIBUTION STATS (A–H) - only if computed
+    # CONFIDENCE DISTRIBUTION STATS - only if computed
+    # Use display letters from confidence_letter_mapping
     # ===========================================================
     compute_confidence = getattr(args, 'compute_confidence', True)
     compute_other_confidence = getattr(args, 'compute_other_confidence', True)
     
+    # Get display letters from confidence_letter_mapping
+    display_letters = [confidence_letter_mapping[chr(ord('A') + i)] for i in range(8)]
+    display_letters_str = ''.join(display_letters)
+    
     if compute_confidence:
-        conf_dist = count_dist([l for l in predicted_confidence_letters if l is not None], "ABCDEFGH")
+        # Count using display letters (which are what's actually stored)
+        conf_dist = count_dist([l for l in predicted_confidence_letters if l is not None], display_letters_str)
         conf_dist_pct = {k: (v / n) * 100.0 for k, v in conf_dist.items()}
 
-        # Pretty print confidence distribution
+        # Pretty print confidence distribution using display letters
         print("\n============================================================")
         print(f"{step_name.upper()} — Self Confidence Prediction Distributions")
         print("============================================================")
-        print("Model Self Confidence Prediction Distribution (A-H):")
-        for k in "ABCDEFGH":
+        print(f"Model Self Confidence Prediction Distribution ({display_letters_str}):")
+        for k in display_letters_str:
             print(f"  {k}: {conf_dist[k]:4d}  ({conf_dist_pct[k]:6.2f}%)")
     else:
-        conf_dist = {k: 0 for k in "ABCDEFGH"}
-        conf_dist_pct = {k: 0.0 for k in "ABCDEFGH"}
+        conf_dist = {k: 0 for k in display_letters_str}
+        conf_dist_pct = {k: 0.0 for k in display_letters_str}
 
     # ===========================================================
-    # OTHER CONFIDENCE DISTRIBUTION STATS (A–H) - only if computed
+    # OTHER CONFIDENCE DISTRIBUTION STATS - only if computed
+    # Use display letters from confidence_letter_mapping
     # ===========================================================
     if compute_other_confidence:
-        other_conf_dist = count_dist([l for l in predicted_other_confidence_letters if l is not None], "ABCDEFGH")
+        # Count using display letters (which are what's actually stored)
+        other_conf_dist = count_dist([l for l in predicted_other_confidence_letters if l is not None], display_letters_str)
         other_conf_dist_pct = {k: (v / n) * 100.0 for k, v in other_conf_dist.items()}
 
-        # Pretty print other confidence distribution
+        # Pretty print other confidence distribution using display letters
         print("\n============================================================")
         print(f"{step_name.upper()} — Other Confidence Prediction Distributions")
         print("============================================================")
-        print("Model Other Confidence Prediction Distribution (A-H):")
-        for k in "ABCDEFGH":
+        print(f"Model Other Confidence Prediction Distribution ({display_letters_str}):")
+        for k in display_letters_str:
             print(f"  {k}: {other_conf_dist[k]:4d}  ({other_conf_dist_pct[k]:6.2f}%)")
     else:
-        other_conf_dist = {k: 0 for k in "ABCDEFGH"}
-        other_conf_dist_pct = {k: 0.0 for k in "ABCDEFGH"}
+        other_conf_dist = {k: 0 for k in display_letters_str}
+        other_conf_dist_pct = {k: 0.0 for k in display_letters_str}
 
     # ===========================================================
     # FINAL METRICS
@@ -723,12 +766,12 @@ def run_evaluation(
                 wandb_metrics[f"{prefix}/pred_dist_{letter}_pct"] = pred_dist_pct[letter]
                 wandb_metrics[f"{prefix}/correct_dist_{letter}_pct"] = gold_dist_pct[letter]
             
-            # Add self confidence distribution percentages (A-H)
-            for letter in "ABCDEFGH":
+            # Add self confidence distribution percentages (using display letters)
+            for letter in display_letters_str:
                 wandb_metrics[f"{prefix}/self_conf_{letter}"] = conf_dist_pct[letter]
             
-            # Add other confidence distribution percentages (A-H)
-            for letter in "ABCDEFGH":
+            # Add other confidence distribution percentages (using display letters)
+            for letter in display_letters_str:
                 wandb_metrics[f"{prefix}/other_conf_{letter}"] = other_conf_dist_pct[letter]
             
             # Add step if provided

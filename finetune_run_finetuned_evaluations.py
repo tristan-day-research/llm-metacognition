@@ -61,6 +61,8 @@ def run_finetuned_evaluations(
     compute_other_confidence: bool = True,
     loss_type: str = "gaussian_soft_bin_ce",
     log_dir: str = "finetuned_evals",
+    confidence_letter_scheme: str = "A-H",
+    confidence_letter_random_seed: int = None,
 ):
     """
     Load finetuned model + tokenizer and run full evaluation pipeline
@@ -80,6 +82,8 @@ def run_finetuned_evaluations(
         compute_other_confidence: If True, compute other-confidence predictions.
         loss_type: Loss type for evaluation ('gaussian_soft_bin_ce' or 'scalar_confidence_mse').
         log_dir: Directory to save evaluation logs (default: "finetuned_evals").
+        confidence_letter_scheme: Letter scheme for confidence bins ('A-H', 'S-Z', or 'random').
+        confidence_letter_random_seed: Random seed for 'random' scheme (optional).
 
     Returns:
         results: dict with evaluation metrics. If evaluate_base_first=True,
@@ -147,6 +151,8 @@ def run_finetuned_evaluations(
             wandb_project=wandb_project,
             wandb_run_name=f"{dataset_name}_base",
             log_prefix="instruct_",
+            confidence_letter_scheme=confidence_letter_scheme,
+            confidence_letter_random_seed=confidence_letter_random_seed,
         )
         
         results['base'] = base_results
@@ -191,6 +197,8 @@ def run_finetuned_evaluations(
         wandb_project=wandb_project,
         wandb_run_name=f"{dataset_name}_finetuned",
         log_prefix="finetuned_",
+        confidence_letter_scheme=confidence_letter_scheme,
+        confidence_letter_random_seed=confidence_letter_random_seed,
     )
     
     if evaluate_base_first:
@@ -229,6 +237,11 @@ if __name__ == "__main__":
                        help="Gaussian width parameter for soft label conversion (REQUIRED - no default to prevent silent errors)")
     parser.add_argument("--log_dir", type=str, default="finetuned_evals",
                        help="Directory to save evaluation logs (default: finetuned_evals)")
+    parser.add_argument("--confidence_letter_scheme", type=str, default="A-H",
+                       choices=["A-H", "S-Z", "random"],
+                       help="Letter scheme for confidence bins (default: A-H)")
+    parser.add_argument("--confidence_letter_random_seed", type=int, default=None,
+                       help="Random seed for 'random' confidence_letter_scheme (optional)")
 
     args = parser.parse_args()
 
@@ -246,6 +259,8 @@ if __name__ == "__main__":
         compute_other_confidence=not args.no_other_confidence,
         loss_type=args.loss_type,
         log_dir=args.log_dir,
+        confidence_letter_scheme=args.confidence_letter_scheme,
+        confidence_letter_random_seed=args.confidence_letter_random_seed,
     )
 
     print("\n" + "="*60)

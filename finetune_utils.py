@@ -152,21 +152,17 @@ def build_structured_hf_repo_path(hf_checkpoint_repo, run_name, run_id, step, ti
     """
     Build a structured HuggingFace repo path for checkpoints that maps 1:1 to WandB run.
     
-    Format: {username}/llm_metacognition-{run_name}-runid-{run_id}-step-{step}-{timestamp}
-    
-    Note: HuggingFace Hub doesn't support nested paths in repo names, so we use
-    hyphens to create a flat but structured name that includes both run_name and run_id
-    for full traceability to WandB.
+    Format: {username}/ect_{timestamp}_{runid}_step_{step}
     
     Args:
         hf_checkpoint_repo: Base HF repo name (e.g., 'username/model-name' or 'username/repo')
-        run_name: WandB run name (human-readable)
+        run_name: WandB run name (human-readable) - not used in repo name
         run_id: WandB run ID (unique stable ID)
         step: Training step number (int or string like "final")
         timestamp: Timestamp string (YYYYMMDD-HHMMSS format)
     
     Returns:
-        Full HF repo path string in format: username/llm_metacognition-{run_name}-runid-{run_id}-step-{step}-{timestamp}
+        Full HF repo path string in format: username/ect_{timestamp}_{runid}_step_{step}
     """
     # Extract username from base repo if provided
     if hf_checkpoint_repo and "/" in hf_checkpoint_repo:
@@ -176,20 +172,25 @@ def build_structured_hf_repo_path(hf_checkpoint_repo, run_name, run_id, step, ti
         # This shouldn't happen in practice, but handle gracefully
         username = "checkpoints"
     
-    # Sanitize run_name for use in repo names (replace spaces/special chars with hyphens)
-    safe_run_name = run_name.replace(" ", "-").replace("/", "-").replace("_", "-")
-    # Remove any consecutive hyphens
-    while "--" in safe_run_name:
-        safe_run_name = safe_run_name.replace("--", "-")
-    # Remove leading/trailing hyphens
-    safe_run_name = safe_run_name.strip("-")
+    # Convert step to string and sanitize (remove any special chars that might cause issues)
+    step_str = str(step).replace("/", "-").replace(" ", "-")
     
-    # Convert step to string
-    step_str = str(step)
+    # Replace hyphen in timestamp with underscore for consistency
+    timestamp_clean = timestamp.replace("-", "_")
     
-    # Build flat structured path that includes both run_name and run_id for traceability
-    # Format: username/llm_metacognition-{run_name}-runid-{run_id}-step-{step}-{timestamp}
-    structured_path = f"{username}/llm_metacognition-{safe_run_name}-runid-{run_id}-step-{step_str}-{timestamp}"
+    # Build simple structured path: username/ect_{timestamp}_{runid}_step_{step}
+    # Use underscores for cleaner separation
+    structured_path = f"{username}/ect_{timestamp_clean}_{run_id}_step_{step_str}"
+    
+    # Ensure it meets HF requirements: max 96 chars, no leading/trailing '-' or '.'
+    # Truncate if necessary (though this format should be well under 96 chars)
+    if len(structured_path) > 96:
+        # Truncate timestamp if needed (shouldn't happen, but be safe)
+        max_timestamp_len = 96 - len(f"{username}/ect_") - len(f"_{run_id}_step_{step_str}")
+        if max_timestamp_len < len(timestamp_clean):
+            timestamp_clean = timestamp_clean[:max_timestamp_len]
+            structured_path = f"{username}/ect_{timestamp_clean}_{run_id}_step_{step_str}"
+    
     return structured_path
 
 
@@ -272,12 +273,15 @@ def save_model_final(model, tokenizer, output_dir, hf_repo=None,
     if save_wandb_artifact:
         try:
             import wandb
+            # Use passed wandb_run_name if available, otherwise try wandb.run.name
+            artifact_name = f"model-{wandb_run_name}" if wandb_run_name else f"model-{wandb.run.name if wandb.run else 'unknown'}"
+            
             artifact = wandb.Artifact(
-                name=f"model-{wandb.run.name}",
+                name=artifact_name,
                 type="model",
                 description=(
                     f"Fine-tuned ECT model with LoRA. "
-                    f"Config: {wandb.config}"
+                    f"Step: {step if step is not None else 'unknown'}"
                 )
             )
             artifact.add_dir(output_dir)
@@ -451,11 +455,8 @@ def save_checkpoint(model, tokenizer, checkpoint_base_dir, step,
                     )
                 else:
                     # If no base repo provided, use a default structure
-                    safe_run_name = wandb_run_name.replace(" ", "-").replace("/", "-").replace("_", "-")
-                    while "--" in safe_run_name:
-                        safe_run_name = safe_run_name.replace("--", "-")
-                    safe_run_name = safe_run_name.strip("-")
-                    hf_ckpt_repo = f"checkpoints/llm_metacognition-{safe_run_name}-runid-{wandb_run_id}-step-{step}-{checkpoint_timestamp}"
+                    timestamp_clean = checkpoint_timestamp.replace("-", "_") if checkpoint_timestamp else datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+                    hf_ckpt_repo = f"checkpoints/ect_{timestamp_clean}_{wandb_run_id}_step_{step}"
                     print("⚠️  Warning: --hf_checkpoint_repo not specified, using default path structure")
                 
                 # Log checkpoint identifier to WandB

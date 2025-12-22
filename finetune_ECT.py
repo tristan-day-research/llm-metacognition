@@ -28,7 +28,8 @@ from finetune_prompting import (
     build_self_confidence_prompts,
     build_multiple_choice_question_prompts,
     run_mcq_forward_pass,
-    run_confidence_forward_pass
+    run_confidence_forward_pass,
+    get_confidence_letter_mapping
 )
 from finetune_data_handling import (
     load_mcq_results_data,
@@ -135,7 +136,10 @@ def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=
     # 2. Confidence forward pass
     # ----------------------------------------------
 
-    conf_prompts = build_self_confidence_prompts(batch, tokenizer)
+    # Get confidence letter mapping from args (passed from train function)
+    confidence_letter_mapping = args.confidence_letter_mapping
+
+    conf_prompts = build_self_confidence_prompts(batch, tokenizer, confidence_letter_mapping)
 
     conf_out = run_confidence_forward_pass(
         model=model,
@@ -144,6 +148,7 @@ def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=
         device=device,
         temperature=args.temperature,
         requires_grad=True,  # Need gradients for training
+        confidence_letter_mapping=confidence_letter_mapping,
     )
 
     logits8 = conf_out["logits8"]  # [B, 8]
@@ -192,6 +197,43 @@ def train(args):
     os.makedirs(log_dir, exist_ok=True)
     model_name_safe = args.model_name.replace("/", "-").replace("_", "-")
     log_file_path = os.path.join(log_dir, f"{timestamp}_{model_name_safe}_evaluation_metrics.jsonl")
+    
+    # Setup print log file to capture all printed output
+    print_log_path = os.path.join(log_dir, f"{timestamp}_{model_name_safe}_print_output.txt")
+    print_log_file = open(print_log_path, 'w', encoding='utf-8')
+    
+    # Write header to file immediately to ensure it's created
+    header = f"Training Run Print Output Log\n"
+    header += f"Started: {timestamp}\n"
+    header += f"Model: {args.model_name}\n"
+    header += f"{'='*80}\n\n"
+    print_log_file.write(header)
+    print_log_file.flush()
+    
+    # Create a custom print function that writes to both console and file
+    import builtins
+    original_print = builtins.print
+    def logged_print(*args, **kwargs):
+        """Print that writes to both console and log file."""
+        # If file parameter is specified, use it; otherwise print to console
+        file_param = kwargs.pop('file', None)
+        if file_param is not None:
+            # User specified a file, print to that file
+            original_print(*args, file=file_param, **kwargs)
+        else:
+            # No file specified, print to console
+            original_print(*args, **kwargs)
+        
+        # Always also write to log file (unless it's the log file itself to avoid recursion)
+        if file_param is not print_log_file:
+            original_print(*args, file=print_log_file, **kwargs)
+            print_log_file.flush()  # Ensure immediate write
+    
+    # Replace built-in print with logged version
+    builtins.print = logged_print
+    
+    # Print location of log file (this will also be logged)
+    print(f"✓ Print output will be logged to: {print_log_path}")
 
     # Dataset loading ------------------------------------------------
     # CRITICAL: Load train and val datasets separately to prevent any mixing
@@ -309,6 +351,15 @@ def train(args):
         print(f"✓ Validation mode: FROZEN (pre-recorded MCQ answers and entropy)")
     else:
         print(f"✓ Validation mode: LIVE (current model's MCQ answers and entropy)")
+    
+    # Generate confidence letter mapping and store in args for use in train_step
+    confidence_letter_mapping = get_confidence_letter_mapping(
+        args.confidence_letter_scheme,
+        seed=args.confidence_letter_random_seed
+    )
+    args.confidence_letter_mapping = confidence_letter_mapping
+    display_letters = [confidence_letter_mapping[chr(ord('A') + i)] for i in range(8)]
+    print(f"✓ Confidence letter scheme: {args.confidence_letter_scheme} -> {''.join(display_letters)}")
 
     # Optimizer ------------------------------------------------------
     optimizer = torch.optim.AdamW(
@@ -355,20 +406,29 @@ def train(args):
     save_training_parameters(args, checkpoint_base_dir)
 
     # ============================================================
+    # Print first MCQ and confidence prompts
+    # ============================================================
+    print("\n" + "="*80)
+    print("First Multiple Choice Question Prompt:")
+    print("="*80)
+    first_batch = train_dataset[0:1]
+    mcq_prompts = build_multiple_choice_question_prompts(first_batch, tokenizer)
+    print(mcq_prompts[0])
+    print("="*80 + "\n")
+    
+    print("="*80)
+    print("First Confidence Question Prompt:")
+    print("="*80)
+    conf_prompts = build_self_confidence_prompts(first_batch, tokenizer, confidence_letter_mapping)
+    print(conf_prompts[0])
+    print("="*80 + "\n")
+
+    # ============================================================
     # Baseline evaluation BEFORE training
     # ============================================================
     print("\n" + "="*60)
     print("Running baseline validation (before training)...")
     print("="*60)
-
-    # DEBUG printing
-    # test_batch = val_dataset[0:1]
-    # test_prompts = build_multiple_choice_question_prompts(test_batch, tokenizer)
-    # print("\n" + "="*80)
-    # print("DEBUG: Sample MCQ Prompt")
-    # print("="*80)
-    # print(test_prompts[0])
-    # print("="*80 + "\n")
 
     baseline_metrics = run_evaluation(
         model=model,
@@ -516,9 +576,6 @@ def train(args):
 
     # Generate timestamp for final model save
     final_timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-    
-    if args.save_wandb_artifact:
-        wandb.finish()
 
     print("Saving model.")
     success = save_model_final(
@@ -538,6 +595,16 @@ def train(args):
     else:
         print("❌ Model save failed! Check error messages above.")
         raise RuntimeError("Failed to save model")
+    
+    # Finish wandb run after model is saved (so artifact can be logged)
+    if args.save_wandb_artifact:
+        wandb.finish()
+    
+    # Restore original print and close print log file
+    import builtins
+    builtins.print = original_print
+    print_log_file.close()
+    print(f"✓ Print output saved to: {print_log_path}")
     
 
 
@@ -649,6 +716,19 @@ def parse_args():
         help=("Use live model's MCQ answers and entropy for validation "
               "(dynamic teacher validation, default behavior).")
     )
+    
+    parser.add_argument(
+        "--confidence_letter_scheme", type=str, default=None,
+        choices=["A-H", "S-Z", "random"],
+        help=("Letter scheme for confidence bins. Must be one of: 'A-H' (default), "
+              "'S-Z' (S-Z mapping), or 'random' (random letters). REQUIRED - no default.")
+    )
+    
+    parser.add_argument(
+        "--confidence_letter_random_seed", type=int, default=None,
+        help=("Random seed for 'random' confidence_letter_scheme. "
+              "If not provided, uses system random seed (not reproducible).")
+    )
 
 
     # -----------------------
@@ -728,6 +808,13 @@ def parse_args():
     
     # Set val_on_frozen boolean for easier use
     args.val_on_frozen = args.val_on_frozen if args.val_on_frozen else False
+    
+    # Validate that confidence_letter_scheme is provided
+    if args.confidence_letter_scheme is None:
+        parser.error(
+            "--confidence_letter_scheme is REQUIRED. "
+            "Must be one of: 'A-H', 'S-Z', or 'random'."
+        )
     
     return args
 

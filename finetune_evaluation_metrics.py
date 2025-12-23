@@ -56,6 +56,8 @@ def evaluate_model(
     log_prefix="",
     confidence_letter_scheme="A-H",
     confidence_letter_random_seed=None,
+    mcq_letter_scheme="A-D",
+    mcq_letter_random_seed=None,
 ):
     """
     Simplified evaluation function for arbitrary datasets.
@@ -92,6 +94,8 @@ def evaluate_model(
         log_prefix: Prefix to add to log entry "type" field (e.g., "base_" or "finetuned_")
         confidence_letter_scheme: Letter scheme for confidence bins ('A-H', 'S-Z', or 'random', default: 'A-H')
         confidence_letter_random_seed: Random seed for 'random' scheme (optional)
+        mcq_letter_scheme: Letter scheme for MCQ answers ('A-D', 'E-H', etc., or 'random', default: 'A-D')
+        mcq_letter_random_seed: Random seed for 'random' mcq_letter_scheme (optional)
     
     Returns:
         results: dict with evaluation metrics (mcq_accuracy, avg_entropy, etc.)
@@ -125,15 +129,22 @@ def evaluate_model(
             self.compute_other_confidence = compute_other_confidence
             self.confidence_letter_scheme = confidence_letter_scheme
             self.confidence_letter_random_seed = confidence_letter_random_seed
+            self.mcq_letter_scheme = mcq_letter_scheme
+            self.mcq_letter_random_seed = mcq_letter_random_seed
     
     args = SimpleArgs()
     
     # Generate confidence letter mapping
-    from finetune_prompting import get_confidence_letter_mapping
+    from finetune_prompting import get_confidence_letter_mapping, get_mcq_letter_mapping
     confidence_letter_mapping = get_confidence_letter_mapping(
         confidence_letter_scheme,
         seed=confidence_letter_random_seed
     )
+    mcq_letter_mapping = get_mcq_letter_mapping(
+        mcq_letter_scheme,
+        seed=mcq_letter_random_seed
+    )
+    args.mcq_letter_mapping = mcq_letter_mapping
     
     # Note: We skip train_dataset validation checks since this is for arbitrary datasets
     # Pass None for train_dataset_qids and train_dataset_questions
@@ -153,6 +164,7 @@ def evaluate_model(
         log_prefix=log_prefix,
         sigma=sigma,
         confidence_letter_mapping=confidence_letter_mapping,
+        mcq_letter_mapping=mcq_letter_mapping,
     )
     
     return results
@@ -175,6 +187,7 @@ def run_evaluation(
     sigma=None,
     val_on_frozen=False,
     confidence_letter_mapping=None,
+    mcq_letter_mapping=None,
 ):
     """
     Evaluation loop:
@@ -241,6 +254,45 @@ def run_evaluation(
             from finetune_prompting import get_confidence_letter_mapping
             confidence_letter_mapping = get_confidence_letter_mapping("A-H")
     
+    # Check if per-question randomization is enabled
+    randomize_per_question = getattr(args, 'randomize_letters_per_question', False)
+    
+    # Get MCQ letter mapping from args if not provided (only if NOT randomizing per question)
+    if randomize_per_question:
+        # Will generate per sample in the loop
+        mcq_letter_mapping = None
+    elif mcq_letter_mapping is None:
+        if hasattr(args, 'mcq_letter_mapping') and args.mcq_letter_mapping is not None:
+            mcq_letter_mapping = args.mcq_letter_mapping
+        elif hasattr(args, 'mcq_letter_scheme') and args.mcq_letter_scheme is not None:
+            from finetune_prompting import get_mcq_letter_mapping
+            mcq_letter_mapping = get_mcq_letter_mapping(
+                args.mcq_letter_scheme,
+                seed=getattr(args, 'mcq_letter_random_seed', None)
+            )
+        else:
+            # Default to A-D if nothing specified
+            from finetune_prompting import get_mcq_letter_mapping
+            mcq_letter_mapping = get_mcq_letter_mapping("A-D")
+    
+    # Get confidence letter mapping (only if NOT randomizing per question)
+    if randomize_per_question:
+        # Will generate per sample in the loop
+        confidence_letter_mapping = None
+    elif confidence_letter_mapping is None:
+        if hasattr(args, 'confidence_letter_mapping') and args.confidence_letter_mapping is not None:
+            confidence_letter_mapping = args.confidence_letter_mapping
+        elif hasattr(args, 'confidence_letter_scheme') and args.confidence_letter_scheme is not None:
+            from finetune_prompting import get_confidence_letter_mapping
+            confidence_letter_mapping = get_confidence_letter_mapping(
+                args.confidence_letter_scheme,
+                seed=getattr(args, 'confidence_letter_random_seed', None)
+            )
+        else:
+            # Default to A-H if nothing specified
+            from finetune_prompting import get_confidence_letter_mapping
+            confidence_letter_mapping = get_confidence_letter_mapping("A-H")
+    
     # Validate val_on_frozen requirements
     if val_on_frozen:
         if mcq_results_lookup is None:
@@ -278,10 +330,14 @@ def run_evaluation(
     expected_conf_values = []
     expected_other_conf_values = []  # Other confidence (college-educated people)
     loss_values = []
-    predicted_letters = []
+    predicted_letters = []  # Display letters (e.g., E, F, G, H)
+    predicted_positions = []  # Position indices (0-3, corresponding to A-D internally)
     correct_letters = []
+    correct_positions = []  # Position indices for correct answers
     predicted_confidence_letters = []  # Display letter confidence predictions (self) (e.g., S-Z)
+    predicted_confidence_bin_indices = []  # Bin indices (0-7, corresponding to A-H internally)
     predicted_other_confidence_letters = []  # Display letter confidence predictions (other) (e.g., S-Z)
+    predicted_other_confidence_bin_indices = []  # Bin indices for other confidence
     prerecorded_entropy_values = []  # Pre-recorded entropy from mcq_results_data
 
     # ==================== MAIN LOOP ==========================
@@ -292,6 +348,23 @@ def run_evaluation(
             print(f"  Progress: {idx_in_loop + 1}/{total_samples} questions evaluated ({100.0 * (idx_in_loop + 1) / total_samples:.1f}%)")
         
         batch = val_dataset[i:i+1]    # single-sample batch (list of 1 dict)
+
+        # Generate letter mappings for this sample if per-question randomization is enabled
+        if randomize_per_question:
+            from finetune_prompting import get_mcq_letter_mapping, get_confidence_letter_mapping
+            # Generate new mappings for this sample
+            sample_mcq_letter_mapping = get_mcq_letter_mapping(
+                args.mcq_letter_scheme,
+                seed=None  # Don't use seed for per-question randomization
+            )
+            sample_confidence_letter_mapping = get_confidence_letter_mapping(
+                args.confidence_letter_scheme,
+                seed=None  # Don't use seed for per-question randomization
+            )
+        else:
+            # Use pre-generated mappings
+            sample_mcq_letter_mapping = mcq_letter_mapping
+            sample_confidence_letter_mapping = confidence_letter_mapping
 
         # 0. Look up pre-recorded entropy if available (before any option changes)
         # We do this BEFORE verify_and_resolve_options to avoid option mismatches
@@ -394,7 +467,7 @@ def run_evaluation(
                 )
         else:
             # Use live model (current behavior)
-            mcq_prompts = build_multiple_choice_question_prompts(batch, tokenizer)
+            mcq_prompts = build_multiple_choice_question_prompts(batch, tokenizer, sample_mcq_letter_mapping)
 
             # print("DEBUG mcq_prompts", mcq_prompts)
 
@@ -404,17 +477,47 @@ def run_evaluation(
                 prompts=mcq_prompts,
                 device=device,
                 temperature=0.0,
+                mcq_letter_mapping=sample_mcq_letter_mapping,
             )
 
-            predicted_answer_letter = mcq_out["pred_letters"][0]
+            predicted_answer_letter = mcq_out["pred_letters"][0]  # Display letter
+            predicted_answer_position = mcq_out["pred_positions"][0]  # Position index (0-3)
             entropy_value = mcq_out["entropy"][0].item()
+        
+        # Map correct_answer_letter to position index (0-3 for A-D)
+        correct_answer_position = ord(correct_answer_letter) - ord('A') if correct_answer_letter in "ABCD" else None
+        
+        # Map correct_answer_letter to display letter for logging
+        if correct_answer_position is not None and correct_answer_position < 4:
+            correct_answer_display_letter = sample_mcq_letter_mapping[chr(ord('A') + correct_answer_position)]
+        else:
+            correct_answer_display_letter = correct_answer_letter  # Fallback if mapping fails
+        
+        # For frozen validation, we need to map the predicted_answer_letter back to position
+        if val_on_frozen:
+            # predicted_answer_letter is in A-D space (internal), map to position
+            predicted_answer_position = ord(predicted_answer_letter) - ord('A') if predicted_answer_letter in "ABCD" else None
+            # Map to display letter using sample_mcq_letter_mapping
+            if predicted_answer_position is not None and predicted_answer_position < 4:
+                predicted_answer_letter = sample_mcq_letter_mapping[chr(ord('A') + predicted_answer_position)]
+            else:
+                predicted_answer_letter = None
 
         predicted_letters.append(predicted_answer_letter)
-        correct_letters.append(correct_answer_letter)
+        predicted_positions.append(predicted_answer_position)
+        correct_letters.append(correct_answer_display_letter)  # Use display letter for logging
+        correct_positions.append(correct_answer_position)
 
-        correctness_flags.append(
-            1.0 if predicted_answer_letter == correct_answer_letter else 0.0
-        )
+        # Compare positions for correctness (more robust than comparing display letters)
+        if predicted_answer_position is not None and correct_answer_position is not None:
+            correctness_flags.append(
+                1.0 if predicted_answer_position == correct_answer_position else 0.0
+            )
+        else:
+            # Fallback: compare display letters if positions are unavailable
+            correctness_flags.append(
+                1.0 if predicted_answer_letter == correct_answer_display_letter else 0.0
+            )
         entropy_values.append(entropy_value)
 
         # ==================================================
@@ -434,7 +537,7 @@ def run_evaluation(
         compute_other_confidence = getattr(args, 'compute_other_confidence', True)
         
         if compute_confidence:
-            conf_prompts = build_self_confidence_prompts(batch, tokenizer, confidence_letter_mapping)
+            conf_prompts = build_self_confidence_prompts(batch, tokenizer, sample_confidence_letter_mapping, sample_mcq_letter_mapping)
 
             conf_out = run_confidence_forward_pass(
                 model=model,
@@ -442,26 +545,29 @@ def run_evaluation(
                 prompts=conf_prompts,
                 device=device,
                 temperature=args.temperature,
-                confidence_letter_mapping=confidence_letter_mapping,
+                confidence_letter_mapping=sample_confidence_letter_mapping,
             )
 
             logits8 = conf_out["logits8"][0]
             expected_confidence_value = conf_out["expected_conf"][0].item()
             predicted_confidence_letter = conf_out["pred_bins"][0]  # Display letter (e.g., S-Z)
+            predicted_confidence_bin_index = conf_out["pred_bin_indices"][0]  # Bin index (0-7 for A-H)
         else:
             # Skip confidence computation - use dummy values
             logits8 = None
             expected_confidence_value = 0.0
             predicted_confidence_letter = None
+            predicted_confidence_bin_index = None
 
         expected_conf_values.append(expected_confidence_value)
         predicted_confidence_letters.append(predicted_confidence_letter)
+        predicted_confidence_bin_indices.append(predicted_confidence_bin_index)
 
         # ==================================================
         # 3.5. Other confidence pass (optional)
         # ==================================================
         if compute_other_confidence:
-            other_conf_prompts = build_other_confidence_prompts(batch, tokenizer, confidence_letter_mapping)
+            other_conf_prompts = build_other_confidence_prompts(batch, tokenizer, sample_confidence_letter_mapping, sample_mcq_letter_mapping)
 
             other_conf_out = run_confidence_forward_pass(
                 model=model,
@@ -469,18 +575,21 @@ def run_evaluation(
                 prompts=other_conf_prompts,
                 device=device,
                 temperature=args.temperature,
-                confidence_letter_mapping=confidence_letter_mapping,
+                confidence_letter_mapping=sample_confidence_letter_mapping,
             )
 
             expected_other_confidence_value = other_conf_out["expected_conf"][0].item()
             predicted_other_confidence_letter = other_conf_out["pred_bins"][0]  # Display letter (e.g., S-Z)
+            predicted_other_confidence_bin_index = other_conf_out["pred_bin_indices"][0]  # Bin index (0-7 for A-H)
         else:
             # Skip other confidence computation - use dummy values
             expected_other_confidence_value = 0.0
             predicted_other_confidence_letter = None
+            predicted_other_confidence_bin_index = None
             
         expected_other_conf_values.append(expected_other_confidence_value)
         predicted_other_confidence_letters.append(predicted_other_confidence_letter)
+        predicted_other_confidence_bin_indices.append(predicted_other_confidence_bin_index)
 
         # ==================================================
         # 4. Loss (only if confidence was computed)
@@ -514,9 +623,14 @@ def run_evaluation(
                 "type": f"{log_prefix}eval_sample" if log_prefix else "eval_sample",
                 "qid": batch[0].get("qid"),
                 "question": batch[0]["question"],
-                "model_answer": predicted_answer_letter,
-                "correct_answer": correct_answer_letter,
+                "model_answer": predicted_answer_letter,  # Display letter (e.g., E, F, G, H)
+                "model_answer_position": predicted_answer_position,  # Position index (0-3 for A-D)
+                "correct_answer": correct_answer_letter,  # Display letter
+                "correct_answer_position": correct_answer_position,  # Position index (0-3 for A-D)
                 "predicted_confidence_letter": predicted_confidence_letter,  # Display letter (e.g., S-Z)
+                "predicted_confidence_bin_index": predicted_confidence_bin_index,  # Bin index (0-7 for A-H)
+                "predicted_other_confidence_letter": predicted_other_confidence_letter,  # Display letter
+                "predicted_other_confidence_bin_index": predicted_other_confidence_bin_index,  # Bin index
                 "entropy": entropy_value,
                 "expected_confidence": expected_confidence_value,
                 "expected_other_confidence": expected_other_confidence_value,
@@ -528,31 +642,70 @@ def run_evaluation(
             write_jsonl(log_file_path, log_entry)
 
     # ===========================================================
-    # DISTRIBUTION STATS (A–D)
+    # DISTRIBUTION STATS - MCQ Answers
+    # Track both letter distributions and position distributions
     # ===========================================================
 
     def count_dist(values, letters):
         return {letter: values.count(letter) for letter in letters}
-
-    pred_dist = count_dist(predicted_letters, "ABCD")
-    gold_dist = count_dist(correct_letters, "ABCD")
+    
+    def count_dist_indices(values, max_index):
+        """Count distribution of indices (0 to max_index)."""
+        dist = {i: 0 for i in range(max_index + 1)}
+        for v in values:
+            if v is not None and 0 <= v <= max_index:
+                dist[v] = dist.get(v, 0) + 1
+        return dist
 
     n = len(predicted_letters)
+    
+    # Get MCQ display letters for distribution stats
+    if randomize_per_question:
+        # When randomizing per question, collect all unique letters that appeared
+        all_mcq_letters = set([l for l in predicted_letters + correct_letters if l is not None])
+        mcq_display_letters_str = ''.join(sorted(all_mcq_letters))
+    else:
+        # Use the fixed mapping
+        mcq_display_letters = [mcq_letter_mapping[chr(ord('A') + i)] for i in range(4)]
+        mcq_display_letters_str = ''.join(mcq_display_letters)
+    
+    # Count by display letters
+    pred_dist_letters = count_dist([l for l in predicted_letters if l is not None], mcq_display_letters_str)
+    gold_dist_letters = count_dist([l for l in correct_letters if l is not None], mcq_display_letters_str)
+    pred_dist_letters_pct = {k: (v / n) * 100.0 for k, v in pred_dist_letters.items()}
+    gold_dist_letters_pct = {k: (v / n) * 100.0 for k, v in gold_dist_letters.items()}
+    
+    # Count by position (0-3)
+    pred_dist_positions = count_dist_indices([p for p in predicted_positions if p is not None], 3)
+    gold_dist_positions = count_dist_indices([p for p in correct_positions if p is not None], 3)
+    pred_dist_positions_pct = {k: (v / n) * 100.0 for k, v in pred_dist_positions.items()}
+    gold_dist_positions_pct = {k: (v / n) * 100.0 for k, v in gold_dist_positions.items()}
 
-    pred_dist_pct = {k: (v / n) * 100.0 for k, v in pred_dist.items()}
-    gold_dist_pct = {k: (v / n) * 100.0 for k, v in gold_dist.items()}
-
-    # Pretty print
+    # Pretty print - Letter distributions
     print("\n============================================================")
-    print(f"{step_name.upper()} — MCQ Answer Distributions")
+    print(f"{step_name.upper()} — MCQ Answer Distributions (by Letter)")
     print("============================================================")
-    print("Correct (Ground Truth) Distribution:")
-    for k in "ABCD":
-        print(f"  {k}: {gold_dist[k]:4d}  ({gold_dist_pct[k]:6.2f}%)")
+    print(f"Correct (Ground Truth) Distribution ({mcq_display_letters_str}):")
+    for k in mcq_display_letters_str:
+        print(f"  {k}: {gold_dist_letters[k]:4d}  ({gold_dist_letters_pct[k]:6.2f}%)")
 
-    print("\nModel Prediction Distribution:")
-    for k in "ABCD":
-        print(f"  {k}: {pred_dist[k]:4d}  ({pred_dist_pct[k]:6.2f}%)")
+    print(f"\nModel Prediction Distribution ({mcq_display_letters_str}):")
+    for k in mcq_display_letters_str:
+        print(f"  {k}: {pred_dist_letters[k]:4d}  ({pred_dist_letters_pct[k]:6.2f}%)")
+    
+    # Pretty print - Position distributions
+    print("\n============================================================")
+    print(f"{step_name.upper()} — MCQ Answer Distributions (by Position)")
+    print("============================================================")
+    print("Correct (Ground Truth) Distribution (positions 0-3, corresponding to A-D):")
+    for pos in range(4):
+        letter = chr(ord('A') + pos)
+        print(f"  Position {pos} ({letter}): {gold_dist_positions[pos]:4d}  ({gold_dist_positions_pct[pos]:6.2f}%)")
+
+    print("\nModel Prediction Distribution (positions 0-3, corresponding to A-D):")
+    for pos in range(4):
+        letter = chr(ord('A') + pos)
+        print(f"  Position {pos} ({letter}): {pred_dist_positions[pos]:4d}  ({pred_dist_positions_pct[pos]:6.2f}%)")
 
     # ===========================================================
     # CONFIDENCE DISTRIBUTION STATS - only if computed
@@ -561,25 +714,53 @@ def run_evaluation(
     compute_confidence = getattr(args, 'compute_confidence', True)
     compute_other_confidence = getattr(args, 'compute_other_confidence', True)
     
-    # Get display letters from confidence_letter_mapping
-    display_letters = [confidence_letter_mapping[chr(ord('A') + i)] for i in range(8)]
-    display_letters_str = ''.join(display_letters)
+    # Get display letters from confidence_letter_mapping for distribution stats
+    if randomize_per_question:
+        # When randomizing per question, collect all unique letters that appeared
+        all_conf_letters = set([l for l in predicted_confidence_letters + predicted_other_confidence_letters if l is not None])
+        display_letters_str = ''.join(sorted(all_conf_letters))
+    else:
+        # Use the fixed mapping
+        display_letters = [confidence_letter_mapping[chr(ord('A') + i)] for i in range(8)]
+        display_letters_str = ''.join(display_letters)
+    
+    # Confidence bin labels (A-H correspond to confidence levels)
+    confidence_bin_labels = {
+        0: "<5%", 1: "5-10%", 2: "10-20%", 3: "20-40%",
+        4: "40-60%", 5: "60-80%", 6: "80-90%", 7: ">90%"
+    }
     
     if compute_confidence:
         # Count using display letters (which are what's actually stored)
-        conf_dist = count_dist([l for l in predicted_confidence_letters if l is not None], display_letters_str)
-        conf_dist_pct = {k: (v / n) * 100.0 for k, v in conf_dist.items()}
+        conf_dist_letters = count_dist([l for l in predicted_confidence_letters if l is not None], display_letters_str)
+        conf_dist_letters_pct = {k: (v / n) * 100.0 for k, v in conf_dist_letters.items()}
+        
+        # Count by bin index (0-7 for A-H)
+        conf_dist_bins = count_dist_indices([b for b in predicted_confidence_bin_indices if b is not None], 7)
+        conf_dist_bins_pct = {k: (v / n) * 100.0 for k, v in conf_dist_bins.items()}
 
         # Pretty print confidence distribution using display letters
         print("\n============================================================")
-        print(f"{step_name.upper()} — Self Confidence Prediction Distributions")
+        print(f"{step_name.upper()} — Self Confidence Prediction Distributions (by Letter)")
         print("============================================================")
         print(f"Model Self Confidence Prediction Distribution ({display_letters_str}):")
         for k in display_letters_str:
-            print(f"  {k}: {conf_dist[k]:4d}  ({conf_dist_pct[k]:6.2f}%)")
+            print(f"  {k}: {conf_dist_letters[k]:4d}  ({conf_dist_letters_pct[k]:6.2f}%)")
+        
+        # Pretty print confidence distribution by bin
+        print("\n============================================================")
+        print(f"{step_name.upper()} — Self Confidence Prediction Distributions (by Bin)")
+        print("============================================================")
+        print("Model Self Confidence Prediction Distribution (bins 0-7, corresponding to A-H):")
+        for bin_idx in range(8):
+            bin_letter = chr(ord('A') + bin_idx)
+            bin_label = confidence_bin_labels[bin_idx]
+            print(f"  Bin {bin_idx} ({bin_letter}, {bin_label}): {conf_dist_bins[bin_idx]:4d}  ({conf_dist_bins_pct[bin_idx]:6.2f}%)")
     else:
-        conf_dist = {k: 0 for k in display_letters_str}
-        conf_dist_pct = {k: 0.0 for k in display_letters_str}
+        conf_dist_letters = {k: 0 for k in display_letters_str}
+        conf_dist_letters_pct = {k: 0.0 for k in display_letters_str}
+        conf_dist_bins = {i: 0 for i in range(8)}
+        conf_dist_bins_pct = {i: 0.0 for i in range(8)}
 
     # ===========================================================
     # OTHER CONFIDENCE DISTRIBUTION STATS - only if computed
@@ -587,19 +768,35 @@ def run_evaluation(
     # ===========================================================
     if compute_other_confidence:
         # Count using display letters (which are what's actually stored)
-        other_conf_dist = count_dist([l for l in predicted_other_confidence_letters if l is not None], display_letters_str)
-        other_conf_dist_pct = {k: (v / n) * 100.0 for k, v in other_conf_dist.items()}
+        other_conf_dist_letters = count_dist([l for l in predicted_other_confidence_letters if l is not None], display_letters_str)
+        other_conf_dist_letters_pct = {k: (v / n) * 100.0 for k, v in other_conf_dist_letters.items()}
+        
+        # Count by bin index (0-7 for A-H)
+        other_conf_dist_bins = count_dist_indices([b for b in predicted_other_confidence_bin_indices if b is not None], 7)
+        other_conf_dist_bins_pct = {k: (v / n) * 100.0 for k, v in other_conf_dist_bins.items()}
 
         # Pretty print other confidence distribution using display letters
         print("\n============================================================")
-        print(f"{step_name.upper()} — Other Confidence Prediction Distributions")
+        print(f"{step_name.upper()} — Other Confidence Prediction Distributions (by Letter)")
         print("============================================================")
         print(f"Model Other Confidence Prediction Distribution ({display_letters_str}):")
         for k in display_letters_str:
-            print(f"  {k}: {other_conf_dist[k]:4d}  ({other_conf_dist_pct[k]:6.2f}%)")
+            print(f"  {k}: {other_conf_dist_letters[k]:4d}  ({other_conf_dist_letters_pct[k]:6.2f}%)")
+        
+        # Pretty print other confidence distribution by bin
+        print("\n============================================================")
+        print(f"{step_name.upper()} — Other Confidence Prediction Distributions (by Bin)")
+        print("============================================================")
+        print("Model Other Confidence Prediction Distribution (bins 0-7, corresponding to A-H):")
+        for bin_idx in range(8):
+            bin_letter = chr(ord('A') + bin_idx)
+            bin_label = confidence_bin_labels[bin_idx]
+            print(f"  Bin {bin_idx} ({bin_letter}, {bin_label}): {other_conf_dist_bins[bin_idx]:4d}  ({other_conf_dist_bins_pct[bin_idx]:6.2f}%)")
     else:
-        other_conf_dist = {k: 0 for k in display_letters_str}
-        other_conf_dist_pct = {k: 0.0 for k in display_letters_str}
+        other_conf_dist_letters = {k: 0 for k in display_letters_str}
+        other_conf_dist_letters_pct = {k: 0.0 for k in display_letters_str}
+        other_conf_dist_bins = {i: 0 for i in range(8)}
+        other_conf_dist_bins_pct = {i: 0.0 for i in range(8)}
 
     # ===========================================================
     # FINAL METRICS
@@ -612,14 +809,26 @@ def run_evaluation(
         "avg_loss": float(np.mean(loss_values)),
         "loss_type": args.loss_type,  # Log the loss type used for evaluation
         "n_samples": n,
-        "correct_answer_distribution_raw": gold_dist,
-        "correct_answer_distribution_pct": gold_dist_pct,
-        "predicted_answer_distribution_raw": pred_dist,
-        "predicted_answer_distribution_pct": pred_dist_pct,
-        "predicted_confidence_distribution_raw": conf_dist,
-        "predicted_confidence_distribution_pct": conf_dist_pct,
-        "predicted_other_confidence_distribution_raw": other_conf_dist,
-        "predicted_other_confidence_distribution_pct": other_conf_dist_pct,
+        # MCQ distributions by letter
+        "correct_answer_distribution_by_letter_raw": gold_dist_letters,
+        "correct_answer_distribution_by_letter_pct": gold_dist_letters_pct,
+        "predicted_answer_distribution_by_letter_raw": pred_dist_letters,
+        "predicted_answer_distribution_by_letter_pct": pred_dist_letters_pct,
+        # MCQ distributions by position
+        "correct_answer_distribution_by_position_raw": gold_dist_positions,
+        "correct_answer_distribution_by_position_pct": gold_dist_positions_pct,
+        "predicted_answer_distribution_by_position_raw": pred_dist_positions,
+        "predicted_answer_distribution_by_position_pct": pred_dist_positions_pct,
+        # Confidence distributions by letter
+        "predicted_confidence_distribution_by_letter_raw": conf_dist_letters,
+        "predicted_confidence_distribution_by_letter_pct": conf_dist_letters_pct,
+        "predicted_other_confidence_distribution_by_letter_raw": other_conf_dist_letters,
+        "predicted_other_confidence_distribution_by_letter_pct": other_conf_dist_letters_pct,
+        # Confidence distributions by bin
+        "predicted_confidence_distribution_by_bin_raw": conf_dist_bins,
+        "predicted_confidence_distribution_by_bin_pct": conf_dist_bins_pct,
+        "predicted_other_confidence_distribution_by_bin_raw": other_conf_dist_bins,
+        "predicted_other_confidence_distribution_by_bin_pct": other_conf_dist_bins_pct,
     }
 
     # Compute additional metrics for wandb
@@ -761,18 +970,36 @@ def run_evaluation(
                 wandb_metrics[f"{prefix}/self_frozen_corr"] = self_frozen_corr
                 wandb_metrics[f"{prefix}/other_frozen_corr"] = other_frozen_corr
             
-            # Add answer distribution percentages
-            for letter in "ABCD":
-                wandb_metrics[f"{prefix}/pred_dist_{letter}_pct"] = pred_dist_pct[letter]
-                wandb_metrics[f"{prefix}/correct_dist_{letter}_pct"] = gold_dist_pct[letter]
+            # Add answer distribution percentages by letter
+            for letter in mcq_display_letters_str:
+                wandb_metrics[f"{prefix}/pred_dist_letter_{letter}_pct"] = pred_dist_letters_pct[letter]
+                wandb_metrics[f"{prefix}/correct_dist_letter_{letter}_pct"] = gold_dist_letters_pct[letter]
             
-            # Add self confidence distribution percentages (using display letters)
-            for letter in display_letters_str:
-                wandb_metrics[f"{prefix}/self_conf_{letter}"] = conf_dist_pct[letter]
+            # Add answer distribution percentages by position
+            for pos in range(4):
+                letter = chr(ord('A') + pos)
+                wandb_metrics[f"{prefix}/pred_dist_position_{pos}_{letter}_pct"] = pred_dist_positions_pct[pos]
+                wandb_metrics[f"{prefix}/correct_dist_position_{pos}_{letter}_pct"] = gold_dist_positions_pct[pos]
             
-            # Add other confidence distribution percentages (using display letters)
+            # Add self confidence distribution percentages by letter (using display letters)
             for letter in display_letters_str:
-                wandb_metrics[f"{prefix}/other_conf_{letter}"] = other_conf_dist_pct[letter]
+                wandb_metrics[f"{prefix}/self_conf_letter_{letter}_pct"] = conf_dist_letters_pct[letter]
+            
+            # Add self confidence distribution percentages by bin
+            for bin_idx in range(8):
+                bin_letter = chr(ord('A') + bin_idx)
+                bin_label = confidence_bin_labels[bin_idx].replace('%', 'pct').replace('-', '_').replace('<', 'lt').replace('>', 'gt')
+                wandb_metrics[f"{prefix}/self_conf_bin_{bin_idx}_{bin_letter}_{bin_label}_pct"] = conf_dist_bins_pct[bin_idx]
+            
+            # Add other confidence distribution percentages by letter (using display letters)
+            for letter in display_letters_str:
+                wandb_metrics[f"{prefix}/other_conf_letter_{letter}_pct"] = other_conf_dist_letters_pct[letter]
+            
+            # Add other confidence distribution percentages by bin
+            for bin_idx in range(8):
+                bin_letter = chr(ord('A') + bin_idx)
+                bin_label = confidence_bin_labels[bin_idx].replace('%', 'pct').replace('-', '_').replace('<', 'lt').replace('>', 'gt')
+                wandb_metrics[f"{prefix}/other_conf_bin_{bin_idx}_{bin_letter}_{bin_label}_pct"] = other_conf_dist_bins_pct[bin_idx]
             
             # Add step if provided
             if step is not None:

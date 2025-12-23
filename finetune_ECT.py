@@ -1,6 +1,7 @@
 import argparse
 import numpy as np
 import os
+import sys
 import torch
 import wandb
 from datetime import datetime, timezone
@@ -29,7 +30,8 @@ from finetune_prompting import (
     build_multiple_choice_question_prompts,
     run_mcq_forward_pass,
     run_confidence_forward_pass,
-    get_confidence_letter_mapping
+    get_confidence_letter_mapping,
+    get_mcq_letter_mapping
 )
 from finetune_data_handling import (
     load_mcq_results_data,
@@ -71,6 +73,17 @@ def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=
     # ----------------------------------------------
     # 1. Get entropy, either from frozen or dynamic teacher)
     # ----------------------------------------------
+    
+    # Generate or get MCQ letter mapping (needed for confidence prompts regardless of teacher type)
+    if args.randomize_letters_per_question:
+        # Generate new mapping for this batch
+        mcq_letter_mapping = get_mcq_letter_mapping(
+            args.mcq_letter_scheme,
+            seed=None  # Don't use seed for per-question randomization
+        )
+    else:
+        # Use pre-generated mapping
+        mcq_letter_mapping = args.mcq_letter_mapping
 
     # ----------------------------------------------
     # If using frozen teacher, gets multiple choice answers and the output logit entroy form pre-recorded responses
@@ -114,7 +127,8 @@ def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=
     # ----------------------------------------------
 
     else:
-        mcq_prompts = build_multiple_choice_question_prompts(batch, tokenizer)
+        # Use the MCQ letter mapping already defined above
+        mcq_prompts = build_multiple_choice_question_prompts(batch, tokenizer, mcq_letter_mapping)
         
         mcq_out = run_mcq_forward_pass(
             model=model,
@@ -123,6 +137,7 @@ def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=
             device=device,
             temperature=0.0,
             requires_grad=True,  # KEEP GRADIENTS for dynamic teacher
+            mcq_letter_mapping=mcq_letter_mapping,
         )
         
         entropy = mcq_out["entropy"]  # [B]
@@ -136,10 +151,18 @@ def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=
     # 2. Confidence forward pass
     # ----------------------------------------------
 
-    # Get confidence letter mapping from args (passed from train function)
-    confidence_letter_mapping = args.confidence_letter_mapping
+    # Generate or get confidence letter mapping
+    if args.randomize_letters_per_question:
+        # Generate new mapping for this batch
+        confidence_letter_mapping = get_confidence_letter_mapping(
+            args.confidence_letter_scheme,
+            seed=None  # Don't use seed for per-question randomization
+        )
+    else:
+        # Use pre-generated mapping
+        confidence_letter_mapping = args.confidence_letter_mapping
 
-    conf_prompts = build_self_confidence_prompts(batch, tokenizer, confidence_letter_mapping)
+    conf_prompts = build_self_confidence_prompts(batch, tokenizer, confidence_letter_mapping, mcq_letter_mapping)
 
     conf_out = run_confidence_forward_pass(
         model=model,
@@ -231,6 +254,14 @@ def train(args):
     
     # Replace built-in print with logged version
     builtins.print = logged_print
+    
+    # Print training command at the very beginning (will be logged)
+    training_command = " ".join(sys.argv)
+    print("\n" + "="*80)
+    print("TRAINING COMMAND:")
+    print("="*80)
+    print(training_command)
+    print("="*80 + "\n")
     
     # Print location of log file (this will also be logged)
     print(f"✓ Print output will be logged to: {print_log_path}")
@@ -352,14 +383,31 @@ def train(args):
     else:
         print(f"✓ Validation mode: LIVE (current model's MCQ answers and entropy)")
     
-    # Generate confidence letter mapping and store in args for use in train_step
-    confidence_letter_mapping = get_confidence_letter_mapping(
-        args.confidence_letter_scheme,
-        seed=args.confidence_letter_random_seed
-    )
-    args.confidence_letter_mapping = confidence_letter_mapping
-    display_letters = [confidence_letter_mapping[chr(ord('A') + i)] for i in range(8)]
-    print(f"✓ Confidence letter scheme: {args.confidence_letter_scheme} -> {''.join(display_letters)}")
+    # Generate letter mappings (only if NOT randomizing per question)
+    if args.randomize_letters_per_question:
+        # Don't generate mappings here - will be generated per question/batch
+        args.confidence_letter_mapping = None
+        args.mcq_letter_mapping = None
+        print(f"✓ Letter randomization mode: PER QUESTION (will randomize for each question/batch)")
+    else:
+        # Generate once at the beginning and reuse
+        confidence_letter_mapping = get_confidence_letter_mapping(
+            args.confidence_letter_scheme,
+            seed=args.confidence_letter_random_seed
+        )
+        args.confidence_letter_mapping = confidence_letter_mapping
+        display_letters = [confidence_letter_mapping[chr(ord('A') + i)] for i in range(8)]
+        print(f"✓ Confidence letter scheme: {args.confidence_letter_scheme} -> {''.join(display_letters)}")
+        
+        # Generate MCQ letter mapping and store in args for use in train_step
+        mcq_letter_mapping = get_mcq_letter_mapping(
+            args.mcq_letter_scheme,
+            seed=args.mcq_letter_random_seed
+        )
+        args.mcq_letter_mapping = mcq_letter_mapping
+        mcq_display_letters = [mcq_letter_mapping[chr(ord('A') + i)] for i in range(4)]
+        print(f"✓ MCQ letter scheme: {args.mcq_letter_scheme} -> {''.join(mcq_display_letters)}")
+        print(f"✓ Letter randomization mode: ONCE AT START (same mapping for all questions)")
 
     # Optimizer ------------------------------------------------------
     optimizer = torch.optim.AdamW(
@@ -412,14 +460,24 @@ def train(args):
     print("First Multiple Choice Question Prompt:")
     print("="*80)
     first_batch = train_dataset[0:1]
-    mcq_prompts = build_multiple_choice_question_prompts(first_batch, tokenizer)
+    # Generate mapping for display (use sample mapping if per-question randomization)
+    if args.randomize_letters_per_question:
+        display_mcq_mapping = get_mcq_letter_mapping(args.mcq_letter_scheme, seed=None)
+    else:
+        display_mcq_mapping = mcq_letter_mapping
+    mcq_prompts = build_multiple_choice_question_prompts(first_batch, tokenizer, display_mcq_mapping)
     print(mcq_prompts[0])
     print("="*80 + "\n")
     
     print("="*80)
     print("First Confidence Question Prompt:")
     print("="*80)
-    conf_prompts = build_self_confidence_prompts(first_batch, tokenizer, confidence_letter_mapping)
+    # Generate mapping for display (use sample mapping if per-question randomization)
+    if args.randomize_letters_per_question:
+        display_conf_mapping = get_confidence_letter_mapping(args.confidence_letter_scheme, seed=None)
+    else:
+        display_conf_mapping = confidence_letter_mapping
+    conf_prompts = build_self_confidence_prompts(first_batch, tokenizer, display_conf_mapping, display_mcq_mapping)
     print(conf_prompts[0])
     print("="*80 + "\n")
 
@@ -728,6 +786,25 @@ def parse_args():
         "--confidence_letter_random_seed", type=int, default=None,
         help=("Random seed for 'random' confidence_letter_scheme. "
               "If not provided, uses system random seed (not reproducible).")
+    )
+    
+    parser.add_argument(
+        "--mcq_letter_scheme", type=str, default="A-D",
+        choices=["A-D", "E-H", "I-L", "M-P", "Q-T", "U-X", "Y-Z", "random"],
+        help=("Letter scheme for MCQ answer options. Must be one of: 'A-D' (default), "
+              "'E-H', 'I-L', 'M-P', 'Q-T', 'U-X', 'Y-Z', or 'random' (random letters).")
+    )
+    
+    parser.add_argument(
+        "--mcq_letter_random_seed", type=int, default=None,
+        help=("Random seed for 'random' mcq_letter_scheme. "
+              "If not provided, uses system random seed (not reproducible).")
+    )
+    
+    parser.add_argument(
+        "--randomize_letters_per_question", action="store_true",
+        help=("If set, randomize letter mappings for each question/batch instead of once at the beginning. "
+              "Applies to both MCQ and confidence letters. When enabled, each question gets a fresh random mapping.")
     )
 
 

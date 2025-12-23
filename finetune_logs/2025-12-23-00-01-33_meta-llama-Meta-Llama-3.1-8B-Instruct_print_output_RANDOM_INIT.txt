@@ -1,0 +1,1375 @@
+Training Run Print Output Log
+Started: 2025-12-23-00-01-33
+Model: meta-llama/Meta-Llama-3.1-8B-Instruct
+================================================================================
+
+✓ Print output will be logged to: finetune_logs/2025-12-23-00-01-33_meta-llama-Meta-Llama-3.1-8B-Instruct_print_output.txt
+✓ Training dataset loaded: 9129 samples
+✓ Validation dataset loaded: 1141 samples
+✓ Loaded 10652 pre-recorded MCQ results
+
+🔍 Filtered training:
+  Original size: 9129
+  After filtering: 8525
+  Removed: 604 (6.6%)
+  ⚠️  6.6% of training data will not be used
+
+🔍 Filtered validation:
+  Original size: 1141
+  After filtering: 1062
+  Removed: 79 (6.9%)
+  ⚠️  6.9% of validation data will not be used
+
+✓ Training dataset loaded: 8525 samples
+✓ Validation dataset loaded: 1062 samples
+⚠️  Data leakage checks DISABLED (not recommended)
+✓ Using FROZEN TEACHER (pre-recorded responses)
+✓ Validation mode: LIVE (current model's MCQ answers and entropy)
+✓ Confidence letter scheme: random -> YHEMLVIP
+✓ MCQ letter scheme: random -> UDAX
+✓ WandB run initialized: 20251223-000134_ect-training-run-20251203-222659 (ID: 8c6f69au)
+✓ Checkpoints will be saved to: /workspace/local_checkpoints/2025-12-23-00-01-33_checkpoints
+✓ Training parameters saved to: /workspace/local_checkpoints/2025-12-23-00-01-33_checkpoints/training_parameters.json
+
+================================================================================
+First Multiple Choice Question Prompt:
+================================================================================
+<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+
+Cutting Knowledge Date: December 2023
+Today Date: 26 Jul 2024
+
+<|eot_id|><|start_header_id|>user<|end_header_id|>
+
+I'm going to ask you a series of multiple-choice questions. For each one, select the answer you think is best. Respond only with the letter of your choice; do NOT output any other text.
+
+Question: What is the religion of Gabriel Sharma?
+U: Catholicism
+D: Anglicanism
+A: Judaism
+X: Buddhism
+Your choice (U, D, A, X):<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+
+
+================================================================================
+
+================================================================================
+First Confidence Question Prompt:
+================================================================================
+<|begin_of_text|><|start_header_id|>user<|end_header_id|>
+
+I'm going to show you a multiple-choice question, and I want you to tell me your level of confidence that you would get the question right. Respond only with the letter corresponding to the percentage range you choose; do NOT output any other text.
+
+------------------------------
+How confident are you that you would get this question right?
+----------
+Question: What is the religion of Gabriel Sharma?
+A: Catholicism
+B: Anglicanism
+C: Judaism
+D: Buddhism
+----------
+Confidence options:
+Y: <5%
+H: 5-10%
+E: 10-20%
+M: 20-40%
+L: 40-60%
+V: 60-80%
+I: 80-90%
+P: >90%
+------------------------------
+Your choice (Y, H, E, M, L, V, I, P):<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+
+
+================================================================================
+
+
+============================================================
+Running baseline validation (before training)...
+============================================================
+  Progress: 100/300 questions evaluated (33.3%)
+  Progress: 200/300 questions evaluated (66.7%)
+  Progress: 300/300 questions evaluated (100.0%)
+
+============================================================
+BASELINE — MCQ Answer Distributions (by Letter)
+============================================================
+Correct (Ground Truth) Distribution (UDAX):
+  U:   70  ( 23.33%)
+  D:   70  ( 23.33%)
+  A:   83  ( 27.67%)
+  X:   77  ( 25.67%)
+
+Model Prediction Distribution (UDAX):
+  U:  213  ( 71.00%)
+  D:   27  (  9.00%)
+  A:   27  (  9.00%)
+  X:   33  ( 11.00%)
+
+============================================================
+BASELINE — MCQ Answer Distributions (by Position)
+============================================================
+Correct (Ground Truth) Distribution (positions 0-3, corresponding to A-D):
+  Position 0 (A):   70  ( 23.33%)
+  Position 1 (B):   70  ( 23.33%)
+  Position 2 (C):   83  ( 27.67%)
+  Position 3 (D):   77  ( 25.67%)
+
+Model Prediction Distribution (positions 0-3, corresponding to A-D):
+  Position 0 (A):  213  ( 71.00%)
+  Position 1 (B):   27  (  9.00%)
+  Position 2 (C):   27  (  9.00%)
+  Position 3 (D):   33  ( 11.00%)
+
+============================================================
+BASELINE — Self Confidence Prediction Distributions (by Letter)
+============================================================
+Model Self Confidence Prediction Distribution (YHEMLVIP):
+  Y:   11  (  3.67%)
+  H:    7  (  2.33%)
+  E:    0  (  0.00%)
+  M:  281  ( 93.67%)
+  L:    0  (  0.00%)
+  V:    0  (  0.00%)
+  I:    1  (  0.33%)
+  P:    0  (  0.00%)
+
+============================================================
+BASELINE — Self Confidence Prediction Distributions (by Bin)
+============================================================
+Model Self Confidence Prediction Distribution (bins 0-7, corresponding to A-H):
+  Bin 0 (A, <5%):   11  (  3.67%)
+  Bin 1 (B, 5-10%):    7  (  2.33%)
+  Bin 2 (C, 10-20%):    0  (  0.00%)
+  Bin 3 (D, 20-40%):  281  ( 93.67%)
+  Bin 4 (E, 40-60%):    0  (  0.00%)
+  Bin 5 (F, 60-80%):    0  (  0.00%)
+  Bin 6 (G, 80-90%):    1  (  0.33%)
+  Bin 7 (H, >90%):    0  (  0.00%)
+
+============================================================
+BASELINE — Other Confidence Prediction Distributions (by Letter)
+============================================================
+Model Other Confidence Prediction Distribution (YHEMLVIP):
+  Y:   12  (  4.00%)
+  H:    1  (  0.33%)
+  E:    0  (  0.00%)
+  M:  286  ( 95.33%)
+  L:    0  (  0.00%)
+  V:    0  (  0.00%)
+  I:    1  (  0.33%)
+  P:    0  (  0.00%)
+
+============================================================
+BASELINE — Other Confidence Prediction Distributions (by Bin)
+============================================================
+Model Other Confidence Prediction Distribution (bins 0-7, corresponding to A-H):
+  Bin 0 (A, <5%):   12  (  4.00%)
+  Bin 1 (B, 5-10%):    1  (  0.33%)
+  Bin 2 (C, 10-20%):    0  (  0.00%)
+  Bin 3 (D, 20-40%):  286  ( 95.33%)
+  Bin 4 (E, 40-60%):    0  (  0.00%)
+  Bin 5 (F, 60-80%):    0  (  0.00%)
+  Bin 6 (G, 80-90%):    1  (  0.33%)
+  Bin 7 (H, >90%):    0  (  0.00%)
+
+Baseline Accuracy: 0.3600
+Baseline Avg Entropy: 0.6931
+Baseline Avg Confidence: 32.3380
+- samples: 300
+
+
+============================================================
+Validation at step 250
+============================================================
+  Progress: 100/300 questions evaluated (33.3%)
+  Progress: 200/300 questions evaluated (66.7%)
+  Progress: 300/300 questions evaluated (100.0%)
+
+============================================================
+VALIDATION — MCQ Answer Distributions (by Letter)
+============================================================
+Correct (Ground Truth) Distribution (UDAX):
+  U:   70  ( 23.33%)
+  D:   70  ( 23.33%)
+  A:   83  ( 27.67%)
+  X:   77  ( 25.67%)
+
+Model Prediction Distribution (UDAX):
+  U:  208  ( 69.33%)
+  D:   28  (  9.33%)
+  A:   30  ( 10.00%)
+  X:   34  ( 11.33%)
+
+============================================================
+VALIDATION — MCQ Answer Distributions (by Position)
+============================================================
+Correct (Ground Truth) Distribution (positions 0-3, corresponding to A-D):
+  Position 0 (A):   70  ( 23.33%)
+  Position 1 (B):   70  ( 23.33%)
+  Position 2 (C):   83  ( 27.67%)
+  Position 3 (D):   77  ( 25.67%)
+
+Model Prediction Distribution (positions 0-3, corresponding to A-D):
+  Position 0 (A):  208  ( 69.33%)
+  Position 1 (B):   28  (  9.33%)
+  Position 2 (C):   30  ( 10.00%)
+  Position 3 (D):   34  ( 11.33%)
+
+============================================================
+VALIDATION — Self Confidence Prediction Distributions (by Letter)
+============================================================
+Model Self Confidence Prediction Distribution (YHEMLVIP):
+  Y:    0  (  0.00%)
+  H:    0  (  0.00%)
+  E:    0  (  0.00%)
+  M:   17  (  5.67%)
+  L:   29  (  9.67%)
+  V:    0  (  0.00%)
+  I:    0  (  0.00%)
+  P:  254  ( 84.67%)
+
+============================================================
+VALIDATION — Self Confidence Prediction Distributions (by Bin)
+============================================================
+Model Self Confidence Prediction Distribution (bins 0-7, corresponding to A-H):
+  Bin 0 (A, <5%):    0  (  0.00%)
+  Bin 1 (B, 5-10%):    0  (  0.00%)
+  Bin 2 (C, 10-20%):    0  (  0.00%)
+  Bin 3 (D, 20-40%):   17  (  5.67%)
+  Bin 4 (E, 40-60%):   29  (  9.67%)
+  Bin 5 (F, 60-80%):    0  (  0.00%)
+  Bin 6 (G, 80-90%):    0  (  0.00%)
+  Bin 7 (H, >90%):  254  ( 84.67%)
+
+============================================================
+VALIDATION — Other Confidence Prediction Distributions (by Letter)
+============================================================
+Model Other Confidence Prediction Distribution (YHEMLVIP):
+  Y:    0  (  0.00%)
+  H:    0  (  0.00%)
+  E:    3  (  1.00%)
+  M:  209  ( 69.67%)
+  L:   61  ( 20.33%)
+  V:    0  (  0.00%)
+  I:    0  (  0.00%)
+  P:   27  (  9.00%)
+
+============================================================
+VALIDATION — Other Confidence Prediction Distributions (by Bin)
+============================================================
+Model Other Confidence Prediction Distribution (bins 0-7, corresponding to A-H):
+  Bin 0 (A, <5%):    0  (  0.00%)
+  Bin 1 (B, 5-10%):    0  (  0.00%)
+  Bin 2 (C, 10-20%):    3  (  1.00%)
+  Bin 3 (D, 20-40%):  209  ( 69.67%)
+  Bin 4 (E, 40-60%):   61  ( 20.33%)
+  Bin 5 (F, 60-80%):    0  (  0.00%)
+  Bin 6 (G, 80-90%):    0  (  0.00%)
+  Bin 7 (H, >90%):   27  (  9.00%)
+Val Accuracy: 0.3567
+Val Loss:     2.0399
+Val Entropy:  0.7878
+Val Conf:     62.6912
+Samples:      300
+
+============================================================
+Saving checkpoint at step 400
+Local path: /workspace/local_checkpoints/2025-12-23-00-01-33_checkpoints/ckpt_step_400
+============================================================
+✓ Checkpoint saved locally to: /workspace/local_checkpoints/2025-12-23-00-01-33_checkpoints/ckpt_step_400
+Pushing checkpoint to HuggingFace Hub: Tristan-Day/ect_20251223_000620_8c6f69au_step_400
+Checkpoint tag: 20251223-000134-ect-training-run-20251203-222659-runid-8c6f69au-step-400-20251223-000620
+✓ Checkpoint pushed to HuggingFace Hub: Tristan-Day/ect_20251223_000620_8c6f69au_step_400
+
+============================================================
+Validation at step 500
+============================================================
+  Progress: 100/300 questions evaluated (33.3%)
+  Progress: 200/300 questions evaluated (66.7%)
+  Progress: 300/300 questions evaluated (100.0%)
+
+============================================================
+VALIDATION — MCQ Answer Distributions (by Letter)
+============================================================
+Correct (Ground Truth) Distribution (UDAX):
+  U:   70  ( 23.33%)
+  D:   70  ( 23.33%)
+  A:   83  ( 27.67%)
+  X:   77  ( 25.67%)
+
+Model Prediction Distribution (UDAX):
+  U:  202  ( 67.33%)
+  D:   29  (  9.67%)
+  A:   30  ( 10.00%)
+  X:   39  ( 13.00%)
+
+============================================================
+VALIDATION — MCQ Answer Distributions (by Position)
+============================================================
+Correct (Ground Truth) Distribution (positions 0-3, corresponding to A-D):
+  Position 0 (A):   70  ( 23.33%)
+  Position 1 (B):   70  ( 23.33%)
+  Position 2 (C):   83  ( 27.67%)
+  Position 3 (D):   77  ( 25.67%)
+
+Model Prediction Distribution (positions 0-3, corresponding to A-D):
+  Position 0 (A):  202  ( 67.33%)
+  Position 1 (B):   29  (  9.67%)
+  Position 2 (C):   30  ( 10.00%)
+  Position 3 (D):   39  ( 13.00%)
+
+============================================================
+VALIDATION — Self Confidence Prediction Distributions (by Letter)
+============================================================
+Model Self Confidence Prediction Distribution (YHEMLVIP):
+  Y:    0  (  0.00%)
+  H:    0  (  0.00%)
+  E:    0  (  0.00%)
+  M:   22  (  7.33%)
+  L:   32  ( 10.67%)
+  V:    0  (  0.00%)
+  I:    0  (  0.00%)
+  P:  246  ( 82.00%)
+
+============================================================
+VALIDATION — Self Confidence Prediction Distributions (by Bin)
+============================================================
+Model Self Confidence Prediction Distribution (bins 0-7, corresponding to A-H):
+  Bin 0 (A, <5%):    0  (  0.00%)
+  Bin 1 (B, 5-10%):    0  (  0.00%)
+  Bin 2 (C, 10-20%):    0  (  0.00%)
+  Bin 3 (D, 20-40%):   22  (  7.33%)
+  Bin 4 (E, 40-60%):   32  ( 10.67%)
+  Bin 5 (F, 60-80%):    0  (  0.00%)
+  Bin 6 (G, 80-90%):    0  (  0.00%)
+  Bin 7 (H, >90%):  246  ( 82.00%)
+
+============================================================
+VALIDATION — Other Confidence Prediction Distributions (by Letter)
+============================================================
+Model Other Confidence Prediction Distribution (YHEMLVIP):
+  Y:    0  (  0.00%)
+  H:    0  (  0.00%)
+  E:    1  (  0.33%)
+  M:  197  ( 65.67%)
+  L:   26  (  8.67%)
+  V:    0  (  0.00%)
+  I:    0  (  0.00%)
+  P:   76  ( 25.33%)
+
+============================================================
+VALIDATION — Other Confidence Prediction Distributions (by Bin)
+============================================================
+Model Other Confidence Prediction Distribution (bins 0-7, corresponding to A-H):
+  Bin 0 (A, <5%):    0  (  0.00%)
+  Bin 1 (B, 5-10%):    0  (  0.00%)
+  Bin 2 (C, 10-20%):    1  (  0.33%)
+  Bin 3 (D, 20-40%):  197  ( 65.67%)
+  Bin 4 (E, 40-60%):   26  (  8.67%)
+  Bin 5 (F, 60-80%):    0  (  0.00%)
+  Bin 6 (G, 80-90%):    0  (  0.00%)
+  Bin 7 (H, >90%):   76  ( 25.33%)
+Val Accuracy: 0.3833
+Val Loss:     2.0956
+Val Entropy:  0.7720
+Val Conf:     67.3643
+Samples:      300
+
+============================================================
+Validation at step 750
+============================================================
+  Progress: 100/300 questions evaluated (33.3%)
+  Progress: 200/300 questions evaluated (66.7%)
+  Progress: 300/300 questions evaluated (100.0%)
+
+============================================================
+VALIDATION — MCQ Answer Distributions (by Letter)
+============================================================
+Correct (Ground Truth) Distribution (UDAX):
+  U:   70  ( 23.33%)
+  D:   70  ( 23.33%)
+  A:   83  ( 27.67%)
+  X:   77  ( 25.67%)
+
+Model Prediction Distribution (UDAX):
+  U:  182  ( 60.67%)
+  D:   38  ( 12.67%)
+  A:   37  ( 12.33%)
+  X:   43  ( 14.33%)
+
+============================================================
+VALIDATION — MCQ Answer Distributions (by Position)
+============================================================
+Correct (Ground Truth) Distribution (positions 0-3, corresponding to A-D):
+  Position 0 (A):   70  ( 23.33%)
+  Position 1 (B):   70  ( 23.33%)
+  Position 2 (C):   83  ( 27.67%)
+  Position 3 (D):   77  ( 25.67%)
+
+Model Prediction Distribution (positions 0-3, corresponding to A-D):
+  Position 0 (A):  182  ( 60.67%)
+  Position 1 (B):   38  ( 12.67%)
+  Position 2 (C):   37  ( 12.33%)
+  Position 3 (D):   43  ( 14.33%)
+
+============================================================
+VALIDATION — Self Confidence Prediction Distributions (by Letter)
+============================================================
+Model Self Confidence Prediction Distribution (YHEMLVIP):
+  Y:    0  (  0.00%)
+  H:    0  (  0.00%)
+  E:    0  (  0.00%)
+  M:  146  ( 48.67%)
+  L:   30  ( 10.00%)
+  V:    0  (  0.00%)
+  I:    0  (  0.00%)
+  P:  124  ( 41.33%)
+
+============================================================
+VALIDATION — Self Confidence Prediction Distributions (by Bin)
+============================================================
+Model Self Confidence Prediction Distribution (bins 0-7, corresponding to A-H):
+  Bin 0 (A, <5%):    0  (  0.00%)
+  Bin 1 (B, 5-10%):    0  (  0.00%)
+  Bin 2 (C, 10-20%):    0  (  0.00%)
+  Bin 3 (D, 20-40%):  146  ( 48.67%)
+  Bin 4 (E, 40-60%):   30  ( 10.00%)
+  Bin 5 (F, 60-80%):    0  (  0.00%)
+  Bin 6 (G, 80-90%):    0  (  0.00%)
+  Bin 7 (H, >90%):  124  ( 41.33%)
+
+============================================================
+VALIDATION — Other Confidence Prediction Distributions (by Letter)
+============================================================
+Model Other Confidence Prediction Distribution (YHEMLVIP):
+  Y:    0  (  0.00%)
+  H:    0  (  0.00%)
+  E:    2  (  0.67%)
+  M:  220  ( 73.33%)
+  L:    0  (  0.00%)
+  V:    0  (  0.00%)
+  I:    0  (  0.00%)
+  P:   78  ( 26.00%)
+
+============================================================
+VALIDATION — Other Confidence Prediction Distributions (by Bin)
+============================================================
+Model Other Confidence Prediction Distribution (bins 0-7, corresponding to A-H):
+  Bin 0 (A, <5%):    0  (  0.00%)
+  Bin 1 (B, 5-10%):    0  (  0.00%)
+  Bin 2 (C, 10-20%):    2  (  0.67%)
+  Bin 3 (D, 20-40%):  220  ( 73.33%)
+  Bin 4 (E, 40-60%):    0  (  0.00%)
+  Bin 5 (F, 60-80%):    0  (  0.00%)
+  Bin 6 (G, 80-90%):    0  (  0.00%)
+  Bin 7 (H, >90%):   78  ( 26.00%)
+Val Accuracy: 0.4300
+Val Loss:     1.9388
+Val Entropy:  0.7795
+Val Conf:     61.3078
+Samples:      300
+
+============================================================
+Saving checkpoint at step 800
+Local path: /workspace/local_checkpoints/2025-12-23-00-01-33_checkpoints/ckpt_step_800
+============================================================
+✓ Checkpoint saved locally to: /workspace/local_checkpoints/2025-12-23-00-01-33_checkpoints/ckpt_step_800
+Pushing checkpoint to HuggingFace Hub: Tristan-Day/ect_20251223_001114_8c6f69au_step_800
+Checkpoint tag: 20251223-000134-ect-training-run-20251203-222659-runid-8c6f69au-step-800-20251223-001114
+✓ Checkpoint pushed to HuggingFace Hub: Tristan-Day/ect_20251223_001114_8c6f69au_step_800
+
+============================================================
+Validation at step 1000
+============================================================
+  Progress: 100/300 questions evaluated (33.3%)
+  Progress: 200/300 questions evaluated (66.7%)
+  Progress: 300/300 questions evaluated (100.0%)
+
+============================================================
+VALIDATION — MCQ Answer Distributions (by Letter)
+============================================================
+Correct (Ground Truth) Distribution (UDAX):
+  U:   70  ( 23.33%)
+  D:   70  ( 23.33%)
+  A:   83  ( 27.67%)
+  X:   77  ( 25.67%)
+
+Model Prediction Distribution (UDAX):
+  U:  174  ( 58.00%)
+  D:   40  ( 13.33%)
+  A:   45  ( 15.00%)
+  X:   41  ( 13.67%)
+
+============================================================
+VALIDATION — MCQ Answer Distributions (by Position)
+============================================================
+Correct (Ground Truth) Distribution (positions 0-3, corresponding to A-D):
+  Position 0 (A):   70  ( 23.33%)
+  Position 1 (B):   70  ( 23.33%)
+  Position 2 (C):   83  ( 27.67%)
+  Position 3 (D):   77  ( 25.67%)
+
+Model Prediction Distribution (positions 0-3, corresponding to A-D):
+  Position 0 (A):  174  ( 58.00%)
+  Position 1 (B):   40  ( 13.33%)
+  Position 2 (C):   45  ( 15.00%)
+  Position 3 (D):   41  ( 13.67%)
+
+============================================================
+VALIDATION — Self Confidence Prediction Distributions (by Letter)
+============================================================
+Model Self Confidence Prediction Distribution (YHEMLVIP):
+  Y:    0  (  0.00%)
+  H:    0  (  0.00%)
+  E:    5  (  1.67%)
+  M:  142  ( 47.33%)
+  L:   34  ( 11.33%)
+  V:    0  (  0.00%)
+  I:    0  (  0.00%)
+  P:  119  ( 39.67%)
+
+============================================================
+VALIDATION — Self Confidence Prediction Distributions (by Bin)
+============================================================
+Model Self Confidence Prediction Distribution (bins 0-7, corresponding to A-H):
+  Bin 0 (A, <5%):    0  (  0.00%)
+  Bin 1 (B, 5-10%):    0  (  0.00%)
+  Bin 2 (C, 10-20%):    5  (  1.67%)
+  Bin 3 (D, 20-40%):  142  ( 47.33%)
+  Bin 4 (E, 40-60%):   34  ( 11.33%)
+  Bin 5 (F, 60-80%):    0  (  0.00%)
+  Bin 6 (G, 80-90%):    0  (  0.00%)
+  Bin 7 (H, >90%):  119  ( 39.67%)
+
+============================================================
+VALIDATION — Other Confidence Prediction Distributions (by Letter)
+============================================================
+Model Other Confidence Prediction Distribution (YHEMLVIP):
+  Y:    0  (  0.00%)
+  H:    0  (  0.00%)
+  E:   22  (  7.33%)
+  M:  195  ( 65.00%)
+  L:    9  (  3.00%)
+  V:    0  (  0.00%)
+  I:    0  (  0.00%)
+  P:   74  ( 24.67%)
+
+============================================================
+VALIDATION — Other Confidence Prediction Distributions (by Bin)
+============================================================
+Model Other Confidence Prediction Distribution (bins 0-7, corresponding to A-H):
+  Bin 0 (A, <5%):    0  (  0.00%)
+  Bin 1 (B, 5-10%):    0  (  0.00%)
+  Bin 2 (C, 10-20%):   22  (  7.33%)
+  Bin 3 (D, 20-40%):  195  ( 65.00%)
+  Bin 4 (E, 40-60%):    9  (  3.00%)
+  Bin 5 (F, 60-80%):    0  (  0.00%)
+  Bin 6 (G, 80-90%):    0  (  0.00%)
+  Bin 7 (H, >90%):   74  ( 24.67%)
+Val Accuracy: 0.4333
+Val Loss:     1.9471
+Val Entropy:  0.7711
+Val Conf:     60.9788
+Samples:      300
+
+============================================================
+Saving checkpoint at step 1200
+Local path: /workspace/local_checkpoints/2025-12-23-00-01-33_checkpoints/ckpt_step_1200
+============================================================
+✓ Checkpoint saved locally to: /workspace/local_checkpoints/2025-12-23-00-01-33_checkpoints/ckpt_step_1200
+Pushing checkpoint to HuggingFace Hub: Tristan-Day/ect_20251223_001458_8c6f69au_step_1200
+Checkpoint tag: 20251223-000134-ect-training-run-20251203-222659-runid-8c6f69au-step-1200-20251223-001458
+✓ Checkpoint pushed to HuggingFace Hub: Tristan-Day/ect_20251223_001458_8c6f69au_step_1200
+
+============================================================
+Validation at step 1250
+============================================================
+  Progress: 100/300 questions evaluated (33.3%)
+  Progress: 200/300 questions evaluated (66.7%)
+  Progress: 300/300 questions evaluated (100.0%)
+
+============================================================
+VALIDATION — MCQ Answer Distributions (by Letter)
+============================================================
+Correct (Ground Truth) Distribution (UDAX):
+  U:   70  ( 23.33%)
+  D:   70  ( 23.33%)
+  A:   83  ( 27.67%)
+  X:   77  ( 25.67%)
+
+Model Prediction Distribution (UDAX):
+  U:  169  ( 56.33%)
+  D:   40  ( 13.33%)
+  A:   51  ( 17.00%)
+  X:   40  ( 13.33%)
+
+============================================================
+VALIDATION — MCQ Answer Distributions (by Position)
+============================================================
+Correct (Ground Truth) Distribution (positions 0-3, corresponding to A-D):
+  Position 0 (A):   70  ( 23.33%)
+  Position 1 (B):   70  ( 23.33%)
+  Position 2 (C):   83  ( 27.67%)
+  Position 3 (D):   77  ( 25.67%)
+
+Model Prediction Distribution (positions 0-3, corresponding to A-D):
+  Position 0 (A):  169  ( 56.33%)
+  Position 1 (B):   40  ( 13.33%)
+  Position 2 (C):   51  ( 17.00%)
+  Position 3 (D):   40  ( 13.33%)
+
+============================================================
+VALIDATION — Self Confidence Prediction Distributions (by Letter)
+============================================================
+Model Self Confidence Prediction Distribution (YHEMLVIP):
+  Y:    0  (  0.00%)
+  H:    0  (  0.00%)
+  E:    0  (  0.00%)
+  M:  169  ( 56.33%)
+  L:    7  (  2.33%)
+  V:    0  (  0.00%)
+  I:    0  (  0.00%)
+  P:  124  ( 41.33%)
+
+============================================================
+VALIDATION — Self Confidence Prediction Distributions (by Bin)
+============================================================
+Model Self Confidence Prediction Distribution (bins 0-7, corresponding to A-H):
+  Bin 0 (A, <5%):    0  (  0.00%)
+  Bin 1 (B, 5-10%):    0  (  0.00%)
+  Bin 2 (C, 10-20%):    0  (  0.00%)
+  Bin 3 (D, 20-40%):  169  ( 56.33%)
+  Bin 4 (E, 40-60%):    7  (  2.33%)
+  Bin 5 (F, 60-80%):    0  (  0.00%)
+  Bin 6 (G, 80-90%):    0  (  0.00%)
+  Bin 7 (H, >90%):  124  ( 41.33%)
+
+============================================================
+VALIDATION — Other Confidence Prediction Distributions (by Letter)
+============================================================
+Model Other Confidence Prediction Distribution (YHEMLVIP):
+  Y:    0  (  0.00%)
+  H:    0  (  0.00%)
+  E:   13  (  4.33%)
+  M:  190  ( 63.33%)
+  L:    0  (  0.00%)
+  V:    0  (  0.00%)
+  I:    0  (  0.00%)
+  P:   97  ( 32.33%)
+
+============================================================
+VALIDATION — Other Confidence Prediction Distributions (by Bin)
+============================================================
+Model Other Confidence Prediction Distribution (bins 0-7, corresponding to A-H):
+  Bin 0 (A, <5%):    0  (  0.00%)
+  Bin 1 (B, 5-10%):    0  (  0.00%)
+  Bin 2 (C, 10-20%):   13  (  4.33%)
+  Bin 3 (D, 20-40%):  190  ( 63.33%)
+  Bin 4 (E, 40-60%):    0  (  0.00%)
+  Bin 5 (F, 60-80%):    0  (  0.00%)
+  Bin 6 (G, 80-90%):    0  (  0.00%)
+  Bin 7 (H, >90%):   97  ( 32.33%)
+Val Accuracy: 0.4500
+Val Loss:     1.9224
+Val Entropy:  0.7863
+Val Conf:     59.6350
+Samples:      300
+
+============================================================
+Validation at step 1500
+============================================================
+  Progress: 100/300 questions evaluated (33.3%)
+  Progress: 200/300 questions evaluated (66.7%)
+  Progress: 300/300 questions evaluated (100.0%)
+
+============================================================
+VALIDATION — MCQ Answer Distributions (by Letter)
+============================================================
+Correct (Ground Truth) Distribution (UDAX):
+  U:   70  ( 23.33%)
+  D:   70  ( 23.33%)
+  A:   83  ( 27.67%)
+  X:   77  ( 25.67%)
+
+Model Prediction Distribution (UDAX):
+  U:  163  ( 54.33%)
+  D:   43  ( 14.33%)
+  A:   53  ( 17.67%)
+  X:   41  ( 13.67%)
+
+============================================================
+VALIDATION — MCQ Answer Distributions (by Position)
+============================================================
+Correct (Ground Truth) Distribution (positions 0-3, corresponding to A-D):
+  Position 0 (A):   70  ( 23.33%)
+  Position 1 (B):   70  ( 23.33%)
+  Position 2 (C):   83  ( 27.67%)
+  Position 3 (D):   77  ( 25.67%)
+
+Model Prediction Distribution (positions 0-3, corresponding to A-D):
+  Position 0 (A):  163  ( 54.33%)
+  Position 1 (B):   43  ( 14.33%)
+  Position 2 (C):   53  ( 17.67%)
+  Position 3 (D):   41  ( 13.67%)
+
+============================================================
+VALIDATION — Self Confidence Prediction Distributions (by Letter)
+============================================================
+Model Self Confidence Prediction Distribution (YHEMLVIP):
+  Y:    0  (  0.00%)
+  H:    0  (  0.00%)
+  E:    8  (  2.67%)
+  M:   75  ( 25.00%)
+  L:   52  ( 17.33%)
+  V:    4  (  1.33%)
+  I:    1  (  0.33%)
+  P:  160  ( 53.33%)
+
+============================================================
+VALIDATION — Self Confidence Prediction Distributions (by Bin)
+============================================================
+Model Self Confidence Prediction Distribution (bins 0-7, corresponding to A-H):
+  Bin 0 (A, <5%):    0  (  0.00%)
+  Bin 1 (B, 5-10%):    0  (  0.00%)
+  Bin 2 (C, 10-20%):    8  (  2.67%)
+  Bin 3 (D, 20-40%):   75  ( 25.00%)
+  Bin 4 (E, 40-60%):   52  ( 17.33%)
+  Bin 5 (F, 60-80%):    4  (  1.33%)
+  Bin 6 (G, 80-90%):    1  (  0.33%)
+  Bin 7 (H, >90%):  160  ( 53.33%)
+
+============================================================
+VALIDATION — Other Confidence Prediction Distributions (by Letter)
+============================================================
+Model Other Confidence Prediction Distribution (YHEMLVIP):
+  Y:    0  (  0.00%)
+  H:    0  (  0.00%)
+  E:   40  ( 13.33%)
+  M:  123  ( 41.00%)
+  L:   15  (  5.00%)
+  V:    3  (  1.00%)
+  I:    0  (  0.00%)
+  P:  119  ( 39.67%)
+
+============================================================
+VALIDATION — Other Confidence Prediction Distributions (by Bin)
+============================================================
+Model Other Confidence Prediction Distribution (bins 0-7, corresponding to A-H):
+  Bin 0 (A, <5%):    0  (  0.00%)
+  Bin 1 (B, 5-10%):    0  (  0.00%)
+  Bin 2 (C, 10-20%):   40  ( 13.33%)
+  Bin 3 (D, 20-40%):  123  ( 41.00%)
+  Bin 4 (E, 40-60%):   15  (  5.00%)
+  Bin 5 (F, 60-80%):    3  (  1.00%)
+  Bin 6 (G, 80-90%):    0  (  0.00%)
+  Bin 7 (H, >90%):  119  ( 39.67%)
+Val Accuracy: 0.4533
+Val Loss:     2.1642
+Val Entropy:  0.7795
+Val Conf:     66.3843
+Samples:      300
+
+============================================================
+Saving checkpoint at step 1600
+Local path: /workspace/local_checkpoints/2025-12-23-00-01-33_checkpoints/ckpt_step_1600
+============================================================
+✓ Checkpoint saved locally to: /workspace/local_checkpoints/2025-12-23-00-01-33_checkpoints/ckpt_step_1600
+Pushing checkpoint to HuggingFace Hub: Tristan-Day/ect_20251223_001950_8c6f69au_step_1600
+Checkpoint tag: 20251223-000134-ect-training-run-20251203-222659-runid-8c6f69au-step-1600-20251223-001950
+✓ Checkpoint pushed to HuggingFace Hub: Tristan-Day/ect_20251223_001950_8c6f69au_step_1600
+
+============================================================
+Validation at step 1750
+============================================================
+  Progress: 100/300 questions evaluated (33.3%)
+  Progress: 200/300 questions evaluated (66.7%)
+  Progress: 300/300 questions evaluated (100.0%)
+
+============================================================
+VALIDATION — MCQ Answer Distributions (by Letter)
+============================================================
+Correct (Ground Truth) Distribution (UDAX):
+  U:   70  ( 23.33%)
+  D:   70  ( 23.33%)
+  A:   83  ( 27.67%)
+  X:   77  ( 25.67%)
+
+Model Prediction Distribution (UDAX):
+  U:  160  ( 53.33%)
+  D:   45  ( 15.00%)
+  A:   56  ( 18.67%)
+  X:   39  ( 13.00%)
+
+============================================================
+VALIDATION — MCQ Answer Distributions (by Position)
+============================================================
+Correct (Ground Truth) Distribution (positions 0-3, corresponding to A-D):
+  Position 0 (A):   70  ( 23.33%)
+  Position 1 (B):   70  ( 23.33%)
+  Position 2 (C):   83  ( 27.67%)
+  Position 3 (D):   77  ( 25.67%)
+
+Model Prediction Distribution (positions 0-3, corresponding to A-D):
+  Position 0 (A):  160  ( 53.33%)
+  Position 1 (B):   45  ( 15.00%)
+  Position 2 (C):   56  ( 18.67%)
+  Position 3 (D):   39  ( 13.00%)
+
+============================================================
+VALIDATION — Self Confidence Prediction Distributions (by Letter)
+============================================================
+Model Self Confidence Prediction Distribution (YHEMLVIP):
+  Y:    0  (  0.00%)
+  H:    0  (  0.00%)
+  E:    2  (  0.67%)
+  M:  117  ( 39.00%)
+  L:   39  ( 13.00%)
+  V:    2  (  0.67%)
+  I:    0  (  0.00%)
+  P:  140  ( 46.67%)
+
+============================================================
+VALIDATION — Self Confidence Prediction Distributions (by Bin)
+============================================================
+Model Self Confidence Prediction Distribution (bins 0-7, corresponding to A-H):
+  Bin 0 (A, <5%):    0  (  0.00%)
+  Bin 1 (B, 5-10%):    0  (  0.00%)
+  Bin 2 (C, 10-20%):    2  (  0.67%)
+  Bin 3 (D, 20-40%):  117  ( 39.00%)
+  Bin 4 (E, 40-60%):   39  ( 13.00%)
+  Bin 5 (F, 60-80%):    2  (  0.67%)
+  Bin 6 (G, 80-90%):    0  (  0.00%)
+  Bin 7 (H, >90%):  140  ( 46.67%)
+
+============================================================
+VALIDATION — Other Confidence Prediction Distributions (by Letter)
+============================================================
+Model Other Confidence Prediction Distribution (YHEMLVIP):
+  Y:    0  (  0.00%)
+  H:    0  (  0.00%)
+  E:   25  (  8.33%)
+  M:  154  ( 51.33%)
+  L:    3  (  1.00%)
+  V:    5  (  1.67%)
+  I:    0  (  0.00%)
+  P:  113  ( 37.67%)
+
+============================================================
+VALIDATION — Other Confidence Prediction Distributions (by Bin)
+============================================================
+Model Other Confidence Prediction Distribution (bins 0-7, corresponding to A-H):
+  Bin 0 (A, <5%):    0  (  0.00%)
+  Bin 1 (B, 5-10%):    0  (  0.00%)
+  Bin 2 (C, 10-20%):   25  (  8.33%)
+  Bin 3 (D, 20-40%):  154  ( 51.33%)
+  Bin 4 (E, 40-60%):    3  (  1.00%)
+  Bin 5 (F, 60-80%):    5  (  1.67%)
+  Bin 6 (G, 80-90%):    0  (  0.00%)
+  Bin 7 (H, >90%):  113  ( 37.67%)
+Val Accuracy: 0.4633
+Val Loss:     2.0725
+Val Entropy:  0.7622
+Val Conf:     64.5813
+Samples:      300
+
+============================================================
+Validation at step 2000
+============================================================
+  Progress: 100/300 questions evaluated (33.3%)
+  Progress: 200/300 questions evaluated (66.7%)
+  Progress: 300/300 questions evaluated (100.0%)
+
+============================================================
+VALIDATION — MCQ Answer Distributions (by Letter)
+============================================================
+Correct (Ground Truth) Distribution (UDAX):
+  U:   70  ( 23.33%)
+  D:   70  ( 23.33%)
+  A:   83  ( 27.67%)
+  X:   77  ( 25.67%)
+
+Model Prediction Distribution (UDAX):
+  U:  164  ( 54.67%)
+  D:   44  ( 14.67%)
+  A:   53  ( 17.67%)
+  X:   39  ( 13.00%)
+
+============================================================
+VALIDATION — MCQ Answer Distributions (by Position)
+============================================================
+Correct (Ground Truth) Distribution (positions 0-3, corresponding to A-D):
+  Position 0 (A):   70  ( 23.33%)
+  Position 1 (B):   70  ( 23.33%)
+  Position 2 (C):   83  ( 27.67%)
+  Position 3 (D):   77  ( 25.67%)
+
+Model Prediction Distribution (positions 0-3, corresponding to A-D):
+  Position 0 (A):  164  ( 54.67%)
+  Position 1 (B):   44  ( 14.67%)
+  Position 2 (C):   53  ( 17.67%)
+  Position 3 (D):   39  ( 13.00%)
+
+============================================================
+VALIDATION — Self Confidence Prediction Distributions (by Letter)
+============================================================
+Model Self Confidence Prediction Distribution (YHEMLVIP):
+  Y:    0  (  0.00%)
+  H:    0  (  0.00%)
+  E:   20  (  6.67%)
+  M:  120  ( 40.00%)
+  L:   48  ( 16.00%)
+  V:    3  (  1.00%)
+  I:    1  (  0.33%)
+  P:  108  ( 36.00%)
+
+============================================================
+VALIDATION — Self Confidence Prediction Distributions (by Bin)
+============================================================
+Model Self Confidence Prediction Distribution (bins 0-7, corresponding to A-H):
+  Bin 0 (A, <5%):    0  (  0.00%)
+  Bin 1 (B, 5-10%):    0  (  0.00%)
+  Bin 2 (C, 10-20%):   20  (  6.67%)
+  Bin 3 (D, 20-40%):  120  ( 40.00%)
+  Bin 4 (E, 40-60%):   48  ( 16.00%)
+  Bin 5 (F, 60-80%):    3  (  1.00%)
+  Bin 6 (G, 80-90%):    1  (  0.33%)
+  Bin 7 (H, >90%):  108  ( 36.00%)
+
+============================================================
+VALIDATION — Other Confidence Prediction Distributions (by Letter)
+============================================================
+Model Other Confidence Prediction Distribution (YHEMLVIP):
+  Y:    0  (  0.00%)
+  H:    0  (  0.00%)
+  E:   55  ( 18.33%)
+  M:  120  ( 40.00%)
+  L:   28  (  9.33%)
+  V:    2  (  0.67%)
+  I:    0  (  0.00%)
+  P:   95  ( 31.67%)
+
+============================================================
+VALIDATION — Other Confidence Prediction Distributions (by Bin)
+============================================================
+Model Other Confidence Prediction Distribution (bins 0-7, corresponding to A-H):
+  Bin 0 (A, <5%):    0  (  0.00%)
+  Bin 1 (B, 5-10%):    0  (  0.00%)
+  Bin 2 (C, 10-20%):   55  ( 18.33%)
+  Bin 3 (D, 20-40%):  120  ( 40.00%)
+  Bin 4 (E, 40-60%):   28  (  9.33%)
+  Bin 5 (F, 60-80%):    2  (  0.67%)
+  Bin 6 (G, 80-90%):    0  (  0.00%)
+  Bin 7 (H, >90%):   95  ( 31.67%)
+Val Accuracy: 0.4667
+Val Loss:     1.9277
+Val Entropy:  0.7648
+Val Conf:     59.2137
+Samples:      300
+
+============================================================
+Saving checkpoint at step 2000
+Local path: /workspace/local_checkpoints/2025-12-23-00-01-33_checkpoints/ckpt_step_2000
+============================================================
+✓ Checkpoint saved locally to: /workspace/local_checkpoints/2025-12-23-00-01-33_checkpoints/ckpt_step_2000
+Pushing checkpoint to HuggingFace Hub: Tristan-Day/ect_20251223_002502_8c6f69au_step_2000
+Checkpoint tag: 20251223-000134-ect-training-run-20251203-222659-runid-8c6f69au-step-2000-20251223-002502
+✓ Checkpoint pushed to HuggingFace Hub: Tristan-Day/ect_20251223_002502_8c6f69au_step_2000
+
+============================================================
+Validation at step 2250
+============================================================
+  Progress: 100/300 questions evaluated (33.3%)
+  Progress: 200/300 questions evaluated (66.7%)
+  Progress: 300/300 questions evaluated (100.0%)
+
+============================================================
+VALIDATION — MCQ Answer Distributions (by Letter)
+============================================================
+Correct (Ground Truth) Distribution (UDAX):
+  U:   70  ( 23.33%)
+  D:   70  ( 23.33%)
+  A:   83  ( 27.67%)
+  X:   77  ( 25.67%)
+
+Model Prediction Distribution (UDAX):
+  U:  162  ( 54.00%)
+  D:   45  ( 15.00%)
+  A:   54  ( 18.00%)
+  X:   39  ( 13.00%)
+
+============================================================
+VALIDATION — MCQ Answer Distributions (by Position)
+============================================================
+Correct (Ground Truth) Distribution (positions 0-3, corresponding to A-D):
+  Position 0 (A):   70  ( 23.33%)
+  Position 1 (B):   70  ( 23.33%)
+  Position 2 (C):   83  ( 27.67%)
+  Position 3 (D):   77  ( 25.67%)
+
+Model Prediction Distribution (positions 0-3, corresponding to A-D):
+  Position 0 (A):  162  ( 54.00%)
+  Position 1 (B):   45  ( 15.00%)
+  Position 2 (C):   54  ( 18.00%)
+  Position 3 (D):   39  ( 13.00%)
+
+============================================================
+VALIDATION — Self Confidence Prediction Distributions (by Letter)
+============================================================
+Model Self Confidence Prediction Distribution (YHEMLVIP):
+  Y:    0  (  0.00%)
+  H:    0  (  0.00%)
+  E:   25  (  8.33%)
+  M:  113  ( 37.67%)
+  L:   23  (  7.67%)
+  V:    0  (  0.00%)
+  I:    2  (  0.67%)
+  P:  137  ( 45.67%)
+
+============================================================
+VALIDATION — Self Confidence Prediction Distributions (by Bin)
+============================================================
+Model Self Confidence Prediction Distribution (bins 0-7, corresponding to A-H):
+  Bin 0 (A, <5%):    0  (  0.00%)
+  Bin 1 (B, 5-10%):    0  (  0.00%)
+  Bin 2 (C, 10-20%):   25  (  8.33%)
+  Bin 3 (D, 20-40%):  113  ( 37.67%)
+  Bin 4 (E, 40-60%):   23  (  7.67%)
+  Bin 5 (F, 60-80%):    0  (  0.00%)
+  Bin 6 (G, 80-90%):    2  (  0.67%)
+  Bin 7 (H, >90%):  137  ( 45.67%)
+
+============================================================
+VALIDATION — Other Confidence Prediction Distributions (by Letter)
+============================================================
+Model Other Confidence Prediction Distribution (YHEMLVIP):
+  Y:    0  (  0.00%)
+  H:    0  (  0.00%)
+  E:   49  ( 16.33%)
+  M:  128  ( 42.67%)
+  L:    4  (  1.33%)
+  V:    3  (  1.00%)
+  I:    0  (  0.00%)
+  P:  116  ( 38.67%)
+
+============================================================
+VALIDATION — Other Confidence Prediction Distributions (by Bin)
+============================================================
+Model Other Confidence Prediction Distribution (bins 0-7, corresponding to A-H):
+  Bin 0 (A, <5%):    0  (  0.00%)
+  Bin 1 (B, 5-10%):    0  (  0.00%)
+  Bin 2 (C, 10-20%):   49  ( 16.33%)
+  Bin 3 (D, 20-40%):  128  ( 42.67%)
+  Bin 4 (E, 40-60%):    4  (  1.33%)
+  Bin 5 (F, 60-80%):    3  (  1.00%)
+  Bin 6 (G, 80-90%):    0  (  0.00%)
+  Bin 7 (H, >90%):  116  ( 38.67%)
+Val Accuracy: 0.4633
+Val Loss:     2.0715
+Val Entropy:  0.7904
+Val Conf:     61.9688
+Samples:      300
+
+============================================================
+Saving checkpoint at step 2400
+Local path: /workspace/local_checkpoints/2025-12-23-00-01-33_checkpoints/ckpt_step_2400
+============================================================
+✓ Checkpoint saved locally to: /workspace/local_checkpoints/2025-12-23-00-01-33_checkpoints/ckpt_step_2400
+Pushing checkpoint to HuggingFace Hub: Tristan-Day/ect_20251223_002851_8c6f69au_step_2400
+Checkpoint tag: 20251223-000134-ect-training-run-20251203-222659-runid-8c6f69au-step-2400-20251223-002851
+✓ Checkpoint pushed to HuggingFace Hub: Tristan-Day/ect_20251223_002851_8c6f69au_step_2400
+
+============================================================
+Validation at step 2500
+============================================================
+  Progress: 100/300 questions evaluated (33.3%)
+  Progress: 200/300 questions evaluated (66.7%)
+  Progress: 300/300 questions evaluated (100.0%)
+
+============================================================
+VALIDATION — MCQ Answer Distributions (by Letter)
+============================================================
+Correct (Ground Truth) Distribution (UDAX):
+  U:   70  ( 23.33%)
+  D:   70  ( 23.33%)
+  A:   83  ( 27.67%)
+  X:   77  ( 25.67%)
+
+Model Prediction Distribution (UDAX):
+  U:  157  ( 52.33%)
+  D:   46  ( 15.33%)
+  A:   56  ( 18.67%)
+  X:   41  ( 13.67%)
+
+============================================================
+VALIDATION — MCQ Answer Distributions (by Position)
+============================================================
+Correct (Ground Truth) Distribution (positions 0-3, corresponding to A-D):
+  Position 0 (A):   70  ( 23.33%)
+  Position 1 (B):   70  ( 23.33%)
+  Position 2 (C):   83  ( 27.67%)
+  Position 3 (D):   77  ( 25.67%)
+
+Model Prediction Distribution (positions 0-3, corresponding to A-D):
+  Position 0 (A):  157  ( 52.33%)
+  Position 1 (B):   46  ( 15.33%)
+  Position 2 (C):   56  ( 18.67%)
+  Position 3 (D):   41  ( 13.67%)
+
+============================================================
+VALIDATION — Self Confidence Prediction Distributions (by Letter)
+============================================================
+Model Self Confidence Prediction Distribution (YHEMLVIP):
+  Y:    0  (  0.00%)
+  H:    0  (  0.00%)
+  E:   14  (  4.67%)
+  M:  106  ( 35.33%)
+  L:   68  ( 22.67%)
+  V:    5  (  1.67%)
+  I:    0  (  0.00%)
+  P:  107  ( 35.67%)
+
+============================================================
+VALIDATION — Self Confidence Prediction Distributions (by Bin)
+============================================================
+Model Self Confidence Prediction Distribution (bins 0-7, corresponding to A-H):
+  Bin 0 (A, <5%):    0  (  0.00%)
+  Bin 1 (B, 5-10%):    0  (  0.00%)
+  Bin 2 (C, 10-20%):   14  (  4.67%)
+  Bin 3 (D, 20-40%):  106  ( 35.33%)
+  Bin 4 (E, 40-60%):   68  ( 22.67%)
+  Bin 5 (F, 60-80%):    5  (  1.67%)
+  Bin 6 (G, 80-90%):    0  (  0.00%)
+  Bin 7 (H, >90%):  107  ( 35.67%)
+
+============================================================
+VALIDATION — Other Confidence Prediction Distributions (by Letter)
+============================================================
+Model Other Confidence Prediction Distribution (YHEMLVIP):
+  Y:    0  (  0.00%)
+  H:    0  (  0.00%)
+  E:   44  ( 14.67%)
+  M:  119  ( 39.67%)
+  L:   33  ( 11.00%)
+  V:    7  (  2.33%)
+  I:    0  (  0.00%)
+  P:   97  ( 32.33%)
+
+============================================================
+VALIDATION — Other Confidence Prediction Distributions (by Bin)
+============================================================
+Model Other Confidence Prediction Distribution (bins 0-7, corresponding to A-H):
+  Bin 0 (A, <5%):    0  (  0.00%)
+  Bin 1 (B, 5-10%):    0  (  0.00%)
+  Bin 2 (C, 10-20%):   44  ( 14.67%)
+  Bin 3 (D, 20-40%):  119  ( 39.67%)
+  Bin 4 (E, 40-60%):   33  ( 11.00%)
+  Bin 5 (F, 60-80%):    7  (  2.33%)
+  Bin 6 (G, 80-90%):    0  (  0.00%)
+  Bin 7 (H, >90%):   97  ( 32.33%)
+Val Accuracy: 0.4700
+Val Loss:     2.0241
+Val Entropy:  0.7878
+Val Conf:     61.3874
+Samples:      300
+
+============================================================
+Validation at step 2750
+============================================================
+  Progress: 100/300 questions evaluated (33.3%)
+  Progress: 200/300 questions evaluated (66.7%)
+  Progress: 300/300 questions evaluated (100.0%)
+
+============================================================
+VALIDATION — MCQ Answer Distributions (by Letter)
+============================================================
+Correct (Ground Truth) Distribution (UDAX):
+  U:   70  ( 23.33%)
+  D:   70  ( 23.33%)
+  A:   83  ( 27.67%)
+  X:   77  ( 25.67%)
+
+Model Prediction Distribution (UDAX):
+  U:  159  ( 53.00%)
+  D:   45  ( 15.00%)
+  A:   57  ( 19.00%)
+  X:   39  ( 13.00%)
+
+============================================================
+VALIDATION — MCQ Answer Distributions (by Position)
+============================================================
+Correct (Ground Truth) Distribution (positions 0-3, corresponding to A-D):
+  Position 0 (A):   70  ( 23.33%)
+  Position 1 (B):   70  ( 23.33%)
+  Position 2 (C):   83  ( 27.67%)
+  Position 3 (D):   77  ( 25.67%)
+
+Model Prediction Distribution (positions 0-3, corresponding to A-D):
+  Position 0 (A):  159  ( 53.00%)
+  Position 1 (B):   45  ( 15.00%)
+  Position 2 (C):   57  ( 19.00%)
+  Position 3 (D):   39  ( 13.00%)
+
+============================================================
+VALIDATION — Self Confidence Prediction Distributions (by Letter)
+============================================================
+Model Self Confidence Prediction Distribution (YHEMLVIP):
+  Y:    0  (  0.00%)
+  H:    0  (  0.00%)
+  E:   12  (  4.00%)
+  M:  108  ( 36.00%)
+  L:   47  ( 15.67%)
+  V:   12  (  4.00%)
+  I:    0  (  0.00%)
+  P:  121  ( 40.33%)
+
+============================================================
+VALIDATION — Self Confidence Prediction Distributions (by Bin)
+============================================================
+Model Self Confidence Prediction Distribution (bins 0-7, corresponding to A-H):
+  Bin 0 (A, <5%):    0  (  0.00%)
+  Bin 1 (B, 5-10%):    0  (  0.00%)
+  Bin 2 (C, 10-20%):   12  (  4.00%)
+  Bin 3 (D, 20-40%):  108  ( 36.00%)
+  Bin 4 (E, 40-60%):   47  ( 15.67%)
+  Bin 5 (F, 60-80%):   12  (  4.00%)
+  Bin 6 (G, 80-90%):    0  (  0.00%)
+  Bin 7 (H, >90%):  121  ( 40.33%)
+
+============================================================
+VALIDATION — Other Confidence Prediction Distributions (by Letter)
+============================================================
+Model Other Confidence Prediction Distribution (YHEMLVIP):
+  Y:    0  (  0.00%)
+  H:    0  (  0.00%)
+  E:   44  ( 14.67%)
+  M:  112  ( 37.33%)
+  L:   23  (  7.67%)
+  V:   14  (  4.67%)
+  I:    0  (  0.00%)
+  P:  107  ( 35.67%)
+
+============================================================
+VALIDATION — Other Confidence Prediction Distributions (by Bin)
+============================================================
+Model Other Confidence Prediction Distribution (bins 0-7, corresponding to A-H):
+  Bin 0 (A, <5%):    0  (  0.00%)
+  Bin 1 (B, 5-10%):    0  (  0.00%)
+  Bin 2 (C, 10-20%):   44  ( 14.67%)
+  Bin 3 (D, 20-40%):  112  ( 37.33%)
+  Bin 4 (E, 40-60%):   23  (  7.67%)
+  Bin 5 (F, 60-80%):   14  (  4.67%)
+  Bin 6 (G, 80-90%):    0  (  0.00%)
+  Bin 7 (H, >90%):  107  ( 35.67%)
+Val Accuracy: 0.4767
+Val Loss:     2.1323
+Val Entropy:  0.7885
+Val Conf:     62.2268
+Samples:      300
+
+============================================================
+Saving checkpoint at step 2800
+Local path: /workspace/local_checkpoints/2025-12-23-00-01-33_checkpoints/ckpt_step_2800
+============================================================
+✓ Checkpoint saved locally to: /workspace/local_checkpoints/2025-12-23-00-01-33_checkpoints/ckpt_step_2800
+Pushing checkpoint to HuggingFace Hub: Tristan-Day/ect_20251223_003415_8c6f69au_step_2800
+Checkpoint tag: 20251223-000134-ect-training-run-20251203-222659-runid-8c6f69au-step-2800-20251223-003415
+✓ Checkpoint pushed to HuggingFace Hub: Tristan-Day/ect_20251223_003415_8c6f69au_step_2800
+
+============================================================
+Final evaluation:
+============================================================
+  Progress: 100/300 questions evaluated (33.3%)
+  Progress: 200/300 questions evaluated (66.7%)
+  Progress: 300/300 questions evaluated (100.0%)
+
+============================================================
+FINAL — MCQ Answer Distributions (by Letter)
+============================================================
+Correct (Ground Truth) Distribution (UDAX):
+  U:   70  ( 23.33%)
+  D:   70  ( 23.33%)
+  A:   83  ( 27.67%)
+  X:   77  ( 25.67%)
+
+Model Prediction Distribution (UDAX):
+  U:  159  ( 53.00%)
+  D:   46  ( 15.33%)
+  A:   56  ( 18.67%)
+  X:   39  ( 13.00%)
+
+============================================================
+FINAL — MCQ Answer Distributions (by Position)
+============================================================
+Correct (Ground Truth) Distribution (positions 0-3, corresponding to A-D):
+  Position 0 (A):   70  ( 23.33%)
+  Position 1 (B):   70  ( 23.33%)
+  Position 2 (C):   83  ( 27.67%)
+  Position 3 (D):   77  ( 25.67%)
+
+Model Prediction Distribution (positions 0-3, corresponding to A-D):
+  Position 0 (A):  159  ( 53.00%)
+  Position 1 (B):   46  ( 15.33%)
+  Position 2 (C):   56  ( 18.67%)
+  Position 3 (D):   39  ( 13.00%)
+
+============================================================
+FINAL — Self Confidence Prediction Distributions (by Letter)
+============================================================
+Model Self Confidence Prediction Distribution (YHEMLVIP):
+  Y:    0  (  0.00%)
+  H:    0  (  0.00%)
+  E:   19  (  6.33%)
+  M:   78  ( 26.00%)
+  L:   68  ( 22.67%)
+  V:    8  (  2.67%)
+  I:   11  (  3.67%)
+  P:  116  ( 38.67%)
+
+============================================================
+FINAL — Self Confidence Prediction Distributions (by Bin)
+============================================================
+Model Self Confidence Prediction Distribution (bins 0-7, corresponding to A-H):
+  Bin 0 (A, <5%):    0  (  0.00%)
+  Bin 1 (B, 5-10%):    0  (  0.00%)
+  Bin 2 (C, 10-20%):   19  (  6.33%)
+  Bin 3 (D, 20-40%):   78  ( 26.00%)
+  Bin 4 (E, 40-60%):   68  ( 22.67%)
+  Bin 5 (F, 60-80%):    8  (  2.67%)
+  Bin 6 (G, 80-90%):   11  (  3.67%)
+  Bin 7 (H, >90%):  116  ( 38.67%)
+
+============================================================
+FINAL — Other Confidence Prediction Distributions (by Letter)
+============================================================
+Model Other Confidence Prediction Distribution (YHEMLVIP):
+  Y:    0  (  0.00%)
+  H:    0  (  0.00%)
+  E:   41  ( 13.67%)
+  M:   94  ( 31.33%)
+  L:   45  ( 15.00%)
+  V:   14  (  4.67%)
+  I:    1  (  0.33%)
+  P:  105  ( 35.00%)
+
+============================================================
+FINAL — Other Confidence Prediction Distributions (by Bin)
+============================================================
+Model Other Confidence Prediction Distribution (bins 0-7, corresponding to A-H):
+  Bin 0 (A, <5%):    0  (  0.00%)
+  Bin 1 (B, 5-10%):    0  (  0.00%)
+  Bin 2 (C, 10-20%):   41  ( 13.67%)
+  Bin 3 (D, 20-40%):   94  ( 31.33%)
+  Bin 4 (E, 40-60%):   45  ( 15.00%)
+  Bin 5 (F, 60-80%):   14  (  4.67%)
+  Bin 6 (G, 80-90%):    1  (  0.33%)
+  Bin 7 (H, >90%):  105  ( 35.00%)
+
+Final Accuracy:  0.4733
+Final Loss:      2.1406
+Final Confidence:63.9902
+Saving model.
+✓ Model and tokenizer saved to dynamic_ect_lora
+✓ Model saved as wandb artifact: model-20251223-000134_ect-training-run-20251203-222659
+✓ Model saved successfully!

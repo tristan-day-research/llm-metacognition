@@ -1,0 +1,911 @@
+
+# --- repo path bootstrap (so root-level imports like `finetune_prompting`,
+# `finetune_config` resolve when run from anywhere) ---
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
+
+import argparse
+import numpy as np
+import os
+import sys
+import torch
+import wandb
+from datetime import datetime, timezone
+from torch.utils.data import DataLoader
+from peft import LoraConfig, get_peft_model
+
+# Defaults live in finetune_config.ECTConfig — edit there to change behavior
+# globally; CLI flags still override per-run.
+from finetune_config import ECTConfig as _C
+
+# Imports from helper files
+from evaluation_metrics import (
+      run_evaluation,
+)
+from utils import (
+    save_model_final,
+    save_checkpoint,
+    save_training_parameters,
+    load_tokenizer,
+    load_model_with_lora,
+    prepare_model_and_tokenizer,
+    validate_train_batch
+)
+from loss import (
+    build_soft_targets_from_entropy,
+    compute_loss
+)
+from finetune_prompting import (
+    build_self_confidence_prompts,
+    build_multiple_choice_question_prompts,
+    run_mcq_forward_pass,
+    run_confidence_forward_pass,
+    get_confidence_letter_mapping,
+    get_mcq_letter_mapping
+)
+from data_handling import (
+    load_mcq_results_data,
+    get_batch,
+    load_jsonl_dataset,
+    filter_dataset_by_mcq_results,
+    validate_datasets_separate
+)
+
+
+# ------------------------------------------------------------------
+# Training Step
+# ------------------------------------------------------------------
+
+def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=None, 
+               train_dataset_qids=None, train_dataset_questions=None):
+    """
+    Train step with support for frozen teacher (pre-recorded) or dynamic teacher.
+    
+    CRITICAL: This function should ONLY receive batches from train_dataset.
+    Never pass validation data to this function.
+    
+    Args:
+        batch: Batch from train_dataset (list of question dicts)
+        mcq_results_lookup: Dict from load_mcq_results_data() or None
+        train_dataset_qids: Set of qids from train_dataset for validation (optional)
+        train_dataset_questions: Set of normalized question texts from train_dataset (optional)
+    
+    Returns:
+        loss tensor, or None if batch should be skipped
+    """
+    # Defensive check: Verify batch contains only questions from train_dataset
+    validate_train_batch(batch, train_dataset_qids, train_dataset_questions, function_name="train_step")
+    
+    # Ensure model is in training mode (set it explicitly to handle cases where
+    # model might be in eval mode from previous evaluation)
+    model.train()
+
+    # ----------------------------------------------
+    # 1. Get entropy, either from frozen or dynamic teacher)
+    # ----------------------------------------------
+    
+    # Generate or get MCQ letter mapping (needed for confidence prompts regardless of teacher type)
+    if args.randomize_letters_per_question:
+        # Generate new mapping for this batch
+        mcq_letter_mapping = get_mcq_letter_mapping(
+            args.mcq_letter_scheme,
+            seed=None  # Don't use seed for per-question randomization
+        )
+    else:
+        # Use pre-generated mapping
+        mcq_letter_mapping = args.mcq_letter_mapping
+
+    # ----------------------------------------------
+    # If using frozen teacher, gets multiple choice answers and the output logit entroy form pre-recorded responses
+    # This is selected with --no_use_recorded_responses flag when running this file
+    # ----------------------------------------------
+
+    if args.use_recorded_responses:
+        if mcq_results_lookup is None:
+            raise ValueError(
+                "--use_recorded_responses is True but no mcq_results_data provided!"
+            )
+        
+        # Look up pre-recorded entropy for each question in batch
+        entropies = []
+        valid_indices = []  # Track which samples in batch are valid
+        
+        for i, row in enumerate(batch):
+            qid = row.get("qid")
+            if qid and qid in mcq_results_lookup:
+                entropies.append(mcq_results_lookup[qid]["entropy"])
+                valid_indices.append(i)
+            else:
+                # Skip this question
+                print(f"⏭️  Skipping question without pre-recorded data: qid={qid}")
+        
+        # If no valid samples in batch, skip this training step
+        if len(entropies) == 0:
+            print(f"⚠️  Entire batch skipped - no pre-recorded data available")
+            return None
+        
+        # Filter batch to only valid samples
+        if len(valid_indices) < len(batch):
+            batch = [batch[i] for i in valid_indices]
+            print(f"  Batch reduced from {len(valid_indices)} to {len(batch)} samples")
+        
+        entropy = torch.tensor(entropies, dtype=torch.float32, device=device)
+
+    # ----------------------------------------------
+    # If using dynamic teacher: compute entropy live from current model
+    # This is  selected with --use_recorded_responses flag when  running this file
+    # ----------------------------------------------
+
+    else:
+        # Use the MCQ letter mapping already defined above
+        mcq_prompts = build_multiple_choice_question_prompts(batch, tokenizer, mcq_letter_mapping)
+        
+        mcq_out = run_mcq_forward_pass(
+            model=model,
+            tokenizer=tokenizer,
+            prompts=mcq_prompts,
+            device=device,
+            temperature=0.0,
+            requires_grad=True,  # KEEP GRADIENTS for dynamic teacher
+            mcq_letter_mapping=mcq_letter_mapping,
+        )
+        
+        entropy = mcq_out["entropy"]  # [B]
+
+    # Convert to soft labels
+
+    soft = build_soft_targets_from_entropy(entropy, sigma=sigma)
+
+
+    # ----------------------------------------------
+    # 2. Confidence forward pass
+    # ----------------------------------------------
+
+    # Generate or get confidence letter mapping
+    if args.randomize_letters_per_question:
+        # Generate new mapping for this batch
+        confidence_letter_mapping = get_confidence_letter_mapping(
+            args.confidence_letter_scheme,
+            seed=None  # Don't use seed for per-question randomization
+        )
+    else:
+        # Use pre-generated mapping
+        confidence_letter_mapping = args.confidence_letter_mapping
+
+    conf_prompts = build_self_confidence_prompts(batch, tokenizer, confidence_letter_mapping, mcq_letter_mapping)
+
+    conf_out = run_confidence_forward_pass(
+        model=model,
+        tokenizer=tokenizer,
+        prompts=conf_prompts,
+        device=device,
+        temperature=args.temperature,
+        requires_grad=True,  # Need gradients for training
+        confidence_letter_mapping=confidence_letter_mapping,
+    )
+
+    logits8 = conf_out["logits8"]  # [B, 8]
+
+    # ----------------------------------------------
+    # 3. Compute loss
+    # ----------------------------------------------
+    loss = compute_loss(logits8, soft_targets=soft, entropy=entropy, loss_type=args.loss_type, reduction='mean')
+
+    # ----------------------------------------------
+    # 4. Backprop
+    # ----------------------------------------------
+    loss.backward()
+
+    return loss.detach()
+
+    
+# ============================================================
+# Main training
+# ============================================================
+
+def train(args):
+    """
+    Trainer for Expected Confidence Task (ECT).
+    Uses:
+        - run_mcq_forward_pass()
+        - run_confidence_forward_pass()
+        - train_step()
+        - val_step()
+        - run_evaluation()
+    """
+
+    # ============================================================
+    # Setup / Load model and data
+    # ============================================================
+    device = args.device
+    tokenizer = load_tokenizer(args)
+    model = load_model_with_lora(args, tokenizer).to(device)
+
+    # Canonicalize model/tokenizer setup (fix pad_token warnings)
+    model, tokenizer = prepare_model_and_tokenizer(model, tokenizer)
+
+    # Setup log file path early (needed for duplicate removal logging)
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d-%H-%M-%S")
+    log_dir = str(_C.LOGS_DIR)
+    os.makedirs(log_dir, exist_ok=True)
+    model_name_safe = args.model_name.replace("/", "-").replace("_", "-")
+    log_file_path = os.path.join(log_dir, f"{timestamp}_{model_name_safe}_evaluation_metrics.jsonl")
+    
+    # Setup print log file to capture all printed output
+    print_log_path = os.path.join(log_dir, f"{timestamp}_{model_name_safe}_print_output.txt")
+    print_log_file = open(print_log_path, 'w', encoding='utf-8')
+    
+    # Write header to file immediately to ensure it's created
+    header = f"Training Run Print Output Log\n"
+    header += f"Started: {timestamp}\n"
+    header += f"Model: {args.model_name}\n"
+    header += f"{'='*80}\n\n"
+    print_log_file.write(header)
+    print_log_file.flush()
+    
+    # Create a custom print function that writes to both console and file
+    import builtins
+    original_print = builtins.print
+    def logged_print(*args, **kwargs):
+        """Print that writes to both console and log file."""
+        # If file parameter is specified, use it; otherwise print to console
+        file_param = kwargs.pop('file', None)
+        if file_param is not None:
+            # User specified a file, print to that file
+            original_print(*args, file=file_param, **kwargs)
+        else:
+            # No file specified, print to console
+            original_print(*args, **kwargs)
+        
+        # Always also write to log file (unless it's the log file itself to avoid recursion)
+        if file_param is not print_log_file:
+            original_print(*args, file=print_log_file, **kwargs)
+            print_log_file.flush()  # Ensure immediate write
+    
+    # Replace built-in print with logged version
+    builtins.print = logged_print
+    
+    # Print training command at the very beginning (will be logged)
+    training_command = " ".join(sys.argv)
+    print("\n" + "="*80)
+    print("TRAINING COMMAND:")
+    print("="*80)
+    print(training_command)
+    print("="*80 + "\n")
+    
+    # Print location of log file (this will also be logged)
+    print(f"✓ Print output will be logged to: {print_log_path}")
+
+    # Dataset loading ------------------------------------------------
+    # CRITICAL: Load train and val datasets separately to prevent any mixing
+    train_dataset = load_jsonl_dataset(args.train_data_path, dataset_type="train")
+    val_dataset   = load_jsonl_dataset(args.val_data_path, dataset_type="val")
+
+    print(f"✓ Training dataset loaded: {len(train_dataset)} samples")
+    print(f"✓ Validation dataset loaded: {len(val_dataset)} samples")
+
+    # Load pre-recorded MCQ results if using frozen teacher OR if provided for evaluation
+    mcq_results_lookup = None
+    if args.mcq_results_data is not None:
+        mcq_results_lookup = load_mcq_results_data(args.mcq_results_data)
+        if mcq_results_lookup is None:
+            if args.use_recorded_responses:
+                raise ValueError(f"Failed to load MCQ results from {args.mcq_results_data}")
+            else:
+                print(f"⚠️  Warning: Could not load MCQ results from {args.mcq_results_data}, continuing without pre-recorded entropy logging")
+        
+        # Filter datasets to only include questions with pre-recorded results (if using frozen teacher)
+        if args.use_recorded_responses:
+            train_dataset = filter_dataset_by_mcq_results(
+                train_dataset, mcq_results_lookup, dataset_name="training"
+            )
+            val_dataset = filter_dataset_by_mcq_results(
+                val_dataset, mcq_results_lookup, dataset_name="validation"
+            )
+        
+        # Filter validation dataset if using frozen validation
+        if args.val_on_frozen:
+            val_dataset = filter_dataset_by_mcq_results(
+                val_dataset, mcq_results_lookup, dataset_name="validation"
+            )
+    elif args.use_recorded_responses:
+        raise ValueError(
+            "--use_recorded_responses requires --mcq_results_data to be specified"
+        )
+    
+    # Validate val_on_frozen requirements
+    if args.val_on_frozen:
+        if args.mcq_results_data is None:
+            raise ValueError(
+                "--val_on_frozen requires --mcq_results_data to be specified"
+            )
+
+    print(f"\n✓ Training dataset loaded: {len(train_dataset)} samples")
+    print(f"✓ Validation dataset loaded: {len(val_dataset)} samples")
+    
+    # Initialize validation sets (will be None if checks are disabled)
+    train_dataset_qids = None
+    train_dataset_questions = None
+    
+    # CRITICAL: Validate that train and val datasets are completely separate
+    # This checks for duplicates by BOTH qid and question text
+    # Location: data_handling.py:validate_datasets_separate()
+    # - Line 642: Checks for overlapping qids
+    # - Line 652: Checks for overlapping question text (normalized)
+    if args.enable_data_leakage_checks:
+        try:
+            validate_datasets_separate(train_dataset, val_dataset, "train", "val")
+        except ValueError as e:
+            # If validation fails, offer to auto-fix by removing duplicates from train set
+            error_msg = str(e)
+            if "DATA LEAKAGE DETECTED" in error_msg:
+                print("\n" + "="*70)
+                print("DATA LEAKAGE DETECTED - Attempting automatic fix...")
+                print("="*70)
+                print(f"Error triggered at: data_handling.py:validate_datasets_separate()")
+                print(f"  - Checks for overlapping qids (line ~642)")
+                print(f"  - Checks for overlapping question text (line ~652)")
+                print("="*70)
+                
+                from data_handling import find_and_remove_duplicates
+                
+                # Use the evaluation log file if available, otherwise None
+                removal_summary, train_dataset_cleaned = find_and_remove_duplicates(
+                    train_dataset, val_dataset, remove_from="train", log_file_path=log_file_path
+                )
+                
+                if removal_summary["total_removed"] > 0:
+                    train_dataset = train_dataset_cleaned
+                    print(f"\n✓ Automatically removed {removal_summary['total_removed']} duplicate(s) from training dataset")
+                    print(f"  Breakdown: {removal_summary['by_qid_only']} by qid, "
+                          f"{removal_summary['by_text_only']} by text, "
+                          f"{removal_summary['by_both']} by both")
+                    print(f"  Training dataset: {len(train_dataset)} samples")
+                    
+                    # Re-validate to ensure fix worked
+                    print("\nRe-validating dataset separation...")
+                    validate_datasets_separate(train_dataset, val_dataset, "train", "val")
+                    print("✓ Dataset separation validated after auto-fix")
+                else:
+                    # If auto-fix didn't work, re-raise the original error
+                    raise e
+            else:
+                # Re-raise if it's a different ValueError
+                raise e
+        
+        # Build sets for runtime validation (both qids and normalized question text)
+        # Do this AFTER validation/auto-fix to ensure we have the final train_dataset
+        from data_handling import normalize_text
+        train_dataset_qids = {str(row.get("qid")) for row in train_dataset if row.get("qid")}
+        train_dataset_questions = {normalize_text(row.get("question", "")) for row in train_dataset if row.get("question")}
+        print(f"✓ Built train_dataset validation sets: {len(train_dataset_qids)} qids, {len(train_dataset_questions)} questions")
+        print(f"✓ Runtime leakage checks ENABLED: train_step() and run_evaluation() will validate every batch/sample")
+    else:
+        print(f"⚠️  Data leakage checks DISABLED (not recommended)")
+
+    if args.use_recorded_responses:
+        print(f"✓ Using FROZEN TEACHER (pre-recorded responses)")
+    else:
+        print(f"✓ Using DYNAMIC TEACHER (current model)")
+    
+    if args.val_on_frozen:
+        print(f"✓ Validation mode: FROZEN (pre-recorded MCQ answers and entropy)")
+    else:
+        print(f"✓ Validation mode: LIVE (current model's MCQ answers and entropy)")
+    
+    # Generate letter mappings (only if NOT randomizing per question)
+    if args.randomize_letters_per_question:
+        # Don't generate mappings here - will be generated per question/batch
+        args.confidence_letter_mapping = None
+        args.mcq_letter_mapping = None
+        print(f"✓ Letter randomization mode: PER QUESTION (will randomize for each question/batch)")
+    else:
+        # Generate once at the beginning and reuse
+        confidence_letter_mapping = get_confidence_letter_mapping(
+            args.confidence_letter_scheme,
+            seed=args.confidence_letter_random_seed
+        )
+        args.confidence_letter_mapping = confidence_letter_mapping
+        display_letters = [confidence_letter_mapping[chr(ord('A') + i)] for i in range(8)]
+        print(f"✓ Confidence letter scheme: {args.confidence_letter_scheme} -> {''.join(display_letters)}")
+        
+        # Generate MCQ letter mapping and store in args for use in train_step
+        mcq_letter_mapping = get_mcq_letter_mapping(
+            args.mcq_letter_scheme,
+            seed=args.mcq_letter_random_seed
+        )
+        args.mcq_letter_mapping = mcq_letter_mapping
+        mcq_display_letters = [mcq_letter_mapping[chr(ord('A') + i)] for i in range(4)]
+        print(f"✓ MCQ letter scheme: {args.mcq_letter_scheme} -> {''.join(mcq_display_letters)}")
+        print(f"✓ Letter randomization mode: ONCE AT START (same mapping for all questions)")
+
+    # Optimizer ------------------------------------------------------
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=args.learning_rate,
+        weight_decay=0.0
+    )
+
+    # Logging --------------------------------------------------------
+    # Capture WandB run info for checkpoint naming
+    wandb_run = None
+    wandb_run_id = None
+    wandb_run_name = None
+    wandb_init_timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    
+    if args.save_wandb_artifact:
+        # Auto-generate run name with current date if not provided
+        if args.wandb_run_name is None:
+            model_name_safe = args.model_name.replace("/", "-").replace("_", "-")
+            args.wandb_run_name = f"{wandb_init_timestamp}_{model_name_safe}_ect"
+        else:
+            # Prepend date to provided name to ensure it's current
+            args.wandb_run_name = f"{wandb_init_timestamp}_{args.wandb_run_name}"
+        
+        wandb_run = wandb.init(
+            project=args.wandb_project,
+            name=args.wandb_run_name,
+            config=vars(args)
+        )
+        wandb_run_id = wandb_run.id
+        wandb_run_name = wandb_run.name
+        print(f"✓ WandB run initialized: {wandb_run_name} (ID: {wandb_run_id})")
+
+    # Output / checkpoints
+    output_dir = args.output_dir
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Setup checkpoint directory with datetime
+    checkpoint_base_dir = os.path.join(str(_C.CHECKPOINTS_DIR), f"{timestamp}_checkpoints")
+    os.makedirs(checkpoint_base_dir, exist_ok=True)
+    print(f"✓ Checkpoints will be saved to: {os.path.abspath(checkpoint_base_dir)}")
+    
+    # Save training parameters to checkpoint directory
+    save_training_parameters(args, checkpoint_base_dir)
+
+    # ============================================================
+    # Print first MCQ and confidence prompts
+    # ============================================================
+    print("\n" + "="*80)
+    print("First Multiple Choice Question Prompt:")
+    print("="*80)
+    first_batch = train_dataset[0:1]
+    # Generate mapping for display (use sample mapping if per-question randomization)
+    if args.randomize_letters_per_question:
+        display_mcq_mapping = get_mcq_letter_mapping(args.mcq_letter_scheme, seed=None)
+    else:
+        display_mcq_mapping = mcq_letter_mapping
+    mcq_prompts = build_multiple_choice_question_prompts(first_batch, tokenizer, display_mcq_mapping)
+    print(mcq_prompts[0])
+    print("="*80 + "\n")
+    
+    print("="*80)
+    print("First Confidence Question Prompt:")
+    print("="*80)
+    # Generate mapping for display (use sample mapping if per-question randomization)
+    if args.randomize_letters_per_question:
+        display_conf_mapping = get_confidence_letter_mapping(args.confidence_letter_scheme, seed=None)
+    else:
+        display_conf_mapping = confidence_letter_mapping
+    conf_prompts = build_self_confidence_prompts(first_batch, tokenizer, display_conf_mapping, display_mcq_mapping)
+    print(conf_prompts[0])
+    print("="*80 + "\n")
+
+    # ============================================================
+    # Baseline evaluation BEFORE training
+    # ============================================================
+    print("\n" + "="*60)
+    print("Running baseline validation (before training)...")
+    print("="*60)
+
+    baseline_metrics = run_evaluation(
+        model=model,
+        tokenizer=tokenizer,
+        val_dataset=val_dataset,
+        device=device,
+        args=args,
+        step_name="baseline",
+        num_samples=args.val_num_samples,
+        log_file_path=log_file_path,
+        step=0,
+        mcq_results_lookup=mcq_results_lookup,
+        train_dataset_qids=train_dataset_qids,
+        train_dataset_questions=train_dataset_questions,
+        sigma=args.sigma,
+        val_on_frozen=args.val_on_frozen,
+    )
+
+    print(f"\nBaseline Accuracy: {baseline_metrics['mcq_accuracy']:.4f}")
+    print(f"Baseline Avg Entropy: {baseline_metrics['avg_entropy']:.4f}")
+    print(f"Baseline Avg Confidence: {baseline_metrics['avg_confidence']:.4f}")
+    print(f"- samples: {baseline_metrics['n_samples']}\n")
+
+
+    # ============================================================
+    # TRAINING LOOP
+    # ============================================================
+
+    step = 0
+    losses = []
+
+    while step < args.max_steps:
+        # CRITICAL: Only use train_dataset for training batches
+        batch = get_batch(train_dataset, args.batch_size, is_training=True)
+
+        # -----------------------------
+        # Train step 
+        # -----------------------------
+        optimizer.zero_grad()
+
+        loss = train_step(
+            model=model,
+            tokenizer=tokenizer,
+            batch=batch,
+            sigma=args.sigma,
+            device=device,
+            args=args,
+            mcq_results_lookup=mcq_results_lookup,
+            train_dataset_qids=train_dataset_qids,
+            train_dataset_questions=train_dataset_questions,
+        )
+        
+        # Skip optimizer step if batch was skipped
+        if loss is None:
+            continue  # Don't increment step, try next batch
+        
+        optimizer.step()
+
+        losses.append(loss.item())
+
+        # W&B logging
+        if args.save_wandb_artifact:
+            wandb.log({"train/loss": loss.item(), "step": step})
+
+        # -----------------------------
+        # Periodic validation (Validation Step)
+        # -----------------------------
+        if (step % args.val_interval) == 0 and step > 0:
+            print("\n" + "="*60)
+            print(f"Validation at step {step}")
+            print("="*60)
+
+            val_metrics = run_evaluation(
+                model=model,
+                tokenizer=tokenizer,
+                val_dataset=val_dataset,
+                device=device,
+                args=args,
+                step_name="validation",
+                num_samples=args.val_num_samples,
+                log_file_path=log_file_path,
+                step=step,
+                mcq_results_lookup=mcq_results_lookup,
+                train_dataset_qids=train_dataset_qids,
+                train_dataset_questions=train_dataset_questions,
+                sigma=args.sigma,
+                val_on_frozen=args.val_on_frozen,
+            )
+
+            print(f"Val Accuracy: {val_metrics['mcq_accuracy']:.4f}")
+            print(f"Val Loss:     {val_metrics['avg_loss']:.4f}")
+            print(f"Val Entropy:  {val_metrics['avg_entropy']:.4f}")
+            print(f"Val Conf:     {val_metrics['avg_confidence']:.4f}")
+            print(f"Samples:      {val_metrics['n_samples']}")
+
+        # -----------------------------
+        # Periodic checkpointing
+        # -----------------------------
+        if (step % args.checkpoint_steps) == 0 and step > 0:
+            # Generate timestamp for this checkpoint
+            checkpoint_timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+            
+            save_checkpoint(
+                model=model,
+                tokenizer=tokenizer,
+                checkpoint_base_dir=checkpoint_base_dir,
+                step=step,
+                save_hf_checkpoints=args.save_hf_checkpoints,
+                hf_checkpoint_repo=args.hf_checkpoint_repo,
+                hf_checkpoint_private=args.hf_checkpoint_private,
+                wandb_run_name=wandb_run_name,
+                wandb_run_id=wandb_run_id,
+                checkpoint_timestamp=checkpoint_timestamp
+            )
+
+        step += 1
+
+    # ============================================================
+    # Final metrics
+    # ============================================================
+    print("\n" + "="*60)
+    print("Final evaluation:")
+    print("="*60)
+
+    final_metrics = run_evaluation(
+        model=model,
+        tokenizer=tokenizer,
+        val_dataset=val_dataset,
+        device=device,
+        args=args,
+        step_name="final",
+        num_samples=args.val_num_samples,
+        log_file_path=log_file_path,
+        step=step,
+        mcq_results_lookup=mcq_results_lookup,
+        train_dataset_qids=train_dataset_qids,
+        train_dataset_questions=train_dataset_questions,
+        sigma=args.sigma,
+        val_on_frozen=args.val_on_frozen,
+    )
+
+    print(f"\nFinal Accuracy:  {final_metrics['mcq_accuracy']:.4f}")
+    print(f"Final Loss:      {final_metrics['avg_loss']:.4f}")
+    print(f"Final Confidence:{final_metrics['avg_confidence']:.4f}")
+
+    # Generate timestamp for final model save
+    final_timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+
+    print("Saving model.")
+    success = save_model_final(
+        model=model,
+        tokenizer=tokenizer,
+        output_dir=args.output_dir,
+        hf_repo=args.hf_repo if args.save_hf else None,
+        hf_private=args.hf_checkpoint_private,
+        save_wandb_artifact=args.save_wandb_artifact,
+        wandb_run_name=wandb_run_name,
+        wandb_run_id=wandb_run_id,
+        step=step,
+        final_timestamp=final_timestamp
+    )
+    if success:
+        print("✓ Model saved successfully!")
+    else:
+        print("❌ Model save failed! Check error messages above.")
+        raise RuntimeError("Failed to save model")
+    
+    # Finish wandb run after model is saved (so artifact can be logged)
+    if args.save_wandb_artifact:
+        wandb.finish()
+    
+    # Restore original print and close print log file
+    import builtins
+    builtins.print = original_print
+    print_log_file.close()
+    print(f"✓ Print output saved to: {print_log_path}")
+    
+
+
+def parse_args():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Train dynamic metacognition model "
+                    "(Explicit Confidence Task)"
+    )
+
+    # -----------------------
+    # Model
+    # -----------------------
+    parser.add_argument("--model_name", type=str,
+                        default=_C.MODEL_NAME,
+                        help="HF model name or path")
+    parser.add_argument("--device", type=str,
+                        default=_C.DEVICE,
+                        choices=["cuda", "cpu"],
+                        help="Compute device")
+
+    # -----------------------
+    # Data
+    # -----------------------
+    parser.add_argument("--train_data_path", type=str,
+                        required=True,
+                        help="Path to JSONL training dataset")
+    
+    parser.add_argument("--val_data_path", type=str,
+                        default=None,
+                        help="Path to JSONL validation dataset (optional)")
+    
+    parser.add_argument("--test_data_path", type=str,
+                        default=None,
+                        help="Path to JSONL test dataset (optional, will be evaluated after training)")
+
+    parser.add_argument("--batch_size", type=int,
+                        default=_C.BATCH_SIZE,
+                        help="Training batch size")
+
+    parser.add_argument("--mcq_results_data", type=str,
+                        default=_C.MCQ_RESULTS_DATA,
+                        help="Path to JSON/JSONL file with previous MCQ results for verification")
+
+    # -----------------------
+    # LoRA
+    # -----------------------
+    parser.add_argument("--lora_r", type=int, default=_C.LORA_R)
+    parser.add_argument("--lora_alpha", type=int, default=_C.LORA_ALPHA)
+    parser.add_argument("--lora_dropout", type=float, default=_C.LORA_DROPOUT)
+
+    parser.add_argument("--lora_target_modules", type=str, nargs="+",
+                        default=list(_C.LORA_TARGET_MODULES),
+                        help="Modules to apply LoRA to")
+
+    # -----------------------
+    # Training
+    # -----------------------
+    parser.add_argument("--learning_rate", type=float, default=_C.LEARNING_RATE)
+    parser.add_argument("--max_steps", type=int, default=_C.MAX_STEPS)
+    parser.add_argument("--log_interval", type=int, default=_C.LOG_INTERVAL)
+    parser.add_argument("--val_interval", type=int, default=_C.VAL_INTERVAL,
+                        help="Run validation every N training steps")
+    parser.add_argument("--limit_val_batches", type=int, default=_C.LIMIT_VAL_BATCHES,
+                        help="Limit validation to N batches (None = use all validation data)")
+    parser.add_argument("--val_num_samples", type=int, default=_C.VAL_NUM_SAMPLES,
+                        help="Number of random questions to sample from validation dataset for validation steps")
+    parser.add_argument("--sigma", type=float, default=_C.SIGMA,
+                        help="Sigma parameter for soft label distribution")
+    parser.add_argument("--loss_type", type=str, required=True,
+                        choices=["gaussian_soft_bin_ce", "scalar_confidence_mse"],
+                        help="Type of loss function to use: 'gaussian_soft_bin_ce' or 'scalar_confidence_mse'")
+    parser.add_argument("--temperature", type=float, default=_C.TEMPERATURE,
+                        help="Temperature for sampling predictions (0.0 = deterministic/argmax, >0 = sampling)")
+    parser.add_argument(
+        "--no_shuffle_options", dest="shuffle_options", action="store_false",
+        help="Disable shuffling of multiple choice answer options (shuffling is enabled by default)"
+    )
+    parser.add_argument(
+        "--use_recorded_responses", action="store_true", default=None,
+        help=("Use recorded MCQ responses (frozen teacher) as training "
+              "targets instead of recomputing logits.")
+    )
+    parser.add_argument(
+        "--no_use_recorded_responses", dest="use_recorded_responses",
+        action="store_false",
+        help=("Disable using recorded responses, use dynamic teacher "
+              "(current model logits) instead.")
+    )
+    
+    parser.add_argument(
+        "--enable_data_leakage_checks", action="store_true", default=_C.ENABLE_DATA_LEAKAGE_CHECKS,
+        help="Enable data leakage checks to ensure train/val separation (enabled by default)"
+    )
+    
+    parser.add_argument(
+        "--disable_data_leakage_checks", dest="enable_data_leakage_checks",
+        action="store_false",
+        help="Disable data leakage checks (not recommended)"
+    )
+    
+    parser.add_argument(
+        "--val_on_frozen", action="store_true", default=None,
+        help=("Use pre-recorded MCQ answers and entropy for validation "
+              "(frozen teacher validation).")
+    )
+    parser.add_argument(
+        "--val_on_live", action="store_true", default=None,
+        help=("Use live model's MCQ answers and entropy for validation "
+              "(dynamic teacher validation, default behavior).")
+    )
+    
+    parser.add_argument(
+        "--confidence_letter_scheme", type=str, default=_C.CONFIDENCE_LETTER_SCHEME,
+        choices=["A-H", "S-Z", "random"],
+        help="Letter scheme for confidence bins."
+    )
+
+    parser.add_argument(
+        "--confidence_letter_random_seed", type=int, default=_C.CONFIDENCE_LETTER_RANDOM_SEED,
+        help="Random seed for 'random' confidence_letter_scheme."
+    )
+
+    parser.add_argument(
+        "--mcq_letter_scheme", type=str, default=_C.MCQ_LETTER_SCHEME,
+        choices=["A-D", "E-H", "I-L", "M-P", "Q-T", "U-X", "Y-Z", "random"],
+        help="Letter scheme for MCQ answer options."
+    )
+
+    parser.add_argument(
+        "--mcq_letter_random_seed", type=int, default=_C.MCQ_LETTER_RANDOM_SEED,
+        help="Random seed for 'random' mcq_letter_scheme."
+    )
+
+    parser.add_argument(
+        "--randomize_letters_per_question", action="store_true",
+        default=_C.RANDOMIZE_LETTERS_PER_QUESTION,
+        help="If set, randomize letter mappings for each question/batch."
+    )
+
+
+    # -----------------------
+    # Output
+    # -----------------------
+    parser.add_argument("--output_dir", type=str,
+                        default=str(_C.OUTPUT_DIR),
+                        help="Directory to save final model")
+
+    parser.add_argument("--save_hf", action="store_true", default=_C.SAVE_HF,
+                        help="If set, push LoRA model to HuggingFace Hub")
+
+    parser.add_argument("--hf_repo", type=str,
+                        default=_C.HF_REPO,
+                        help="HF repo name if pushing to Hub")
+
+    parser.add_argument("--save_hf_checkpoints", action="store_true",
+                        default=_C.SAVE_HF_CHECKPOINTS,
+                        help="If set, save checkpoints to HuggingFace Hub during training")
+
+    parser.add_argument("--hf_checkpoint_repo", type=str,
+                        default=_C.HF_CHECKPOINT_REPO,
+                        help="Base HF repo name for checkpoints (e.g., 'username/model-name')")
+
+    parser.add_argument("--checkpoint_steps", type=int,
+                        default=_C.CHECKPOINT_STEPS,
+                        help="Save checkpoint every N steps")
+
+    parser.add_argument("--hf_checkpoint_private", action="store_true",
+                        default=_C.HF_CHECKPOINT_PRIVATE,
+                        help="If set, make checkpoint repos private")
+
+    # -----------------------
+    # Weights & Biases
+    # -----------------------
+    parser.add_argument("--wandb_project", type=str,
+                        default=_C.WANDB_PROJECT,
+                        help="W&B project name")
+
+    parser.add_argument("--wandb_run_name", type=str,
+                        default=_C.WANDB_RUN_NAME,
+                        help="W&B run name (auto-generated if not provided)")
+
+    parser.add_argument("--wandb_tags", type=str, nargs="+",
+                        default=_C.WANDB_TAGS,
+                        help="Tags for W&B run")
+
+    parser.add_argument("--wandb_notes", type=str,
+                        default=_C.WANDB_NOTES,
+                        help="Notes/description for W&B run")
+
+    parser.add_argument("--save_wandb_artifact", action="store_true",
+                        default=_C.SAVE_WANDB_ARTIFACT,
+                        help="Save model as W&B artifact for reproducibility")
+
+    args = parser.parse_args()
+    
+    # Set default for shuffle_options (True if --no_shuffle_options was not provided)
+    if not hasattr(args, 'shuffle_options'):
+        args.shuffle_options = True
+    
+    # Validate that exactly one of --use_recorded_responses or --no_use_recorded_responses is set
+    if args.use_recorded_responses is None:
+        parser.error(
+            "Exactly one of --use_recorded_responses or --no_use_recorded_responses must be specified. "
+            "You must explicitly choose whether to use recorded responses (frozen teacher) or live responses (dynamic teacher)."
+        )
+    
+    # Validate that exactly one of --val_on_frozen or --val_on_live is set
+    if args.val_on_frozen is None and args.val_on_live is None:
+        parser.error(
+            "Exactly one of --val_on_frozen or --val_on_live must be specified. "
+            "You must explicitly choose whether to validate on frozen (pre-recorded) or live (current model) responses."
+        )
+    if args.val_on_frozen and args.val_on_live:
+        parser.error(
+            "Cannot specify both --val_on_frozen and --val_on_live. "
+            "You must choose exactly one validation mode."
+        )
+    
+    # Set val_on_frozen boolean for easier use
+    args.val_on_frozen = args.val_on_frozen if args.val_on_frozen else False
+    
+    # Validate that confidence_letter_scheme is provided
+    if args.confidence_letter_scheme is None:
+        parser.error(
+            "--confidence_letter_scheme is REQUIRED. "
+            "Must be one of: 'A-H', 'S-Z', or 'random'."
+        )
+    
+    return args
+
+
+if __name__ == "__main__":
+    args = parse_args()
+    train(args)

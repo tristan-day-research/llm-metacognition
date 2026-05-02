@@ -1,0 +1,30 @@
+# Environment and secrets
+.env
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Data files (large, regenerable)
+*.npz
+*.pkl
+*.npy
+data/
+outputs/
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+CLAUDE.md
+
+# Jupyter
+.ipynb_checkpoints/

@@ -38,11 +38,13 @@ from loss import (
 )
 from finetune_prompting import (
     build_self_confidence_prompts,
+    build_self_confidence_prompts_numeric,
     build_multiple_choice_question_prompts,
     run_mcq_forward_pass,
     run_confidence_forward_pass,
+    run_confidence_forward_pass_numeric,
     get_confidence_letter_mapping,
-    get_mcq_letter_mapping
+    get_mcq_letter_mapping,
 )
 from data_handling import (
     load_mcq_results_data,
@@ -153,44 +155,58 @@ def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=
         
         entropy = mcq_out["entropy"]  # [B]
 
-    # Convert to soft labels
-
-    soft = build_soft_targets_from_entropy(entropy, sigma=sigma)
+    # Convert to soft labels (size depends on confidence_format)
+    confidence_format = getattr(args, "confidence_format", "letter_8bin")
+    soft = build_soft_targets_from_entropy(
+        entropy, sigma=sigma, confidence_format=confidence_format
+    )
 
 
     # ----------------------------------------------
     # 2. Confidence forward pass
     # ----------------------------------------------
 
-    # Generate or get confidence letter mapping
-    if args.randomize_letters_per_question:
-        # Generate new mapping for this batch
-        confidence_letter_mapping = get_confidence_letter_mapping(
-            args.confidence_letter_scheme,
-            seed=None  # Don't use seed for per-question randomization
+    if confidence_format == "letter_8bin":
+        # Generate or get confidence letter mapping
+        if args.randomize_letters_per_question:
+            confidence_letter_mapping = get_confidence_letter_mapping(
+                args.confidence_letter_scheme,
+                seed=None
+            )
+        else:
+            confidence_letter_mapping = args.confidence_letter_mapping
+
+        conf_prompts = build_self_confidence_prompts(
+            batch, tokenizer, confidence_letter_mapping, mcq_letter_mapping
         )
+        conf_out = run_confidence_forward_pass(
+            model=model, tokenizer=tokenizer, prompts=conf_prompts,
+            device=device, temperature=args.temperature, requires_grad=True,
+            confidence_letter_mapping=confidence_letter_mapping,
+        )
+        conf_logits = conf_out["logits8"]  # [B, 8]
+    elif confidence_format in ("numeric_1_5", "numeric_1_10"):
+        n_max = 5 if confidence_format == "numeric_1_5" else 10
+        conf_prompts = build_self_confidence_prompts_numeric(
+            batch, tokenizer, mcq_letter_mapping, n_max=n_max
+        )
+        conf_out = run_confidence_forward_pass_numeric(
+            model=model, tokenizer=tokenizer, prompts=conf_prompts,
+            device=device, temperature=args.temperature, requires_grad=True,
+            n_max=n_max,
+        )
+        conf_logits = conf_out["logits"]  # [B, n_max]
     else:
-        # Use pre-generated mapping
-        confidence_letter_mapping = args.confidence_letter_mapping
-
-    conf_prompts = build_self_confidence_prompts(batch, tokenizer, confidence_letter_mapping, mcq_letter_mapping)
-
-    conf_out = run_confidence_forward_pass(
-        model=model,
-        tokenizer=tokenizer,
-        prompts=conf_prompts,
-        device=device,
-        temperature=args.temperature,
-        requires_grad=True,  # Need gradients for training
-        confidence_letter_mapping=confidence_letter_mapping,
-    )
-
-    logits8 = conf_out["logits8"]  # [B, 8]
+        raise ValueError(f"Unknown confidence_format: {confidence_format!r}")
 
     # ----------------------------------------------
     # 3. Compute loss
     # ----------------------------------------------
-    loss = compute_loss(logits8, soft_targets=soft, entropy=entropy, loss_type=args.loss_type, reduction='mean')
+    loss = compute_loss(
+        conf_logits, soft_targets=soft, entropy=entropy,
+        loss_type=args.loss_type, reduction='mean',
+        confidence_format=confidence_format,
+    )
 
     # ----------------------------------------------
     # 4. Backprop
@@ -713,6 +729,7 @@ def build_args_from_config():
         use_recorded_responses=_C.USE_RECORDED_RESPONSES,
         enable_data_leakage_checks=_C.ENABLE_DATA_LEAKAGE_CHECKS,
         val_on_frozen=_C.VAL_ON_FROZEN,
+        confidence_format=_C.CONFIDENCE_FORMAT,
         confidence_letter_scheme=_C.CONFIDENCE_LETTER_SCHEME,
         confidence_letter_random_seed=_C.CONFIDENCE_LETTER_RANDOM_SEED,
         mcq_letter_scheme=_C.MCQ_LETTER_SCHEME,

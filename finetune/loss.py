@@ -9,6 +9,59 @@ import math
 import torch
 
 
+# ============================================================
+# Bin specs — one per supported CONFIDENCE_FORMAT
+# ============================================================
+# Midpoints/widths are in PERCENTAGE units (0-100) because the Gaussian kernel
+# in convert_entropy_to_soft_labels operates on a "confidence percentage"
+# derived from MCQ entropy. The MSE loss uses the same midpoints, normalized
+# to [0, 1].
+#
+# letter_8bin   — non-uniform bins matching the prompt
+#                 "<5%, 5-10%, 10-20%, 20-40%, 40-60%, 60-80%, 80-90%, >90%"
+# numeric_1_5   — 5 uniform bins of 20% each
+# numeric_1_10  — 10 uniform bins of 10% each
+
+_BIN_SPECS = {
+    "letter_8bin": {
+        "n_bins": 8,
+        "midpoints": [2.5, 7.5, 15.0, 30.0, 50.0, 70.0, 85.0, 95.0],
+        "widths":    [5.0, 5.0, 10.0, 20.0, 20.0, 20.0, 10.0, 10.0],
+    },
+    "numeric_1_5": {
+        "n_bins": 5,
+        "midpoints": [10.0, 30.0, 50.0, 70.0, 90.0],
+        "widths":    [20.0, 20.0, 20.0, 20.0, 20.0],
+    },
+    "numeric_1_10": {
+        "n_bins": 10,
+        "midpoints": [5.0, 15.0, 25.0, 35.0, 45.0, 55.0, 65.0, 75.0, 85.0, 95.0],
+        "widths":    [10.0] * 10,
+    },
+}
+
+
+def get_bin_spec(confidence_format: str) -> dict:
+    """Return {n_bins, midpoints, widths} for the given format."""
+    if confidence_format not in _BIN_SPECS:
+        raise ValueError(
+            f"Unknown confidence_format {confidence_format!r}. "
+            f"Must be one of: {sorted(_BIN_SPECS)}"
+        )
+    return _BIN_SPECS[confidence_format]
+
+
+def _bin_tensors(confidence_format: str, device, dtype):
+    spec = get_bin_spec(confidence_format)
+    midpoints = torch.tensor(spec["midpoints"], device=device, dtype=dtype)
+    widths = torch.tensor(spec["widths"], device=device, dtype=dtype)
+    return midpoints, widths, spec["n_bins"]
+
+
+# ============================================================
+# Entropy → soft confidence labels
+# ============================================================
+
 def compute_entropy_from_logits(logits4: torch.Tensor) -> torch.Tensor:
     """
     Given [batch, 4] logits, compute entropy of the softmax distribution.
@@ -19,193 +72,107 @@ def compute_entropy_from_logits(logits4: torch.Tensor) -> torch.Tensor:
     return entropy
 
 
-
-
-# ============================================================
-# Entropy → scalar confidence → soft labels
-# ============================================================
-
-# def compute_soft_labels(logits4, sigma=10.0):
-#     """
-#     Convert 4-way answer logits into soft 8-bin confidence distribution.
-
-#     Uses percentage-based Gaussian kernel to create soft labels.
-
-#     Args:
-#         logits4: tensor of shape [4] with logits for A, B, C, D
-#         sigma: Gaussian width in percentage space (default: 10)
-
-#     Returns:
-#         tensor of shape [8] with soft label distribution
-#     """
-#     # 1. Softmax over the 4 MCQ options
-#     probs = torch.softmax(logits4, dim=0)
-
-#     # 2. Entropy (natural logs)
-#     entropy = -(probs * torch.log(probs + 1e-12)).sum()
-
-#     # 3. Convert entropy to "confidence percentage"
-#     #    confidence = (1 - H/log(4)) * 100
-#     confidence_percent = (1 - entropy / math.log(4)) * 100.0
-
-#     # 4. Bin midpoints + widths (exact values from your colleague)
-#     bin_edges = torch.tensor([0, 5, 10, 20, 40, 60, 80, 90, 100],
-#                              dtype=torch.float32,
-#                              device=logits4.device)
-#     bin_midpoints = torch.tensor([2.5, 7.5, 15, 30, 50, 70, 85, 95],
-#                                  dtype=torch.float32,
-#                                  device=logits4.device)
-#     bin_widths = bin_edges[1:] - bin_edges[:-1]   # shape [8]
-
-#     # 5. Gaussian kernel in percentage space
-#     distances = (bin_midpoints - confidence_percent)**2
-#     weights = torch.exp(-distances / (2 * sigma * sigma)) * bin_widths
-
-#     return weights / weights.sum()
-
-
-def compute_soft_labels(logits4: torch.Tensor, *, sigma: float):
+def compute_soft_labels(
+    logits4: torch.Tensor,
+    *,
+    sigma: float,
+    confidence_format: str = "letter_8bin",
+):
     """
-    Convert 4-way answer logits into soft 8-bin confidence distribution.
+    Convert 4-way answer logits into a soft N-bin confidence distribution
+    (where N is determined by confidence_format).
 
-    Uses percentage-based Gaussian kernel to create soft labels.
+    Pipeline: logits4 → probs → entropy → soft N-bin Gaussian targets.
 
     Args:
-        logits4: tensor of shape [4] with logits for A, B, C, D
-        sigma: Gaussian width in percentage space (default: 10)
+        logits4: tensor of shape [..., 4] with logits for A, B, C, D
+        sigma: Gaussian width in percentage space (REQUIRED)
+        confidence_format: "letter_8bin" / "numeric_1_5" / "numeric_1_10".
 
     Returns:
-        tensor of shape [8] with soft label distribution
+        soft_targets of shape [..., N] where N matches the format's bin count.
     """
-    """
-    Canonical pipeline:
-        logits4 → probs → entropy → soft 8-bin Gaussian targets
-
-    This MUST be used for both training and evaluation.
-    Sigma must be passed explicitly.
-    """
-
     if sigma is None:
-        raise ValueError("sigma must be explicitly provided to compute_soft_targets_from_logits().")
-
+        raise ValueError("sigma must be explicitly provided to compute_soft_labels().")
     if not isinstance(logits4, torch.Tensor):
         raise TypeError("logits4 must be a torch.Tensor.")
 
     device = logits4.device
     dtype = logits4.dtype
 
-    # 1. Softmax probabilities
     probs4 = torch.softmax(logits4, dim=-1)
-
-    # 2. Entropy
     entropy = -torch.sum(probs4 * torch.log(probs4 + 1e-12), dim=-1)
 
-    # 3. Gaussian soft-labels
-    # bin midpoints: (12.5, 37.5, ... , 87.5)
-    bin_midpoints = torch.linspace(12.5, 87.5, steps=8, device=device, dtype=dtype)
-    bin_widths = torch.full((8,), 25.0, device=device, dtype=dtype)
+    midpoints, widths, _ = _bin_tensors(confidence_format, device, dtype)
 
     # entropy → "certainty" percentage
-    max_entropy = math.log(4)  # 4 choices
+    max_entropy = math.log(4)  # 4 MCQ choices
     confidence_percent = (1.0 - entropy / max_entropy) * 100.0
 
-    distances = (bin_midpoints - confidence_percent.unsqueeze(-1)) ** 2
-    weights = torch.exp(-distances / (2 * sigma * sigma)) * bin_widths
+    distances = (midpoints - confidence_percent.unsqueeze(-1)) ** 2
+    weights = torch.exp(-distances / (2 * sigma * sigma)) * widths
 
-    soft_targets = weights / torch.sum(weights, dim=-1, keepdim=True)
-    return soft_targets
-
+    return weights / torch.sum(weights, dim=-1, keepdim=True)
 
 
-# def convert_entropy_to_soft_labels(entropy, sigma):
-#     """
-#     Convert entropy value to soft 8-bin confidence distribution.
-#     Handles both Tensor inputs (training) and float inputs (evaluation).
-    
-#     Args:
-#         entropy: Entropy value (Tensor or float)
-#         sigma: Gaussian width in percentage space (REQUIRED - no default to prevent silent errors)
-#     """
-#     # Fix: Ensure input is a tensor so we can access .device or operate on it
-#     if not isinstance(entropy, torch.Tensor):
-#         entropy = torch.tensor(entropy, dtype=torch.float32)
+def convert_entropy_to_soft_labels(
+    entropy: torch.Tensor,
+    *,
+    sigma: float,
+    confidence_format: str = "letter_8bin",
+):
+    """Convert pre-computed entropy values into soft N-bin labels.
 
-#     # Get device from entropy tensor (defaults to cpu if created from float)
-#     device = entropy.device
-    
-#     # Convert entropy to "confidence percentage"
-#     # confidence = (1 - H/log(4)) * 100
-#     confidence_percent = (1 - entropy / math.log(4)) * 100.0
-
-#     # Bin midpoints + widths
-#     bin_edges = torch.tensor(
-#         [0, 5, 10, 20, 40, 60, 80, 90, 100],
-#         dtype=torch.float32,
-#         device=device
-#     )
-#     bin_midpoints = torch.tensor(
-#         [2.5, 7.5, 15, 30, 50, 70, 85, 95],
-#         dtype=torch.float32,
-#         device=device
-#     )
-#     bin_widths = bin_edges[1:] - bin_edges[:-1]
-
-#     # Gaussian kernel in percentage space
-#     # Handle broadcasting for both scalar [1] and batched [B] inputs
-#     if entropy.ndim > 0:
-#         distances = (bin_midpoints.unsqueeze(0) - confidence_percent.unsqueeze(-1)) ** 2
-#         weights = torch.exp(-distances / (2 * sigma * sigma)) * bin_widths.unsqueeze(0)
-#     else:
-#         # Scalar case (often hits here during simple eval loops)
-#         distances = (bin_midpoints - confidence_percent) ** 2
-#         weights = torch.exp(-distances / (2 * sigma * sigma)) * bin_widths
-
-#     # Normalize along the last dimension
-#     return weights / weights.sum(dim=-1, keepdim=True)
-
-
-def convert_entropy_to_soft_labels(entropy: torch.Tensor, *, sigma: float):
+    Same Gaussian kernel as compute_soft_labels but takes entropy directly
+    (used during eval where entropy was computed once and reused)."""
     if sigma is None:
         raise ValueError("sigma must be provided")
+    if not isinstance(entropy, torch.Tensor):
+        entropy = torch.as_tensor(entropy, dtype=torch.float32)
 
     device = entropy.device
     dtype = entropy.dtype
 
+    midpoints, widths, _ = _bin_tensors(confidence_format, device, dtype)
+
     max_entropy = math.log(4)
-    confidence_percent = (1.0 - entropy / max_entropy) * 100.0
+    # Clamp guards against float-arithmetic drift producing values slightly
+    # outside [0, 1], which would otherwise pull soft mass onto the wrong end.
+    confidence_percent = ((1.0 - entropy / max_entropy).clamp(0.0, 1.0)) * 100.0
 
-    bin_edges = torch.tensor([0,5,10,20,40,60,80,90,100], device=device, dtype=dtype)
-    bin_midpoints = torch.tensor([2.5,7.5,15,30,50,70,85,95], device=device, dtype=dtype)
-    bin_widths = bin_edges[1:] - bin_edges[:-1]
+    if confidence_percent.ndim == 0:
+        distances = (midpoints - confidence_percent) ** 2
+        weights = torch.exp(-distances / (2 * sigma * sigma)) * widths
+    else:
+        distances = (midpoints.unsqueeze(0) - confidence_percent.unsqueeze(-1)) ** 2
+        weights = torch.exp(-distances / (2 * sigma * sigma)) * widths
 
-    distances = (bin_midpoints.unsqueeze(0) - confidence_percent.unsqueeze(1)) ** 2
-    weights = torch.exp(-distances / (2*sigma*sigma)) * bin_widths
+    return weights / torch.sum(weights, dim=-1, keepdim=True)
 
-    soft = weights / torch.sum(weights, dim=-1, keepdim=True)
-    return soft
 
+def build_soft_targets_from_entropy(
+    entropy: torch.Tensor,
+    sigma: float,
+    confidence_format: str = "letter_8bin",
+) -> torch.Tensor:
+    """Small wrapper so both train_step and run_evaluation use the same call site."""
+    return convert_entropy_to_soft_labels(
+        entropy, sigma=sigma, confidence_format=confidence_format
+    )
 
 
 # ============================================================
 # Loss computation
 # ============================================================
 
-def compute_gaussian_soft_bin_ce_loss(logits8, soft_targets, reduction='mean'):
+def compute_gaussian_soft_bin_ce_loss(logits, soft_targets, reduction='mean'):
+    """Cross-entropy between logits and soft target distribution.
+
+    Bin-count agnostic: shapes must match ([B, N] for both logits and soft_targets).
     """
-    Compute cross-entropy loss between logits8 and soft targets (Gaussian soft bin distribution).
-    
-    Args:
-        logits8: Tensor of shape [B, 8] with logits for confidence bins A-H
-        soft_targets: Tensor of shape [B, 8] with soft target distribution
-        reduction: 'mean' to average over batch, 'none' to return per-sample losses, 
-                  'sum' to sum over batch
-    
-    Returns:
-        Loss tensor depending on reduction
-    """
-    log_probs = torch.log_softmax(logits8, dim=-1)
+    log_probs = torch.log_softmax(logits, dim=-1)
     loss = -(soft_targets * log_probs).sum(dim=-1)  # [B]
-    
+
     if reduction == 'mean':
         return loss.mean()
     elif reduction == 'sum':
@@ -216,40 +183,24 @@ def compute_gaussian_soft_bin_ce_loss(logits8, soft_targets, reduction='mean'):
         raise ValueError(f"Unknown reduction: {reduction}")
 
 
-def compute_scalar_confidence_mse_loss(logits8, entropy, reduction='mean'):
+def compute_scalar_confidence_mse_loss(
+    logits,
+    entropy,
+    reduction='mean',
+    confidence_format: str = "letter_8bin",
+):
+    """MSE between predicted scalar confidence (from logits) and target
+    confidence derived from entropy. Bin midpoints come from the format.
     """
-    Compute MSE loss between:
-        - predicted scalar confidence from logits8
-        - target scalar confidence derived from entropy
-    
-    Args:
-        logits8: Tensor of shape [B, 8] with logits for confidence bins A-H
-        entropy: Tensor of shape [B] with entropy values
-        reduction: 'mean' to average over batch, 'none' to return per-sample losses, 
-                  'sum' to sum over batch
-    
-    Returns:
-        Loss tensor depending on reduction
-    """
-    # softmax → distribution over 8 bins
-    p = torch.softmax(logits8, dim=-1)  # [B,8]
-    
-    # bin midpoints (in percent), normalized to 0–1
-    midpoints = torch.tensor(
-        [2.5, 7.5, 15.0, 30.0, 50.0, 70.0, 85.0, 95.0],
-        dtype=torch.float32,
-        device=logits8.device
-    ) / 100.0
-    
-    # predicted scalar confidence
+    p = torch.softmax(logits, dim=-1)  # [B, N]
+    midpoints, _, _ = _bin_tensors(confidence_format, logits.device, torch.float32)
+    midpoints = midpoints / 100.0  # to [0, 1]
+
     pred_conf = (p * midpoints).sum(dim=-1)  # [B]
-    
-    # target confidence from entropy
     target_conf = 1.0 - entropy / math.log(4)  # [B]
-    
-    # vanilla MSE
+
     mse = (pred_conf - target_conf) ** 2  # [B]
-    
+
     if reduction == 'mean':
         return mse.mean()
     elif reduction == 'sum':
@@ -260,23 +211,18 @@ def compute_scalar_confidence_mse_loss(logits8, entropy, reduction='mean'):
         raise ValueError(f"Unknown reduction: {reduction}")
 
 
-def compute_loss(logits8, soft_targets=None, entropy=None,
-                 loss_type=None, reduction='mean'):
+def compute_loss(
+    logits,
+    soft_targets=None,
+    entropy=None,
+    loss_type=None,
+    reduction='mean',
+    confidence_format: str = "letter_8bin",
+):
+    """Dispatch to gaussian_soft_bin_ce or scalar_confidence_mse.
+
+    Both paths are bin-count agnostic via confidence_format.
     """
-    Compute loss based on the specified loss type.
-    
-    Args:
-        logits8: Tensor of shape [B, 8] with logits for confidence bins A-H
-        soft_targets: Tensor of shape [B, 8] with soft target distribution (required for gaussian_soft_bin_ce)
-        entropy: Tensor of shape [B] with entropy values (required for scalar_confidence_mse)
-        loss_type: Type of loss to compute ('gaussian_soft_bin_ce' or 'scalar_confidence_mse') - REQUIRED, no default to prevent silent errors
-        reduction: 'mean' to average over batch, 'none' to return per-sample losses, 
-                  'sum' to sum over batch
-    
-    Returns:
-        Loss tensor depending on reduction
-    """
-    # CRITICAL: Require loss_type (no default to prevent silent errors)
     if loss_type is None:
         raise ValueError(
             "loss_type parameter is REQUIRED for compute_loss(). "
@@ -286,20 +232,14 @@ def compute_loss(logits8, soft_targets=None, entropy=None,
     if loss_type == 'gaussian_soft_bin_ce':
         if soft_targets is None:
             raise ValueError("soft_targets required for gaussian_soft_bin_ce")
-        return compute_gaussian_soft_bin_ce_loss(logits8, soft_targets, reduction)
-    
+        return compute_gaussian_soft_bin_ce_loss(logits, soft_targets, reduction)
+
     elif loss_type == 'scalar_confidence_mse':
         if entropy is None:
             raise ValueError("entropy required for scalar_confidence_mse")
-        return compute_scalar_confidence_mse_loss(logits8, entropy, reduction)
-    
+        return compute_scalar_confidence_mse_loss(
+            logits, entropy, reduction, confidence_format=confidence_format
+        )
+
     else:
         raise ValueError(f"Unknown loss_type {loss_type}")
-
-
-
-def build_soft_targets_from_entropy(entropy: torch.Tensor, sigma: float) -> torch.Tensor:
-    """
-    Small wrapper so both train_step and run_evaluation use the same call site.
-    """
-    return convert_entropy_to_soft_labels(entropy, sigma=sigma)

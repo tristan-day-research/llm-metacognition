@@ -92,56 +92,59 @@ def get_letter_token_ids(tokenizer, letter: str) -> list:
     return token_ids
     
 
-def build_multiple_choice_question_prompts(batch, tokenizer, mcq_letter_mapping=None):
+def build_multiple_choice_question_prompts(batch, tokenizer, mcq_letter_mapping=None,
+                                           model_type="instruct"):
     """
     Build multiple choice question prompts with optional letter mapping.
-    
+
     Args:
         batch: List of question dicts
         tokenizer: Tokenizer
         mcq_letter_mapping: Optional dict mapping A-D to display letters.
                            If None, uses A-D.
-    
+        model_type: "instruct"/"finetuned" → wrap with the tokenizer's chat
+                    template; "base" → emit raw text (no chat tags) since
+                    Llama base wasn't trained on chat-formatted input.
+
     Returns:
         List of prompt strings
     """
     if mcq_letter_mapping is None:
         mcq_letter_mapping = get_mcq_letter_mapping("A-D")
-    
+
     setup_prompt = (
         "I'm going to ask you a series of multiple-choice questions. "
         "For each one, select the answer you think is best. "
         "Respond only with the letter of your choice; do NOT output any other text."
     )
-    
-    # Get display letters in order
+
     display_letters = [mcq_letter_mapping[chr(ord('A') + i)] for i in range(4)]
     display_letters_str = ", ".join(display_letters)
-    
+
     prompts = []
     for row in batch:
         question = row["question"].strip()
         options = row.get("options", {})
-        
-        # Build question using display letters
+
         q_text = f"Question: {question}\n"
         for i, internal_letter in enumerate("ABCD"):
             display_letter = display_letters[i]
             q_text += f"{display_letter}: {options.get(internal_letter, '')}\n"
-        
-        # Use display letters in prompt
+
         llm_prompt = q_text + f"Your choice ({display_letters_str}): "
         user_content = setup_prompt + "\n\n" + llm_prompt
-        
-        messages = [{"role": "user", "content": user_content}]
-        prompt = tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True
-        )
-        
+
+        if model_type == "base":
+            # Raw text continuation; the base model just keeps generating from here.
+            prompt = "<|begin_of_text|>" + user_content
+        else:
+            messages = [{"role": "user", "content": user_content}]
+            prompt = tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True,
+            )
+
         prompts.append(prompt)
-    
+
     return prompts
 
 
@@ -508,73 +511,123 @@ def run_confidence_forward_pass(
 
 
 # =============================================================================
-# Numeric (1–10) confidence prompt + forward pass
+# Numeric (1..N) confidence prompt + forward pass
 # =============================================================================
-# Parallel to the A–H letter-bin path above, but uses single-digit tokens
-# 1..10 (Llama 3 tokenizes "10" as a single token, so this is clean).
-# Reuses the canonical NUMERIC_CONFIDENCE_SETUP wording from prompts.py so the
-# fine-tune prompts and the inference-time experiment prompts agree verbatim.
+# Parallel to the A–H letter-bin path above, but uses single-digit tokens.
+# Supported scales: 1..5 and 1..10 (Llama 3 tokenizes "10" as a single token,
+# so 1-10 stays clean). Reuses the canonical setup/midpoint helpers from
+# prompts.py so fine-tune prompts and inference-time experiment prompts agree
+# verbatim.
 
-from prompts import NUMERIC_CONFIDENCE_SETUP, NUMERIC_CONFIDENCE_MIDPOINTS
+from prompts import get_numeric_scheme
 
-# 1..10 single-token IDs cached per tokenizer at first use.
+# Cache: id(tokenizer) -> {n_max: list[list[int]]}
 _NUMERIC_TOKEN_ID_CACHE: dict = {}
 
 
-def _get_numeric_token_ids(tokenizer):
-    """Return 10 token-id lists, one per digit '1'..'10'.
+def _get_numeric_token_ids(tokenizer, n_max: int):
+    """Return n_max token-id lists, one per digit '1'..f'{n_max}'.
 
     Each entry is a list because some tokenizers split " 1" and "1" as
     distinct ids; we logsumexp over both, matching the letter-bin path.
     """
     key = id(tokenizer)
-    if key in _NUMERIC_TOKEN_ID_CACHE:
-        return _NUMERIC_TOKEN_ID_CACHE[key]
-    ids_per_digit = [get_letter_token_ids(tokenizer, str(d)) for d in range(1, 11)]
-    _NUMERIC_TOKEN_ID_CACHE[key] = ids_per_digit
+    bucket = _NUMERIC_TOKEN_ID_CACHE.setdefault(key, {})
+    if n_max in bucket:
+        return bucket[n_max]
+    ids_per_digit = [get_letter_token_ids(tokenizer, str(d)) for d in range(1, n_max + 1)]
+    bucket[n_max] = ids_per_digit
     return ids_per_digit
 
 
-def build_self_confidence_prompts_numeric(batch, tokenizer, mcq_letter_mapping=None):
-    """Build self-confidence prompts on the 1–10 numeric scale.
+def _build_numeric_prompt(setup: str, nested_question: str, row: dict,
+                          mcq_display: list, n_max: int,
+                          model_type: str = "instruct") -> str:
+    options = row.get("options", {})
+    q_lines = [
+        "------------------------------",
+        nested_question,
+        "----------",
+        f"Question: {row['question'].strip()}",
+        f"{mcq_display[0]}: {options.get('A', '').strip()}",
+        f"{mcq_display[1]}: {options.get('B', '').strip()}",
+        f"{mcq_display[2]}: {options.get('C', '').strip()}",
+        f"{mcq_display[3]}: {options.get('D', '').strip()}",
+        "------------------------------",
+        f"Your choice (1-{n_max}):",
+    ]
+    user_content = setup + "\n\n" + "\n".join(q_lines)
 
-    Mirrors build_self_confidence_prompts (the A–H letter version) so it slots
-    into the same training loop, but asks for a digit 1..10 instead of a letter.
+    if model_type == "base":
+        # Llama base wasn't trained on chat tags. Raw text + a trailing space
+        # so the model continues naturally with a digit.
+        return "<|begin_of_text|>" + user_content + " "
+    # Instruct / finetuned share the chat-tag wrapping. We build it manually
+    # (rather than using apply_chat_template) to match build_self_confidence_prompts.
+    return (
+        "<|begin_of_text|>"
+        "<|start_header_id|>user<|end_header_id|>\n\n"
+        f"{user_content}<|eot_id|>"
+        "<|start_header_id|>assistant<|end_header_id|>\n\n"
+    )
+
+
+def build_self_confidence_prompts_numeric(batch, tokenizer, mcq_letter_mapping=None,
+                                          n_max: int = 10, model_type: str = "instruct"):
+    """Build self-confidence prompts on the 1..n_max numeric scale.
+
+    Mirrors build_self_confidence_prompts (the A-H letter version) so it slots
+    into the same training loop, but asks for a digit 1..n_max instead of a
+    letter. model_type="base" emits raw text (no chat tags).
     """
     if mcq_letter_mapping is None:
         mcq_letter_mapping = get_mcq_letter_mapping("A-D")
     mcq_display = [mcq_letter_mapping[chr(ord('A') + i)] for i in range(4)]
 
-    prompts = []
-    for row in batch:
-        question = row["question"].strip()
-        options = row.get("options", {})
+    scheme = get_numeric_scheme(n_max)
+    nested_question = (
+        f"How confident are you that you would get this question right? "
+        f"Rate from 1 (not confident at all) to {n_max} (completely sure)."
+    )
 
-        q_lines = [
-            "------------------------------",
-            "How confident are you that you would get this question right? "
-            "Rate from 1 (not confident at all) to 10 (completely sure).",
-            "----------",
-            f"Question: {question}",
-            f"{mcq_display[0]}: {options.get('A', '').strip()}",
-            f"{mcq_display[1]}: {options.get('B', '').strip()}",
-            f"{mcq_display[2]}: {options.get('C', '').strip()}",
-            f"{mcq_display[3]}: {options.get('D', '').strip()}",
-            "------------------------------",
-            "Your choice (1-10):",
-        ]
-        user_content = NUMERIC_CONFIDENCE_SETUP + "\n\n" + "\n".join(q_lines)
+    return [
+        _build_numeric_prompt(scheme["setup"], nested_question, row,
+                              mcq_display, n_max, model_type=model_type)
+        for row in batch
+    ]
 
-        # Manual format to match build_self_confidence_prompts (no chat template).
-        prompt = (
-            "<|begin_of_text|>"
-            "<|start_header_id|>user<|end_header_id|>\n\n"
-            f"{user_content}<|eot_id|>"
-            "<|start_header_id|>assistant<|end_header_id|>\n\n"
-        )
-        prompts.append(prompt)
 
-    return prompts
+def build_other_confidence_prompts_numeric(batch, tokenizer, mcq_letter_mapping=None,
+                                           n_max: int = 10, model_type: str = "instruct"):
+    """Build other-confidence prompts on the 1..n_max numeric scale.
+
+    Mirrors build_other_confidence_prompts (the letter version) but asks for a
+    digit 1..n_max indicating the model's estimate of what fraction of
+    college-educated people would answer correctly. model_type="base" emits
+    raw text (no chat tags).
+    """
+    if mcq_letter_mapping is None:
+        mcq_letter_mapping = get_mcq_letter_mapping("A-D")
+    mcq_display = [mcq_letter_mapping[chr(ord('A') + i)] for i in range(4)]
+
+    setup = (
+        "I want your help calibrating question difficulty. I'm going to show you "
+        "a multiple-choice question, and I want you to tell me approximately how "
+        f"likely a college-educated person is to get it right, on a scale of 1 to "
+        f"{n_max} where 1 means \"almost no one would get it right\" and {n_max} "
+        f"means \"almost everyone would get it right\". Respond only with a number "
+        f"from 1 to {n_max}; do NOT output any other text."
+    )
+    nested_question = (
+        f"What fraction of college-educated people would get this question right? "
+        f"Rate from 1 (almost none) to {n_max} (almost everyone)."
+    )
+
+    return [
+        _build_numeric_prompt(setup, nested_question, row, mcq_display, n_max,
+                              model_type=model_type)
+        for row in batch
+    ]
 
 
 def run_confidence_forward_pass_numeric(
@@ -584,13 +637,14 @@ def run_confidence_forward_pass_numeric(
     device="cuda",
     temperature=0.0,
     requires_grad=False,
+    n_max: int = 10,
 ):
-    """Forward pass for the 1–10 numeric confidence prompt.
+    """Forward pass for the 1..n_max numeric confidence prompt.
 
-    Returns a 10-bin distribution. Note the rest of the training stack (loss
-    in loss.py, eval metrics in evaluation_metrics.py)
-    currently assumes 8 bins; wiring the 10-bin path through training/eval is
-    a follow-up step.
+    Returns an n_max-bin distribution.
+
+    Output dict keys are size-agnostic (logits / probs / expected_conf /
+    pred_digits / pred_digit_indices) so callers don't need to switch on n_max.
     """
     enc = tokenizer(prompts, return_tensors="pt", padding=True).to(device)
 
@@ -601,34 +655,36 @@ def run_confidence_forward_pass_numeric(
             out = model(**enc, use_cache=False)
 
     final_logits = out.logits[:, -1, :]  # [B, vocab]
-    digit_token_ids = _get_numeric_token_ids(tokenizer)
+    digit_token_ids = _get_numeric_token_ids(tokenizer, n_max)
 
-    logits10_list = []
+    logits_list = []
     for ids in digit_token_ids:
         if not ids:
             raise ValueError(
-                "No single-token encoding for one of the digits 1..10. "
-                "Llama 3 tokenizes '10' as one token; some tokenizers may not."
+                f"No single-token encoding for one of the digits 1..{n_max}. "
+                "Check that your tokenizer encodes each digit as a single token."
             )
         sub = final_logits[:, ids]
-        logits10_list.append(torch.logsumexp(sub, dim=-1))
+        logits_list.append(torch.logsumexp(sub, dim=-1))
 
-    logits10 = torch.stack(logits10_list, dim=-1)  # [B, 10]
-    probs10 = torch.softmax(logits10, dim=-1)
+    logits = torch.stack(logits_list, dim=-1)  # [B, n_max]
+    probs = torch.softmax(logits, dim=-1)
 
+    scheme = get_numeric_scheme(n_max)
     mids = torch.tensor(
-        [NUMERIC_CONFIDENCE_MIDPOINTS[str(d)] for d in range(1, 11)],
+        [scheme["midpoints"][str(d)] for d in range(1, n_max + 1)],
         dtype=torch.float32, device=device,
     )
-    expected_conf = (probs10 * mids).sum(dim=-1)
+    expected_conf = (probs * mids).sum(dim=-1)
 
-    idx = logits10.argmax(dim=-1).tolist()
+    idx = logits.argmax(dim=-1).tolist()
     pred_digits = [str(i + 1) for i in idx]
 
     return {
-        "logits10": logits10,
-        "probs10": probs10,
+        "logits": logits,
+        "probs": probs,
         "expected_conf": expected_conf,
         "pred_digits": pred_digits,
         "pred_digit_indices": idx,
+        "n_max": n_max,
     }

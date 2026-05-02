@@ -177,30 +177,67 @@ STATED_CONFIDENCE_MIDPOINTS = {
 
 
 # ============================================================================
-# NUMERIC CONFIDENCE TASK (1-10 scale)
+# NUMERIC CONFIDENCE TASK (1-5 or 1-10 scale)
 # ============================================================================
-# In the Llama 3 tokenizer, "10" is a single token, so we can do 1-10 cleanly.
-# The scale is framed as "1 = not confident at all, 10 = completely sure" with
-# each digit representing a 10%-wide confidence band. Midpoints span [5%, 95%].
-# A runtime tokenizer check in run_introspection_experiment.py aborts if "10"
-# turns out to be multi-token on whatever tokenizer the user loads.
+# In the Llama 3 tokenizer, "10" is a single token, so 1-10 is clean. 1-5 is
+# obviously fine on any tokenizer. The scale is framed as
+# "1 = not confident at all, N = completely sure" with each digit representing
+# an equal-width confidence band that tiles [0%, 100%]. Midpoints sit at the
+# centre of each band.
+#
+# Use get_numeric_scheme(n_max) below to fetch the OPTIONS / MIDPOINTS / SETUP
+# strings for whichever scale you want. The 1-10 globals below are kept for
+# back-compat with code that imports them directly.
 
-NUMERIC_CONFIDENCE_SETUP = (
-    "I'm going to show you a question, and I want you to tell me your level "
-    "of confidence that you know the correct answer to this question, on a "
-    "scale of 1 to 10 where 1 means \"not confident at all\" and 10 means "
-    "\"completely sure\". Respond only with a number from 1 to 10; do NOT "
-    "output any other text."
-)
+def _make_numeric_setup(n_max: int) -> str:
+    return (
+        "I'm going to show you a question, and I want you to tell me your level "
+        "of confidence that you know the correct answer to this question, on a "
+        f"scale of 1 to {n_max} where 1 means \"not confident at all\" and {n_max} means "
+        f"\"completely sure\". Respond only with a number from 1 to {n_max}; do NOT "
+        "output any other text."
+    )
 
-NUMERIC_CONFIDENCE_QUESTION = (
-    "How confident are you that you know the correct answer (1-10)?"
-)
 
-# 10 equal-width bins over [0, 1], midpoints at {5%, 15%, ..., 95%}.
-# "1" = bin [0%, 10%) → midpoint 5%; "10" = bin [90%, 100%] → midpoint 95%.
-NUMERIC_CONFIDENCE_OPTIONS = {str(i): f"~{(i*10-5)}% confident" for i in range(1, 11)}
-NUMERIC_CONFIDENCE_MIDPOINTS = {str(i): (i * 10 - 5) / 100.0 for i in range(1, 11)}
+def _make_numeric_question(n_max: int) -> str:
+    return f"How confident are you that you know the correct answer (1-{n_max})?"
+
+
+def _make_numeric_options(n_max: int) -> dict:
+    """Equal-width bins over [0%, 100%]. Midpoints at the centre of each band."""
+    width_pct = 100 / n_max
+    return {str(i): f"~{int(round((i - 0.5) * width_pct))}% confident" for i in range(1, n_max + 1)}
+
+
+def _make_numeric_midpoints(n_max: int) -> dict:
+    """Per-digit midpoint as a fraction of 1.0."""
+    width = 1.0 / n_max
+    return {str(i): (i - 0.5) * width for i in range(1, n_max + 1)}
+
+
+def get_numeric_scheme(n_max: int) -> dict:
+    """Bundle of strings + maps for the 1..n_max numeric confidence scheme.
+
+    Returns
+    -------
+    dict with keys: setup, question, options, midpoints, n_max.
+    """
+    if n_max not in (5, 10):
+        raise ValueError(f"Only 1-5 and 1-10 schemes are supported, got n_max={n_max}")
+    return {
+        "n_max": n_max,
+        "setup": _make_numeric_setup(n_max),
+        "question": _make_numeric_question(n_max),
+        "options": _make_numeric_options(n_max),
+        "midpoints": _make_numeric_midpoints(n_max),
+    }
+
+
+# Back-compat: 1-10 is the historical default. Existing imports still work.
+NUMERIC_CONFIDENCE_SETUP = _make_numeric_setup(10)
+NUMERIC_CONFIDENCE_QUESTION = _make_numeric_question(10)
+NUMERIC_CONFIDENCE_OPTIONS = _make_numeric_options(10)
+NUMERIC_CONFIDENCE_MIDPOINTS = _make_numeric_midpoints(10)
 
 
 def format_numeric_confidence_prompt(

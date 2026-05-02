@@ -15,7 +15,10 @@ from scipy.stats import pearsonr, spearmanr
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel  # <--- ADDED FOR LORA
 import random
-import wandb
+from tqdm.auto import tqdm
+
+# wandb is imported lazily inside the only branches that use it (so eval works
+# in environments where wandb isn't installed and EVAL_USE_WANDB is False).
 
 from utils import (
     write_log,
@@ -30,10 +33,86 @@ from loss import (
 from finetune_prompting import (
     build_multiple_choice_question_prompts,
     build_self_confidence_prompts,
+    build_self_confidence_prompts_numeric,
     build_other_confidence_prompts,
+    build_other_confidence_prompts_numeric,
     run_mcq_forward_pass,
-    run_confidence_forward_pass
+    run_confidence_forward_pass,
+    run_confidence_forward_pass_numeric,
 )
+from loss import get_bin_spec
+
+
+def _confidence_pass(
+    *,
+    kind: str,                     # "self" or "other"
+    confidence_format: str,
+    batch,
+    tokenizer,
+    model,
+    device,
+    temperature,
+    confidence_letter_mapping,     # only used for letter_8bin
+    mcq_letter_mapping,
+    model_type: str = "instruct",
+):
+    """Dispatch self/other confidence prompt + forward pass on confidence_format.
+
+    Returns a uniform dict regardless of format:
+        logits        — tensor of shape [B, n_bins]
+        probs         — tensor of shape [B, n_bins]
+        expected_conf — tensor of shape [B] in [0, 1]
+        pred_label    — list[str] of display labels (letters or digits)
+        pred_index    — list[int] of bin indices in [0, n_bins-1]
+    """
+    if confidence_format == "letter_8bin":
+        if kind == "self":
+            prompts = build_self_confidence_prompts(
+                batch, tokenizer, confidence_letter_mapping, mcq_letter_mapping
+            )
+        else:
+            prompts = build_other_confidence_prompts(
+                batch, tokenizer, confidence_letter_mapping, mcq_letter_mapping
+            )
+        out = run_confidence_forward_pass(
+            model=model, tokenizer=tokenizer, prompts=prompts,
+            device=device, temperature=temperature,
+            confidence_letter_mapping=confidence_letter_mapping,
+        )
+        return {
+            "logits": out["logits8"],
+            "probs": out["probs8"],
+            "expected_conf": out["expected_conf"],
+            "pred_label": out["pred_bins"],
+            "pred_index": out["pred_bin_indices"],
+        }
+
+    if confidence_format == "numeric_1_5":
+        n_max = 5
+    elif confidence_format == "numeric_1_10":
+        n_max = 10
+    else:
+        raise ValueError(f"Unknown confidence_format: {confidence_format!r}")
+
+    if kind == "self":
+        prompts = build_self_confidence_prompts_numeric(
+            batch, tokenizer, mcq_letter_mapping, n_max=n_max, model_type=model_type
+        )
+    else:
+        prompts = build_other_confidence_prompts_numeric(
+            batch, tokenizer, mcq_letter_mapping, n_max=n_max, model_type=model_type
+        )
+    out = run_confidence_forward_pass_numeric(
+        model=model, tokenizer=tokenizer, prompts=prompts,
+        device=device, temperature=temperature, n_max=n_max,
+    )
+    return {
+        "logits": out["logits"],
+        "probs": out["probs"],
+        "expected_conf": out["expected_conf"],
+        "pred_label": out["pred_digits"],
+        "pred_index": out["pred_digit_indices"],
+    }
 from data_handling import (
     verify_and_resolve_options,
     write_jsonl,
@@ -65,6 +144,8 @@ def evaluate_model(
     confidence_letter_random_seed=None,
     mcq_letter_scheme="A-D",
     mcq_letter_random_seed=None,
+    confidence_format="letter_8bin",
+    model_type="instruct",
 ):
     """
     Simplified evaluation function for arbitrary datasets.
@@ -138,6 +219,8 @@ def evaluate_model(
             self.confidence_letter_random_seed = confidence_letter_random_seed
             self.mcq_letter_scheme = mcq_letter_scheme
             self.mcq_letter_random_seed = mcq_letter_random_seed
+            self.confidence_format = confidence_format
+            self.model_type = model_type
     
     args = SimpleArgs()
     
@@ -172,8 +255,10 @@ def evaluate_model(
         sigma=sigma,
         confidence_letter_mapping=confidence_letter_mapping,
         mcq_letter_mapping=mcq_letter_mapping,
+        confidence_format=confidence_format,
+        model_type=model_type,
     )
-    
+
     return results
 
 
@@ -195,6 +280,8 @@ def run_evaluation(
     val_on_frozen=False,
     confidence_letter_mapping=None,
     mcq_letter_mapping=None,
+    confidence_format=None,
+    model_type=None,
 ):
     """
     Evaluation loop:
@@ -260,7 +347,16 @@ def run_evaluation(
             # Default to A-H if nothing specified
             from finetune_prompting import get_confidence_letter_mapping
             confidence_letter_mapping = get_confidence_letter_mapping("A-H")
-    
+
+    # Resolve confidence_format from args if not passed explicitly. Determines
+    # which prompt builder + forward pass + bin spec is used end-to-end.
+    if confidence_format is None:
+        confidence_format = getattr(args, "confidence_format", "letter_8bin")
+    n_conf_bins = get_bin_spec(confidence_format)["n_bins"]
+
+    if model_type is None:
+        model_type = getattr(args, "model_type", "instruct")
+
     # Check if per-question randomization is enabled
     randomize_per_question = getattr(args, 'randomize_letters_per_question', False)
     
@@ -349,10 +445,8 @@ def run_evaluation(
 
     # ==================== MAIN LOOP ==========================
     total_samples = len(idxs)
-    for idx_in_loop, i in enumerate(idxs):
-        # Progress marker every 100 questions
-        if (idx_in_loop + 1) % 100 == 0:
-            print(f"  Progress: {idx_in_loop + 1}/{total_samples} questions evaluated ({100.0 * (idx_in_loop + 1) / total_samples:.1f}%)")
+    pbar_desc = f"{step_name or 'eval'} ({log_prefix.rstrip('_') or 'model'})"
+    for idx_in_loop, i in enumerate(tqdm(idxs, desc=pbar_desc, total=total_samples, leave=True)):
         
         batch = val_dataset[i:i+1]    # single-sample batch (list of 1 dict)
 
@@ -475,7 +569,9 @@ def run_evaluation(
                 )
         else:
             # Use live model (current behavior)
-            mcq_prompts = build_multiple_choice_question_prompts(batch, tokenizer, sample_mcq_letter_mapping)
+            mcq_prompts = build_multiple_choice_question_prompts(
+                batch, tokenizer, sample_mcq_letter_mapping, model_type=model_type
+            )
 
             # print("DEBUG mcq_prompts", mcq_prompts)
 
@@ -535,7 +631,9 @@ def run_evaluation(
         # entropy_value is a scalar float from MCQ evaluation or prerecorded data
         # Convert to tensor and use the resolved sigma (from parameter or args.sigma)
         entropy_tensor = torch.tensor([entropy_value], dtype=torch.float32, device=device)
-        soft_targets = build_soft_targets_from_entropy(entropy_tensor, sigma=sigma)
+        soft_targets = build_soft_targets_from_entropy(
+            entropy_tensor, sigma=sigma, confidence_format=confidence_format
+        )
  
 
 
@@ -546,24 +644,25 @@ def run_evaluation(
         compute_other_confidence = getattr(args, 'compute_other_confidence', True)
         
         if compute_confidence:
-            conf_prompts = build_self_confidence_prompts(batch, tokenizer, sample_confidence_letter_mapping, sample_mcq_letter_mapping)
-
-            conf_out = run_confidence_forward_pass(
-                model=model,
+            conf_out = _confidence_pass(
+                kind="self",
+                confidence_format=confidence_format,
+                batch=batch,
                 tokenizer=tokenizer,
-                prompts=conf_prompts,
+                model=model,
                 device=device,
                 temperature=args.temperature,
                 confidence_letter_mapping=sample_confidence_letter_mapping,
+                mcq_letter_mapping=sample_mcq_letter_mapping,
+                model_type=model_type,
             )
 
-            logits8 = conf_out["logits8"][0]
+            conf_logits = conf_out["logits"][0]  # [n_bins]
             expected_confidence_value = conf_out["expected_conf"][0].item()
-            predicted_confidence_letter = conf_out["pred_bins"][0]  # Display letter (e.g., S-Z)
-            predicted_confidence_bin_index = conf_out["pred_bin_indices"][0]  # Bin index (0-7 for A-H)
+            predicted_confidence_letter = conf_out["pred_label"][0]  # display letter or digit
+            predicted_confidence_bin_index = conf_out["pred_index"][0]  # 0..n_bins-1
         else:
-            # Skip confidence computation - use dummy values
-            logits8 = None
+            conf_logits = None
             expected_confidence_value = 0.0
             predicted_confidence_letter = None
             predicted_confidence_bin_index = None
@@ -576,20 +675,22 @@ def run_evaluation(
         # 3.5. Other confidence pass (optional)
         # ==================================================
         if compute_other_confidence:
-            other_conf_prompts = build_other_confidence_prompts(batch, tokenizer, sample_confidence_letter_mapping, sample_mcq_letter_mapping)
-
-            other_conf_out = run_confidence_forward_pass(
-                model=model,
+            other_conf_out = _confidence_pass(
+                kind="other",
+                confidence_format=confidence_format,
+                batch=batch,
                 tokenizer=tokenizer,
-                prompts=other_conf_prompts,
+                model=model,
                 device=device,
                 temperature=args.temperature,
                 confidence_letter_mapping=sample_confidence_letter_mapping,
+                mcq_letter_mapping=sample_mcq_letter_mapping,
+                model_type=model_type,
             )
 
             expected_other_confidence_value = other_conf_out["expected_conf"][0].item()
-            predicted_other_confidence_letter = other_conf_out["pred_bins"][0]  # Display letter (e.g., S-Z)
-            predicted_other_confidence_bin_index = other_conf_out["pred_bin_indices"][0]  # Bin index (0-7 for A-H)
+            predicted_other_confidence_letter = other_conf_out["pred_label"][0]
+            predicted_other_confidence_bin_index = other_conf_out["pred_index"][0]
         else:
             # Skip other confidence computation - use dummy values
             expected_other_confidence_value = 0.0
@@ -603,26 +704,27 @@ def run_evaluation(
         # ==================================================
         # 4. Loss (only if confidence was computed)
         # ==================================================
-        if compute_confidence and logits8 is not None:
-            # Prepare inputs based on loss type
+        if compute_confidence and conf_logits is not None:
+            # conf_logits is [n_bins], unsqueeze to [1, n_bins] for batch dim.
+            conf_logits_batch = conf_logits.unsqueeze(0) if conf_logits.ndim == 1 else conf_logits
             if args.loss_type == 'scalar_confidence_mse':
-                # For scalar_confidence_mse, pass entropy directly
-                # logits8 is [8], need to unsqueeze to [1, 8] for batch dimension
-                logits8_batch = logits8.unsqueeze(0) if logits8.ndim == 1 else logits8
                 entropy_tensor = torch.tensor([entropy_value], dtype=torch.float32, device=device)
-                loss = compute_loss(logits8_batch, entropy=entropy_tensor, loss_type=args.loss_type, reduction='mean')
-                loss_value = loss.item()
+                loss = compute_loss(
+                    conf_logits_batch, entropy=entropy_tensor,
+                    loss_type=args.loss_type, reduction='mean',
+                    confidence_format=confidence_format,
+                )
             else:
-                # For gaussian_soft_bin_ce, pass soft_targets
-                # logits8 is [8], need to unsqueeze to [1, 8] for batch dimension
-                logits8_batch = logits8.unsqueeze(0) if logits8.ndim == 1 else logits8
                 soft_targets_batch = soft_targets.unsqueeze(0) if soft_targets.ndim == 1 else soft_targets
-                loss = compute_loss(logits8_batch, soft_targets=soft_targets_batch, loss_type=args.loss_type, reduction='mean')
-                loss_value = loss.item()
-            loss_values.append(loss_value)
+                loss = compute_loss(
+                    conf_logits_batch, soft_targets=soft_targets_batch,
+                    loss_type=args.loss_type, reduction='mean',
+                    confidence_format=confidence_format,
+                )
+            loss_value = loss.item()
         else:
-            # Skip loss computation if confidence was not computed
-            loss_values.append(0.0)
+            loss_value = 0.0
+        loss_values.append(loss_value)
 
         # ==================================================
         # 5. Optional per-sample logging
@@ -740,89 +842,87 @@ def run_evaluation(
     compute_confidence = getattr(args, 'compute_confidence', True)
     compute_other_confidence = getattr(args, 'compute_other_confidence', True)
     
-    # Get display letters from confidence_letter_mapping for distribution stats
-    if randomize_per_question:
-        # When randomizing per question, collect all unique letters that appeared
-        all_conf_letters = set([l for l in predicted_confidence_letters + predicted_other_confidence_letters if l is not None])
-        display_letters_str = ''.join(sorted(all_conf_letters))
+    # Get display labels for distribution stats. For letter_8bin these are
+    # the A-H display letters from confidence_letter_mapping; for the numeric
+    # formats they are the digit strings ("1", "2", …).
+    if confidence_format == "letter_8bin":
+        if randomize_per_question:
+            all_conf_letters = set([l for l in predicted_confidence_letters + predicted_other_confidence_letters if l is not None])
+            display_labels = sorted(all_conf_letters)
+        else:
+            display_labels = [confidence_letter_mapping[chr(ord('A') + i)] for i in range(8)]
+        bin_labels = {
+            0: "<5%", 1: "5-10%", 2: "10-20%", 3: "20-40%",
+            4: "40-60%", 5: "60-80%", 6: "80-90%", 7: ">90%",
+        }
     else:
-        # Use the fixed mapping
-        display_letters = [confidence_letter_mapping[chr(ord('A') + i)] for i in range(8)]
-        display_letters_str = ''.join(display_letters)
-    
-    # Confidence bin labels (A-H correspond to confidence levels)
-    confidence_bin_labels = {
-        0: "<5%", 1: "5-10%", 2: "10-20%", 3: "20-40%",
-        4: "40-60%", 5: "60-80%", 6: "80-90%", 7: ">90%"
-    }
-    
+        display_labels = [str(i + 1) for i in range(n_conf_bins)]
+        # Each digit covers a 100/n_conf_bins percentage band.
+        bin_width_pct = 100.0 / n_conf_bins
+        bin_labels = {
+            i: f"{int(round(i * bin_width_pct))}-{int(round((i + 1) * bin_width_pct))}%"
+            for i in range(n_conf_bins)
+        }
+    display_labels_str = ''.join(display_labels)
+
     if compute_confidence:
-        # Count using display letters (which are what's actually stored)
-        conf_dist_letters = count_dist([l for l in predicted_confidence_letters if l is not None], display_letters_str)
+        conf_dist_letters = count_dist([l for l in predicted_confidence_letters if l is not None], display_labels)
         conf_dist_letters_pct = {k: (v / n) * 100.0 for k, v in conf_dist_letters.items()}
-        
-        # Count by bin index (0-7 for A-H)
-        conf_dist_bins = count_dist_indices([b for b in predicted_confidence_bin_indices if b is not None], 7)
+
+        conf_dist_bins = count_dist_indices([b for b in predicted_confidence_bin_indices if b is not None], n_conf_bins - 1)
         conf_dist_bins_pct = {k: (v / n) * 100.0 for k, v in conf_dist_bins.items()}
 
-        # Pretty print confidence distribution using display letters
         print("\n============================================================")
-        print(f"{step_name.upper()} — Self Confidence Prediction Distributions (by Letter)")
+        print(f"{step_name.upper()} — Self Confidence Prediction Distributions (by Label)")
         print("============================================================")
-        print(f"Model Self Confidence Prediction Distribution ({display_letters_str}):")
-        for k in display_letters_str:
+        print(f"Model Self Confidence Prediction Distribution ({display_labels_str}):")
+        for k in display_labels:
             print(f"  {k}: {conf_dist_letters[k]:4d}  ({conf_dist_letters_pct[k]:6.2f}%)")
-        
-        # Pretty print confidence distribution by bin
+
         print("\n============================================================")
         print(f"{step_name.upper()} — Self Confidence Prediction Distributions (by Bin)")
         print("============================================================")
-        print("Model Self Confidence Prediction Distribution (bins 0-7, corresponding to A-H):")
-        for bin_idx in range(8):
-            bin_letter = chr(ord('A') + bin_idx)
-            bin_label = confidence_bin_labels[bin_idx]
-            print(f"  Bin {bin_idx} ({bin_letter}, {bin_label}): {conf_dist_bins[bin_idx]:4d}  ({conf_dist_bins_pct[bin_idx]:6.2f}%)")
+        print(f"Model Self Confidence Prediction Distribution (bins 0..{n_conf_bins - 1}):")
+        for bin_idx in range(n_conf_bins):
+            label = display_labels[bin_idx] if bin_idx < len(display_labels) else "?"
+            bin_label = bin_labels.get(bin_idx, "?")
+            print(f"  Bin {bin_idx} ({label}, {bin_label}): {conf_dist_bins[bin_idx]:4d}  ({conf_dist_bins_pct[bin_idx]:6.2f}%)")
     else:
-        conf_dist_letters = {k: 0 for k in display_letters_str}
-        conf_dist_letters_pct = {k: 0.0 for k in display_letters_str}
-        conf_dist_bins = {i: 0 for i in range(8)}
-        conf_dist_bins_pct = {i: 0.0 for i in range(8)}
+        conf_dist_letters = {k: 0 for k in display_labels}
+        conf_dist_letters_pct = {k: 0.0 for k in display_labels}
+        conf_dist_bins = {i: 0 for i in range(n_conf_bins)}
+        conf_dist_bins_pct = {i: 0.0 for i in range(n_conf_bins)}
 
     # ===========================================================
     # OTHER CONFIDENCE DISTRIBUTION STATS - only if computed
-    # Use display letters from confidence_letter_mapping
     # ===========================================================
     if compute_other_confidence:
-        # Count using display letters (which are what's actually stored)
-        other_conf_dist_letters = count_dist([l for l in predicted_other_confidence_letters if l is not None], display_letters_str)
+        other_conf_dist_letters = count_dist([l for l in predicted_other_confidence_letters if l is not None], display_labels)
         other_conf_dist_letters_pct = {k: (v / n) * 100.0 for k, v in other_conf_dist_letters.items()}
-        
-        # Count by bin index (0-7 for A-H)
-        other_conf_dist_bins = count_dist_indices([b for b in predicted_other_confidence_bin_indices if b is not None], 7)
+
+        other_conf_dist_bins = count_dist_indices([b for b in predicted_other_confidence_bin_indices if b is not None], n_conf_bins - 1)
         other_conf_dist_bins_pct = {k: (v / n) * 100.0 for k, v in other_conf_dist_bins.items()}
 
-        # Pretty print other confidence distribution using display letters
         print("\n============================================================")
-        print(f"{step_name.upper()} — Other Confidence Prediction Distributions (by Letter)")
+        print(f"{step_name.upper()} — Other Confidence Prediction Distributions (by Label)")
         print("============================================================")
-        print(f"Model Other Confidence Prediction Distribution ({display_letters_str}):")
-        for k in display_letters_str:
+        print(f"Model Other Confidence Prediction Distribution ({display_labels_str}):")
+        for k in display_labels:
             print(f"  {k}: {other_conf_dist_letters[k]:4d}  ({other_conf_dist_letters_pct[k]:6.2f}%)")
-        
-        # Pretty print other confidence distribution by bin
+
         print("\n============================================================")
         print(f"{step_name.upper()} — Other Confidence Prediction Distributions (by Bin)")
         print("============================================================")
-        print("Model Other Confidence Prediction Distribution (bins 0-7, corresponding to A-H):")
-        for bin_idx in range(8):
-            bin_letter = chr(ord('A') + bin_idx)
-            bin_label = confidence_bin_labels[bin_idx]
-            print(f"  Bin {bin_idx} ({bin_letter}, {bin_label}): {other_conf_dist_bins[bin_idx]:4d}  ({other_conf_dist_bins_pct[bin_idx]:6.2f}%)")
+        print(f"Model Other Confidence Prediction Distribution (bins 0..{n_conf_bins - 1}):")
+        for bin_idx in range(n_conf_bins):
+            label = display_labels[bin_idx] if bin_idx < len(display_labels) else "?"
+            bin_label = bin_labels.get(bin_idx, "?")
+            print(f"  Bin {bin_idx} ({label}, {bin_label}): {other_conf_dist_bins[bin_idx]:4d}  ({other_conf_dist_bins_pct[bin_idx]:6.2f}%)")
     else:
-        other_conf_dist_letters = {k: 0 for k in display_letters_str}
-        other_conf_dist_letters_pct = {k: 0.0 for k in display_letters_str}
-        other_conf_dist_bins = {i: 0 for i in range(8)}
-        other_conf_dist_bins_pct = {i: 0.0 for i in range(8)}
+        other_conf_dist_letters = {k: 0 for k in display_labels}
+        other_conf_dist_letters_pct = {k: 0.0 for k in display_labels}
+        other_conf_dist_bins = {i: 0 for i in range(n_conf_bins)}
+        other_conf_dist_bins_pct = {i: 0.0 for i in range(n_conf_bins)}
 
     # ===========================================================
     # FINAL METRICS

@@ -27,6 +27,9 @@ FINETUNE_LOGS_DIR = FINETUNE_OUTPUTS_DIR / "logs"
 FINETUNE_CHECKPOINTS_DIR = FINETUNE_OUTPUTS_DIR / "checkpoints"
 FINETUNE_EVALS_DIR = FINETUNE_OUTPUTS_DIR / "evals"
 
+# Per-dataset evaluation logs (run_evaluations.py) live here.
+EVALUATIONS_DIR = OUTPUTS_DIR / "evaluations"
+
 
 # ---- run_ECT.py (Expected Confidence Task fine-tuning) -----------------------
 class ECTConfig:
@@ -41,8 +44,19 @@ class ECTConfig:
     DEVICE = "cuda"
 
     # Data
+    TRAIN_DATA_PATH = "data/PopMC_0_difficulty_filtered_train.jsonl"
+    VAL_DATA_PATH = "data/PopMC_0_difficulty_filtered_val.jsonl"
+    TEST_DATA_PATH = None
     BATCH_SIZE = 4
     MCQ_RESULTS_DATA = None  # path to JSON/JSONL with pre-recorded MCQ entropies
+
+    # Teacher / validation mode
+    # USE_RECORDED_RESPONSES: True = frozen teacher (uses MCQ_RESULTS_DATA);
+    #                        False = dynamic teacher (recompute logits live).
+    # VAL_ON_FROZEN:         True = validate against pre-recorded answers/entropy;
+    #                        False = validate against live model.
+    USE_RECORDED_RESPONSES = False
+    VAL_ON_FROZEN = False
 
     # LoRA
     LORA_R = 16
@@ -62,6 +76,11 @@ class ECTConfig:
     SHUFFLE_OPTIONS = True
     ENABLE_DATA_LEAKAGE_CHECKS = True
 
+    # Loss — used by training (compute_loss) AND reported by evaluation_metrics
+    # as a validation-loss metric. Keeping this here means eval can never
+    # silently diverge from training on the loss formulation.
+    LOSS_TYPE = "gaussian_soft_bin_ce"  # or "scalar_confidence_mse"
+
     # Confidence response format.
     #   "letter_8bin"  — 8 letter tokens (A-H, S-Z, or random) over percentage
     #                    bands. Uses build_self_confidence_prompts /
@@ -74,7 +93,7 @@ class ECTConfig:
     #                    loss.py + evaluation_metrics.py still
     #                    assume 8 bins, so training on this format requires a
     #                    follow-up pass to widen those to 10 bins.
-    CONFIDENCE_FORMAT = "letter_8bin"
+    CONFIDENCE_FORMAT = "numeric_1_10"
 
     # Letter randomization (used when CONFIDENCE_FORMAT == "letter_8bin")
     CONFIDENCE_LETTER_SCHEME = "A-H"  # "A-H", "S-Z", or "random"
@@ -101,6 +120,26 @@ class ECTConfig:
     WANDB_NOTES = None
     SAVE_WANDB_ARTIFACT = False
 
+    # ---- Post-hoc evaluation (run_evaluations.py) ---------------------------
+    # All HOW knobs (sigma, loss, letter scheme, mcq scheme) live above and
+    # are shared with training so eval cannot drift. The fields below only
+    # describe WHAT to evaluate.
+    EVAL_BASE_MODEL = LLAMA_8B_INSTRUCT
+    EVAL_LORA_REPO = "Tristan-Day/ect_20251222_215412_v0uei7y1_2000"  # "" = base only
+    EVAL_MERGE_LORA = False
+    EVAL_DATASETS = (
+        "data/PopMC.jsonl",
+        "data/SimpleMC.jsonl",
+        "data/TriviaMC.jsonl",
+    )
+    EVAL_MAX_SAMPLES = None  # None = full dataset
+    EVAL_EVALUATE_BASE_FIRST = True  # base vs finetuned into one JSONL
+    EVAL_COMPUTE_CONFIDENCE = True
+    EVAL_COMPUTE_OTHER_CONFIDENCE = True
+    EVAL_LOG_DIR = EVALUATIONS_DIR
+    EVAL_USE_WANDB = False
+    EVAL_WANDB_PROJECT = "llm-evaluation"
+
 
 # ---- shared / cross-cutting --------------------------------------------------
 class FinetuneConfig:
@@ -113,3 +152,4 @@ class FinetuneConfig:
     LOGS_DIR = FINETUNE_LOGS_DIR
     CHECKPOINTS_DIR = FINETUNE_CHECKPOINTS_DIR
     EVALS_DIR = FINETUNE_EVALS_DIR
+    EVALUATIONS_DIR = EVALUATIONS_DIR

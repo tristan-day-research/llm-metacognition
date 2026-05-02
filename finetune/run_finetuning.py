@@ -5,7 +5,6 @@ import sys as _sys
 from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
 
-import argparse
 import numpy as np
 import os
 import sys
@@ -14,6 +13,7 @@ import wandb
 from datetime import datetime, timezone
 from torch.utils.data import DataLoader
 from peft import LoraConfig, get_peft_model
+from types import SimpleNamespace
 
 # Defaults live in finetune_config.ECTConfig — edit there to change behavior
 # globally; CLI flags still override per-run.
@@ -677,235 +677,64 @@ def train(args):
     
 
 
-def parse_args():
-    """Parse command line arguments."""
-    parser = argparse.ArgumentParser(
-        description="Train dynamic metacognition model "
-                    "(Explicit Confidence Task)"
+def build_args_from_config():
+    """Build a training-args namespace directly from ECTConfig.
+
+    No CLI: every parameter lives in finetune_config.ECTConfig. Edit there
+    to change a run. Returned object is a SimpleNamespace because train()
+    also assigns onto it (e.g. confidence_letter_mapping).
+    """
+    return SimpleNamespace(
+        # Model
+        model_name=_C.MODEL_NAME,
+        device=_C.DEVICE,
+        # Data
+        train_data_path=_C.TRAIN_DATA_PATH,
+        val_data_path=_C.VAL_DATA_PATH,
+        test_data_path=_C.TEST_DATA_PATH,
+        batch_size=_C.BATCH_SIZE,
+        mcq_results_data=_C.MCQ_RESULTS_DATA,
+        # LoRA
+        lora_r=_C.LORA_R,
+        lora_alpha=_C.LORA_ALPHA,
+        lora_dropout=_C.LORA_DROPOUT,
+        lora_target_modules=list(_C.LORA_TARGET_MODULES),
+        # Training
+        learning_rate=_C.LEARNING_RATE,
+        max_steps=_C.MAX_STEPS,
+        log_interval=_C.LOG_INTERVAL,
+        val_interval=_C.VAL_INTERVAL,
+        limit_val_batches=_C.LIMIT_VAL_BATCHES,
+        val_num_samples=_C.VAL_NUM_SAMPLES,
+        sigma=_C.SIGMA,
+        loss_type=_C.LOSS_TYPE,
+        temperature=_C.TEMPERATURE,
+        shuffle_options=_C.SHUFFLE_OPTIONS,
+        use_recorded_responses=_C.USE_RECORDED_RESPONSES,
+        enable_data_leakage_checks=_C.ENABLE_DATA_LEAKAGE_CHECKS,
+        val_on_frozen=_C.VAL_ON_FROZEN,
+        confidence_letter_scheme=_C.CONFIDENCE_LETTER_SCHEME,
+        confidence_letter_random_seed=_C.CONFIDENCE_LETTER_RANDOM_SEED,
+        mcq_letter_scheme=_C.MCQ_LETTER_SCHEME,
+        mcq_letter_random_seed=_C.MCQ_LETTER_RANDOM_SEED,
+        randomize_letters_per_question=_C.RANDOMIZE_LETTERS_PER_QUESTION,
+        # Output
+        output_dir=str(_C.OUTPUT_DIR),
+        save_hf=_C.SAVE_HF,
+        hf_repo=_C.HF_REPO,
+        save_hf_checkpoints=_C.SAVE_HF_CHECKPOINTS,
+        hf_checkpoint_repo=_C.HF_CHECKPOINT_REPO,
+        checkpoint_steps=_C.CHECKPOINT_STEPS,
+        hf_checkpoint_private=_C.HF_CHECKPOINT_PRIVATE,
+        # Weights & Biases
+        wandb_project=_C.WANDB_PROJECT,
+        wandb_run_name=_C.WANDB_RUN_NAME,
+        wandb_tags=_C.WANDB_TAGS,
+        wandb_notes=_C.WANDB_NOTES,
+        save_wandb_artifact=_C.SAVE_WANDB_ARTIFACT,
     )
-
-    # -----------------------
-    # Model
-    # -----------------------
-    parser.add_argument("--model_name", type=str,
-                        default=_C.MODEL_NAME,
-                        help="HF model name or path")
-    parser.add_argument("--device", type=str,
-                        default=_C.DEVICE,
-                        choices=["cuda", "cpu"],
-                        help="Compute device")
-
-    # -----------------------
-    # Data
-    # -----------------------
-    parser.add_argument("--train_data_path", type=str,
-                        required=True,
-                        help="Path to JSONL training dataset")
-    
-    parser.add_argument("--val_data_path", type=str,
-                        default=None,
-                        help="Path to JSONL validation dataset (optional)")
-    
-    parser.add_argument("--test_data_path", type=str,
-                        default=None,
-                        help="Path to JSONL test dataset (optional, will be evaluated after training)")
-
-    parser.add_argument("--batch_size", type=int,
-                        default=_C.BATCH_SIZE,
-                        help="Training batch size")
-
-    parser.add_argument("--mcq_results_data", type=str,
-                        default=_C.MCQ_RESULTS_DATA,
-                        help="Path to JSON/JSONL file with previous MCQ results for verification")
-
-    # -----------------------
-    # LoRA
-    # -----------------------
-    parser.add_argument("--lora_r", type=int, default=_C.LORA_R)
-    parser.add_argument("--lora_alpha", type=int, default=_C.LORA_ALPHA)
-    parser.add_argument("--lora_dropout", type=float, default=_C.LORA_DROPOUT)
-
-    parser.add_argument("--lora_target_modules", type=str, nargs="+",
-                        default=list(_C.LORA_TARGET_MODULES),
-                        help="Modules to apply LoRA to")
-
-    # -----------------------
-    # Training
-    # -----------------------
-    parser.add_argument("--learning_rate", type=float, default=_C.LEARNING_RATE)
-    parser.add_argument("--max_steps", type=int, default=_C.MAX_STEPS)
-    parser.add_argument("--log_interval", type=int, default=_C.LOG_INTERVAL)
-    parser.add_argument("--val_interval", type=int, default=_C.VAL_INTERVAL,
-                        help="Run validation every N training steps")
-    parser.add_argument("--limit_val_batches", type=int, default=_C.LIMIT_VAL_BATCHES,
-                        help="Limit validation to N batches (None = use all validation data)")
-    parser.add_argument("--val_num_samples", type=int, default=_C.VAL_NUM_SAMPLES,
-                        help="Number of random questions to sample from validation dataset for validation steps")
-    parser.add_argument("--sigma", type=float, default=_C.SIGMA,
-                        help="Sigma parameter for soft label distribution")
-    parser.add_argument("--loss_type", type=str, required=True,
-                        choices=["gaussian_soft_bin_ce", "scalar_confidence_mse"],
-                        help="Type of loss function to use: 'gaussian_soft_bin_ce' or 'scalar_confidence_mse'")
-    parser.add_argument("--temperature", type=float, default=_C.TEMPERATURE,
-                        help="Temperature for sampling predictions (0.0 = deterministic/argmax, >0 = sampling)")
-    parser.add_argument(
-        "--no_shuffle_options", dest="shuffle_options", action="store_false",
-        help="Disable shuffling of multiple choice answer options (shuffling is enabled by default)"
-    )
-    parser.add_argument(
-        "--use_recorded_responses", action="store_true", default=None,
-        help=("Use recorded MCQ responses (frozen teacher) as training "
-              "targets instead of recomputing logits.")
-    )
-    parser.add_argument(
-        "--no_use_recorded_responses", dest="use_recorded_responses",
-        action="store_false",
-        help=("Disable using recorded responses, use dynamic teacher "
-              "(current model logits) instead.")
-    )
-    
-    parser.add_argument(
-        "--enable_data_leakage_checks", action="store_true", default=_C.ENABLE_DATA_LEAKAGE_CHECKS,
-        help="Enable data leakage checks to ensure train/val separation (enabled by default)"
-    )
-    
-    parser.add_argument(
-        "--disable_data_leakage_checks", dest="enable_data_leakage_checks",
-        action="store_false",
-        help="Disable data leakage checks (not recommended)"
-    )
-    
-    parser.add_argument(
-        "--val_on_frozen", action="store_true", default=None,
-        help=("Use pre-recorded MCQ answers and entropy for validation "
-              "(frozen teacher validation).")
-    )
-    parser.add_argument(
-        "--val_on_live", action="store_true", default=None,
-        help=("Use live model's MCQ answers and entropy for validation "
-              "(dynamic teacher validation, default behavior).")
-    )
-    
-    parser.add_argument(
-        "--confidence_letter_scheme", type=str, default=_C.CONFIDENCE_LETTER_SCHEME,
-        choices=["A-H", "S-Z", "random"],
-        help="Letter scheme for confidence bins."
-    )
-
-    parser.add_argument(
-        "--confidence_letter_random_seed", type=int, default=_C.CONFIDENCE_LETTER_RANDOM_SEED,
-        help="Random seed for 'random' confidence_letter_scheme."
-    )
-
-    parser.add_argument(
-        "--mcq_letter_scheme", type=str, default=_C.MCQ_LETTER_SCHEME,
-        choices=["A-D", "E-H", "I-L", "M-P", "Q-T", "U-X", "Y-Z", "random"],
-        help="Letter scheme for MCQ answer options."
-    )
-
-    parser.add_argument(
-        "--mcq_letter_random_seed", type=int, default=_C.MCQ_LETTER_RANDOM_SEED,
-        help="Random seed for 'random' mcq_letter_scheme."
-    )
-
-    parser.add_argument(
-        "--randomize_letters_per_question", action="store_true",
-        default=_C.RANDOMIZE_LETTERS_PER_QUESTION,
-        help="If set, randomize letter mappings for each question/batch."
-    )
-
-
-    # -----------------------
-    # Output
-    # -----------------------
-    parser.add_argument("--output_dir", type=str,
-                        default=str(_C.OUTPUT_DIR),
-                        help="Directory to save final model")
-
-    parser.add_argument("--save_hf", action="store_true", default=_C.SAVE_HF,
-                        help="If set, push LoRA model to HuggingFace Hub")
-
-    parser.add_argument("--hf_repo", type=str,
-                        default=_C.HF_REPO,
-                        help="HF repo name if pushing to Hub")
-
-    parser.add_argument("--save_hf_checkpoints", action="store_true",
-                        default=_C.SAVE_HF_CHECKPOINTS,
-                        help="If set, save checkpoints to HuggingFace Hub during training")
-
-    parser.add_argument("--hf_checkpoint_repo", type=str,
-                        default=_C.HF_CHECKPOINT_REPO,
-                        help="Base HF repo name for checkpoints (e.g., 'username/model-name')")
-
-    parser.add_argument("--checkpoint_steps", type=int,
-                        default=_C.CHECKPOINT_STEPS,
-                        help="Save checkpoint every N steps")
-
-    parser.add_argument("--hf_checkpoint_private", action="store_true",
-                        default=_C.HF_CHECKPOINT_PRIVATE,
-                        help="If set, make checkpoint repos private")
-
-    # -----------------------
-    # Weights & Biases
-    # -----------------------
-    parser.add_argument("--wandb_project", type=str,
-                        default=_C.WANDB_PROJECT,
-                        help="W&B project name")
-
-    parser.add_argument("--wandb_run_name", type=str,
-                        default=_C.WANDB_RUN_NAME,
-                        help="W&B run name (auto-generated if not provided)")
-
-    parser.add_argument("--wandb_tags", type=str, nargs="+",
-                        default=_C.WANDB_TAGS,
-                        help="Tags for W&B run")
-
-    parser.add_argument("--wandb_notes", type=str,
-                        default=_C.WANDB_NOTES,
-                        help="Notes/description for W&B run")
-
-    parser.add_argument("--save_wandb_artifact", action="store_true",
-                        default=_C.SAVE_WANDB_ARTIFACT,
-                        help="Save model as W&B artifact for reproducibility")
-
-    args = parser.parse_args()
-    
-    # Set default for shuffle_options (True if --no_shuffle_options was not provided)
-    if not hasattr(args, 'shuffle_options'):
-        args.shuffle_options = True
-    
-    # Validate that exactly one of --use_recorded_responses or --no_use_recorded_responses is set
-    if args.use_recorded_responses is None:
-        parser.error(
-            "Exactly one of --use_recorded_responses or --no_use_recorded_responses must be specified. "
-            "You must explicitly choose whether to use recorded responses (frozen teacher) or live responses (dynamic teacher)."
-        )
-    
-    # Validate that exactly one of --val_on_frozen or --val_on_live is set
-    if args.val_on_frozen is None and args.val_on_live is None:
-        parser.error(
-            "Exactly one of --val_on_frozen or --val_on_live must be specified. "
-            "You must explicitly choose whether to validate on frozen (pre-recorded) or live (current model) responses."
-        )
-    if args.val_on_frozen and args.val_on_live:
-        parser.error(
-            "Cannot specify both --val_on_frozen and --val_on_live. "
-            "You must choose exactly one validation mode."
-        )
-    
-    # Set val_on_frozen boolean for easier use
-    args.val_on_frozen = args.val_on_frozen if args.val_on_frozen else False
-    
-    # Validate that confidence_letter_scheme is provided
-    if args.confidence_letter_scheme is None:
-        parser.error(
-            "--confidence_letter_scheme is REQUIRED. "
-            "Must be one of: 'A-H', 'S-Z', or 'random'."
-        )
-    
-    return args
 
 
 if __name__ == "__main__":
-    args = parse_args()
+    args = build_args_from_config()
     train(args)

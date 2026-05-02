@@ -84,11 +84,14 @@ def load_evaluation_jsonl(
 
 
 def latest_eval_log(
-    log_dir: str | Path = "finetuned_evals",
+    log_dir: str | Path = "outputs/evaluations",
     pattern: str = "*.jsonl",
 ) -> Optional[Path]:
     """Return the most recently modified file matching ``pattern`` in
-    ``log_dir``, or None if none exists."""
+    ``log_dir``, or None if none exists.
+
+    Default points at ``outputs/evaluations/`` (where ``run_evaluations.py``
+    writes its JSONL logs)."""
     p = Path(log_dir)
     if not p.exists():
         return None

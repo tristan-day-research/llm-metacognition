@@ -136,7 +136,7 @@ class ECTConfig:
 
     # Training loop
     LEARNING_RATE = 2e-5
-    MAX_STEPS = 3000  # effectively no cap; rely on early stopping or manual
+    MAX_STEPS = 3000  
     LOG_INTERVAL = 20
     VAL_INTERVAL = 100
     LIMIT_VAL_BATCHES = None

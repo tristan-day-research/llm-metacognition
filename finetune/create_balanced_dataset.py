@@ -13,8 +13,14 @@ Sampling hierarchy:
      prop exceeds MAX_PROP_FRACTION of the PopMC quota. Sub-binning by
      entropy still applies inside each prop group.
 
-Output format matches MCQDataset:
-  {qid, question, correct_answer, distractors, entropy, source, [prop, s_pop, o_pop]}
+Output format: every field from the source eval JSONL row (type, is_correct,
+top_prob, probs_ABCD, model_answer, model_answer_position,
+correct_answer_position, prob_gap, expected_confidence,
+predicted_confidence_bin_index, predicted_other_confidence_bin_index,
+expected_other_confidence, loss, entropy, etc.) plus distractors from the
+underlying dataset and source/[prop, s_pop, o_pop]. Keeping the eval-row
+fields lets analyze_performance.ipynb plot the balanced split with the
+same tools it uses on raw evaluation files.
 """
 import sys
 from pathlib import Path
@@ -72,8 +78,9 @@ def entropy_bin(e: float) -> str:
     return "high"
 
 
-def load_eval_entropy(path: str) -> dict[str, float]:
-    out = {}
+def load_eval_rows(path: str) -> dict[str, dict]:
+    """Return qid -> full eval-sample row, dropping rows with missing/NaN entropy."""
+    out: dict[str, dict] = {}
     skipped = 0
     with open(path) as f:
         for line in f:
@@ -83,12 +90,16 @@ def load_eval_entropy(path: str) -> dict[str, float]:
             d = json.loads(line)
             if "entropy" not in d or "qid" not in d:
                 continue
+            # Eval files mix sample and summary rows; only sample rows have qid.
+            if not str(d.get("type", "")).endswith("eval_sample"):
+                continue
             e = d["entropy"]
             # Skip NaN / non-finite — a few rows in the eval files have these.
             if not isinstance(e, (int, float)) or e != e or e in (float("inf"), float("-inf")):
                 skipped += 1
                 continue
-            out[d["qid"]] = float(e)
+            d["entropy"] = float(e)
+            out[d["qid"]] = d
     if skipped:
         print(f"  (skipped {skipped} rows with missing/NaN entropy in {Path(path).name})")
     return out
@@ -108,33 +119,79 @@ def load_data_file(path: str) -> dict[str, dict]:
     return out
 
 
+def _load_options_by_qid(raw_data_path: str) -> dict[str, dict]:
+    """Run the canonical training loader on the raw data so the option order
+    matches what the eval pass saw. Returns {qid: {options dict, correct_letter}}.
+
+    This is what makes the balanced rows usable for frozen training: by
+    freezing options now, the recorded ``model_answer`` letter and
+    ``probs_ABCD`` indices stay aligned with what the finetuning model will
+    later see in its prompt.
+    """
+    from data_handling import load_jsonl_dataset
+    out = {}
+    for row in load_jsonl_dataset(raw_data_path):
+        qid = row.get("qid")
+        if qid is not None:
+            out[qid] = {
+                "options": row["options"],
+                "correct_letter": row["correct_letter"],
+            }
+    return out
+
+
 def build_cells(root: Path) -> dict[str, dict[str, list[dict]]]:
     """cells[source][bin] = list of enriched records."""
     cells: dict[str, dict[str, list]] = {
         ds: {"low": [], "med": [], "high": []} for ds in EVAL_FILES
     }
     for ds in EVAL_FILES:
-        entropy_map = load_eval_entropy(str(root / EVAL_FILES[ds]))
-        data_map    = load_data_file(str(root / DATA_FILES[ds]))
-        for qid, entropy in entropy_map.items():
+        eval_map = load_eval_rows(str(root / EVAL_FILES[ds]))
+        data_map = load_data_file(str(root / DATA_FILES[ds]))
+        opts_by_qid = _load_options_by_qid(str(root / DATA_FILES[ds]))
+        for qid, eval_row in eval_map.items():
             row = data_map.get(qid)
             if row is None:
                 continue
             if len(row.get("distractors", [])) < 3:
                 continue
-            record = {
-                "qid":           qid,
-                "question":      row["question"],
-                "correct_answer": row["correct_answer"],
-                "distractors":   row["distractors"][:3],
-                "entropy":       round(entropy, 6),
-                "source":        ds,
-            }
-            # carry PopMC-specific fields through
-            for field in ("prop", "s_pop", "o_pop"):
-                if field in row:
-                    record[field] = row[field]
-            cells[ds][entropy_bin(entropy)].append(record)
+            opts_info = opts_by_qid.get(qid)
+            if opts_info is None:
+                # Couldn't reconstruct options for this qid — skip rather than
+                # emit a row that can't be replayed at training time.
+                continue
+            # Sanity check: the eval row's recorded correct_answer letter must
+            # match the letter we get from the deterministic shuffle. If it
+            # doesn't, something has drifted and the row is unsafe to use.
+            if eval_row.get("correct_answer") != opts_info["correct_letter"]:
+                continue
+            # Start from the full eval row (keeps type, is_correct, top_prob,
+            # probs_ABCD, expected_confidence, model_answer_position, etc. so
+            # downstream analysis can plot the balanced split with the same
+            # tools used on raw eval files), then merge in EVERY field from
+            # the raw data row so no source-side metadata is lost. Two fields
+            # mean different things in each source and need explicit handling:
+            #   - correct_answer: eval row stores the LETTER (A-D), raw stores
+            #     the TEXT. Keep the letter under correct_answer and surface
+            #     the text as correct_answer_text.
+            #   - distractors: take the first 3 from the raw row (raw is the
+            #     authoritative source).
+            # All other raw-row fields (prop, s_pop, o_pop, and anything
+            # source-specific that may exist now or be added later) are
+            # copied verbatim if they don't already exist on the eval row.
+            record = dict(eval_row)
+            for key, value in row.items():
+                if key == "correct_answer":
+                    record["correct_answer_text"] = value
+                elif key == "distractors":
+                    record["distractors"] = value[:3]
+                elif key not in record:
+                    record[key] = value
+            record["options"] = opts_info["options"]
+            record["correct_letter"] = opts_info["correct_letter"]
+            record["source"] = ds
+            record["entropy"] = round(eval_row["entropy"], 6)
+            cells[ds][entropy_bin(eval_row["entropy"])].append(record)
     return cells
 
 

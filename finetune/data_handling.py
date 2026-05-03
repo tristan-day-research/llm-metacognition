@@ -45,59 +45,86 @@ def write_jsonl(path, obj):
 
 def load_jsonl_dataset(path, dataset_type="unknown"):
     """
-    Load dataset with proper shuffling.
-    
-    Args:
-        path: Path to JSONL file
-        dataset_type: Type of dataset ("train", "val", "test", etc.) for logging
-    
-    Returns:
-        List of question dictionaries
+    Load dataset, preserving every field from the source row.
+
+    Two row formats are supported:
+
+      1. Raw MCQ rows — have ``correct_answer`` (text) and ``distractors``
+         (3 wrong-answer texts). Options are constructed from these and
+         shuffled with a path-seeded RNG so the assignment is deterministic
+         per dataset path.
+
+      2. Pre-baked rows — already carry an ``options`` dict (A→D → text)
+         and a ``correct_letter`` field. Used by the balanced-finetune
+         dataset, which freezes option order at construction time so the
+         row's recorded ``model_answer`` letter and ``probs_ABCD`` stay
+         aligned with what the model actually saw at eval time. We do NOT
+         re-shuffle these rows.
+
+    Either way, all original fields (entropy, model_answer, probs_ABCD,
+    source, etc.) are preserved on the returned dict so downstream code
+    (e.g. inline-results mode in run_finetuning.py) can read them without
+    a second pass over the JSONL.
     """
-    # Use a seeded RNG for deterministic option shuffling per dataset
-    # Different seeds for different dataset types to ensure independence
-    dataset_seed = hash(path) % (2**31)  # Deterministic seed based on path
+    # Path-seeded RNG so raw-row shuffles are reproducible across processes.
+    # Pre-baked rows ignore this — their options are already frozen.
+    dataset_seed = hash(path) % (2**31)
     local_rng = np.random.default_rng(dataset_seed)
-    # Also seed Python's random for shuffle() calls
     random.seed(dataset_seed)
-    
+
     out = []
     with open(path, "r") as f:
         for line in f:
             row = json.loads(line)
 
-            question = row["question"]
-            correct = row["correct_answer"]
-            distractors = row["distractors"]
+            # Branch on whether the row is pre-baked or raw.
+            options = row.get("options")
+            if isinstance(options, dict) and set(options.keys()) == set("ABCD"):
+                # Pre-baked: use what's there.
+                correct_letter = (
+                    row.get("correct_letter")
+                    or (row.get("correct_answer") if row.get("correct_answer") in options else None)
+                )
+                if correct_letter is None:
+                    print(f"WARNING: Pre-baked row {row.get('qid')} missing correct_letter")
+                    continue
+                result = dict(row)
+                result["options"] = options
+                result["correct_letter"] = correct_letter
+                out.append(result)
+                continue
 
-            # Build 4-option MCQ set
-            opts = [correct] + distractors
+            # Raw: shuffle options from correct text + distractors.
+            correct = row.get("correct_answer")
+            distractors = row.get("distractors")
+            if correct is None or distractors is None:
+                print(
+                    f"WARNING: row {row.get('qid')} has neither pre-baked options "
+                    f"nor (correct_answer text + distractors); skipping"
+                )
+                continue
+
+            opts = [correct] + list(distractors)
             if len(opts) != 4:
                 continue
 
-            # Shuffle options using seeded RNG for reproducibility
-            # Note: random.shuffle() uses Python's global random state, which we seeded above
             random.shuffle(opts)
-            
-            # Assign to letters and find correct letter
+
             options = {}
             correct_letter = None
             for i, letter in enumerate(["A", "B", "C", "D"]):
                 options[letter] = opts[i]
                 if opts[i] == correct:
                     correct_letter = letter
-            
-            # Verify we found the correct answer
+
             if correct_letter is None:
                 print(f"WARNING: Could not find correct answer for {row.get('qid')}")
                 continue
 
-            out.append({
-                "qid": row.get("qid"),
-                "question": question,
-                "options": options,
-                "correct_letter": correct_letter,
-            })
+            result = dict(row)
+            result["options"] = options
+            result["correct_letter"] = correct_letter
+            out.append(result)
 
     return out
 
@@ -209,6 +236,56 @@ def load_mcq_results_data(mcq_results_path):
         import traceback
         traceback.print_exc()  # This will show the full error
         return None
+
+
+def build_mcq_results_lookup_from_rows(rows, name="dataset"):
+    """Build the same {qid: {entropy, subject_answer, probs, options}} lookup
+    that ``load_mcq_results_data`` produces, but from inline fields on the
+    dataset rows themselves.
+
+    Used when the dataset (e.g. balanced_metacognition_*.jsonl) carries the
+    eval results inline so frozen-teacher training doesn't need a separate
+    --mcq_results_data file.
+
+    Each row must have:
+      - qid                — string id
+      - entropy            — float (already computed at eval time)
+      - model_answer       — letter A-D (the recorded subject answer)
+      - probs_ABCD         — list of 4 probabilities (canonical A-D order)
+      - options            — dict A-D → text (option order at recording time)
+
+    Rows missing any of these are skipped with a warning so the run still
+    proceeds on whatever subset is usable.
+    """
+    lookup = {}
+    skipped = 0
+    for row in rows:
+        qid = row.get("qid")
+        entropy = row.get("entropy")
+        subject_answer = row.get("model_answer")
+        probs_list = row.get("probs_ABCD")
+        options = row.get("options")
+        if (
+            qid is None
+            or entropy is None
+            or subject_answer is None
+            or not isinstance(probs_list, (list, tuple))
+            or len(probs_list) != 4
+            or not isinstance(options, dict)
+        ):
+            skipped += 1
+            continue
+        lookup[str(qid)] = {
+            "probs": {letter: float(probs_list[i]) for i, letter in enumerate("ABCD")},
+            "subject_answer": subject_answer,
+            "entropy": float(entropy),
+            "options": dict(options),
+        }
+    print(
+        f"✓ Built inline mcq_results_lookup from {name}: "
+        f"{len(lookup)} usable rows ({skipped} skipped for missing fields)"
+    )
+    return lookup
 
 
 def filter_dataset_by_mcq_results(dataset, mcq_results_lookup, dataset_name="dataset"):

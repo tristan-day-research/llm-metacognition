@@ -330,17 +330,24 @@ def train(args):
     print(f"✓ Training dataset loaded: {len(train_dataset)} samples")
     print(f"✓ Validation dataset loaded: {len(val_dataset)} samples")
 
-    # Load pre-recorded MCQ results if using frozen teacher OR if provided for evaluation
+    # Load pre-recorded MCQ results — three modes:
+    #   (a) external file via --mcq_results_data (legacy path)
+    #   (b) inline: rows in the loaded train/val datasets carry the recorded
+    #       entropy/answer/probs/options themselves (e.g. the balanced
+    #       metacognition dataset). Triggered by leaving mcq_results_data
+    #       unset while use_recorded_responses or val_on_frozen is True.
+    #   (c) neither: live teacher (no frozen lookup).
     mcq_results_lookup = None
+    needs_frozen = args.use_recorded_responses or args.val_on_frozen
     if args.mcq_results_data is not None:
         mcq_results_lookup = load_mcq_results_data(args.mcq_results_data)
         if mcq_results_lookup is None:
-            if args.use_recorded_responses:
+            if needs_frozen:
                 raise ValueError(f"Failed to load MCQ results from {args.mcq_results_data}")
             else:
                 print(f"⚠️  Warning: Could not load MCQ results from {args.mcq_results_data}, continuing without pre-recorded entropy logging")
-        
-        # Filter datasets to only include questions with pre-recorded results (if using frozen teacher)
+
+        # Filter datasets to only include questions with pre-recorded results
         if args.use_recorded_responses:
             train_dataset = filter_dataset_by_mcq_results(
                 train_dataset, mcq_results_lookup, dataset_name="training"
@@ -348,22 +355,24 @@ def train(args):
             val_dataset = filter_dataset_by_mcq_results(
                 val_dataset, mcq_results_lookup, dataset_name="validation"
             )
-        
-        # Filter validation dataset if using frozen validation
         if args.val_on_frozen:
             val_dataset = filter_dataset_by_mcq_results(
                 val_dataset, mcq_results_lookup, dataset_name="validation"
             )
-    elif args.use_recorded_responses:
-        raise ValueError(
-            "--use_recorded_responses requires --mcq_results_data to be specified"
-        )
-    
-    # Validate val_on_frozen requirements
-    if args.val_on_frozen:
-        if args.mcq_results_data is None:
+    elif needs_frozen:
+        # Inline mode: build the lookup from the dataset rows themselves.
+        # Requires each row to carry qid + entropy + model_answer + probs_ABCD
+        # + options. The balanced dataset emits all of these.
+        from data_handling import build_mcq_results_lookup_from_rows
+        merged = list(train_dataset) + list(val_dataset)
+        mcq_results_lookup = build_mcq_results_lookup_from_rows(merged, name="train+val")
+        if not mcq_results_lookup:
             raise ValueError(
-                "--val_on_frozen requires --mcq_results_data to be specified"
+                "use_recorded_responses=True / val_on_frozen=True with no "
+                "MCQ_RESULTS_DATA file, but no train/val rows carried the "
+                "required inline fields (qid, entropy, model_answer, "
+                "probs_ABCD, options). Either supply MCQ_RESULTS_DATA or "
+                "regenerate the dataset so each row has those fields."
             )
 
     print(f"\n✓ Training dataset loaded: {len(train_dataset)} samples")

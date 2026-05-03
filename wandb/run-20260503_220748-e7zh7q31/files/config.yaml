@@ -1,0 +1,175 @@
+_wandb:
+    value:
+        cli_version: 0.26.1
+        e:
+            9t6f2yqye2s0v1ipunlcth1bf341hoen:
+                codePath: finetune/run_finetuning.py
+                codePathLocal: finetune/run_finetuning.py
+                cpu_count: 104
+                cpu_count_logical: 208
+                cudaVersion: "13.0"
+                disk:
+                    /:
+                        total: "60129542144"
+                        used: "17361526784"
+                email: daylight444@proton.me
+                executable: /workspace/venvs/metacognition/bin/python
+                git:
+                    commit: 33b95a1ca2bf1401c08108170d23e89670c7d9c5
+                    remote: https://github.com/tristan-day-research/llm-metacognition.git
+                gpu: NVIDIA H100 80GB HBM3
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Hopper
+                      cudaCores: 16896
+                      memoryTotal: "85520809984"
+                      name: NVIDIA H100 80GB HBM3
+                      uuid: GPU-79263017-b2b6-f8d0-a60e-e78fa2c2b500
+                host: 4c854486ffbf
+                memory:
+                    total: "2164111147008"
+                os: Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+                program: /workspace/projects/metacognition/finetune/run_finetuning.py
+                python: CPython 3.11.10
+                root: /workspace/projects/metacognition
+                startedAt: "2026-05-03T22:07:48.237522Z"
+                writerId: 9t6f2yqye2s0v1ipunlcth1bf341hoen
+        m: []
+        python_version: 3.11.10
+        t:
+            "1":
+                - 1
+                - 5
+                - 11
+                - 41
+                - 49
+                - 53
+                - 71
+                - 98
+            "2":
+                - 1
+                - 5
+                - 11
+                - 41
+                - 49
+                - 53
+                - 71
+                - 98
+            "3":
+                - 13
+                - 16
+            "4": 3.11.10
+            "5": 0.26.1
+            "6": 5.7.0
+            "12": 0.26.1
+            "13": linux-x86_64
+batch_size:
+    value: 4
+checkpoint_steps:
+    value: 500
+compute_other_confidence:
+    value: false
+confidence_format:
+    value: numeric_1_10
+confidence_letter_mapping:
+    value:
+        A: A
+        B: B
+        C: C
+        D: D
+        E: E
+        F: F
+        G: G
+        H: H
+confidence_letter_random_seed:
+    value: null
+confidence_letter_scheme:
+    value: A-H
+device:
+    value: cuda
+enable_data_leakage_checks:
+    value: true
+hf_checkpoint_private:
+    value: false
+hf_checkpoint_repo:
+    value: null
+hf_repo:
+    value: null
+keep_local_checkpoints:
+    value: false
+learning_rate:
+    value: 1e-05
+limit_val_batches:
+    value: null
+log_interval:
+    value: 20
+lora_alpha:
+    value: 16
+lora_dropout:
+    value: 0.05
+lora_r:
+    value: 8
+lora_target_modules:
+    value:
+        - q_proj
+        - v_proj
+        - o_proj
+        - k_proj
+loss_type:
+    value: gaussian_soft_bin_ce
+max_grad_norm:
+    value: 1
+max_steps:
+    value: 3000
+mcq_letter_mapping:
+    value:
+        A: A
+        B: B
+        C: C
+        D: D
+mcq_letter_random_seed:
+    value: null
+mcq_letter_scheme:
+    value: A-D
+mcq_results_data:
+    value: null
+model_name:
+    value: meta-llama/Llama-3.1-8B-Instruct
+output_dir:
+    value: outputs/finetuning/ect_lora
+randomize_letters_per_question:
+    value: false
+save_hf:
+    value: false
+save_hf_checkpoints:
+    value: false
+save_wandb_artifact:
+    value: true
+shuffle_options:
+    value: true
+sigma:
+    value: 10
+temperature:
+    value: 0
+test_data_path:
+    value: data/balanced_metacognition_test.jsonl
+train_data_path:
+    value: data/balanced_metacognition_train.jsonl
+use_recorded_responses:
+    value: true
+val_data_path:
+    value: data/balanced_metacognition_val.jsonl
+val_interval:
+    value: 100
+val_num_samples:
+    value: 300
+val_on_frozen:
+    value: true
+wandb_notes:
+    value: null
+wandb_project:
+    value: llm-metacognition-ect
+wandb_run_name:
+    value: 20260503-220733_1-10 bins anchor only, balanced dataset
+wandb_tags:
+    value: null

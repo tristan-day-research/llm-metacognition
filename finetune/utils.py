@@ -155,50 +155,62 @@ def generate_checkpoint_tag(run_name, run_id, step, timestamp=None):
     return checkpoint_tag
 
 
+def _sanitize_for_hf(name: str) -> str:
+    """Convert a human-readable string to an HF-repo-safe slug.
+
+    HF allows alphanumerics, '-', '_', '.'. We collapse any other run of
+    characters (spaces, commas, etc.) to a single '-' and strip leading /
+    trailing '-' or '.' (which HF disallows at the boundary).
+    """
+    import re
+    s = re.sub(r"[^A-Za-z0-9._-]+", "-", name)
+    s = s.strip("-.")
+    return s or "run"
+
+
 def build_structured_hf_repo_path(hf_checkpoint_repo, run_name, run_id, step, timestamp):
     """
-    Build a structured HuggingFace repo path for checkpoints that maps 1:1 to WandB run.
-    
-    Format: {username}/ect_{timestamp}_{runid}_step_{step}
-    
+    Build a structured HF repo path that mirrors the WandB run name so the
+    same identifier can be found in both places.
+
+    Format: {username}/{sanitized_wandb_run_name}_step_{step}
+
+    The wandb run name already includes a UTC timestamp prefix (added in
+    run_finetuning.py), so the HF repo path inherits that prefix too —
+    searching either platform with the timestamp or the descriptive part
+    finds the matching artifact.
+
     Args:
-        hf_checkpoint_repo: Base HF repo name (e.g., 'username/model-name' or 'username/repo')
-        run_name: WandB run name (human-readable) - not used in repo name
-        run_id: WandB run ID (unique stable ID)
-        step: Training step number (int or string like "final")
-        timestamp: Timestamp string (YYYYMMDD-HHMMSS format)
-    
+        hf_checkpoint_repo: 'username/anything' — only the username is used.
+        run_name: WandB run name (timestamp-prefixed, human-readable).
+        run_id: WandB run ID — used only as a fallback if run_name is empty.
+        step: training step, int or string like 'final'.
+        timestamp: fallback timestamp string if run_name is empty.
+
     Returns:
-        Full HF repo path string in format: username/ect_{timestamp}_{runid}_step_{step}
+        Full HF repo path string, max 96 chars, no spaces.
     """
-    # Extract username from base repo if provided
     if hf_checkpoint_repo and "/" in hf_checkpoint_repo:
         username = hf_checkpoint_repo.split("/")[0]
     else:
-        # If no base repo provided, we can't determine username
-        # This shouldn't happen in practice, but handle gracefully
         username = "checkpoints"
-    
-    # Convert step to string and sanitize (remove any special chars that might cause issues)
+
     step_str = str(step).replace("/", "-").replace(" ", "-")
-    
-    # Replace hyphen in timestamp with underscore for consistency
-    timestamp_clean = timestamp.replace("-", "_")
-    
-    # Build simple structured path: username/ect_{timestamp}_{runid}_step_{step}
-    # Use underscores for cleaner separation
-    structured_path = f"{username}/ect_{timestamp_clean}_{run_id}_step_{step_str}"
-    
-    # Ensure it meets HF requirements: max 96 chars, no leading/trailing '-' or '.'
-    # Truncate if necessary (though this format should be well under 96 chars)
-    if len(structured_path) > 96:
-        # Truncate timestamp if needed (shouldn't happen, but be safe)
-        max_timestamp_len = 96 - len(f"{username}/ect_") - len(f"_{run_id}_step_{step_str}")
-        if max_timestamp_len < len(timestamp_clean):
-            timestamp_clean = timestamp_clean[:max_timestamp_len]
-            structured_path = f"{username}/ect_{timestamp_clean}_{run_id}_step_{step_str}"
-    
-    return structured_path
+
+    base = run_name if run_name else f"{timestamp}_{run_id or 'run'}"
+    base_slug = _sanitize_for_hf(base)
+
+    suffix = f"_step_{step_str}"
+    max_total = 96
+    available_for_base = max_total - len(f"{username}/") - len(suffix)
+    if available_for_base < 1:
+        # Username + suffix already saturate the budget; degrade gracefully
+        # by dropping the slug entirely.
+        return f"{username}/{suffix.lstrip('_')}"[:max_total]
+    if len(base_slug) > available_for_base:
+        base_slug = base_slug[:available_for_base].rstrip("-.")
+
+    return f"{username}/{base_slug}{suffix}"
 
 
 def log_wandb_metrics(metrics, step=None):
@@ -227,7 +239,7 @@ def log_wandb_config(updates, allow_val_change=False):
 def save_model_final(model, tokenizer, output_dir, hf_repo=None,
                       hf_private=False, save_wandb_artifact=False,
                       wandb_run_name=None, wandb_run_id=None, step=None,
-                      final_timestamp=None):
+                      final_timestamp=None, keep_local=True):
     """
     Save final model locally and optionally to HuggingFace Hub.
 
@@ -357,14 +369,34 @@ def save_model_final(model, tokenizer, output_dir, hf_repo=None,
             model.push_to_hub(final_hf_repo, private=hf_private)
             tokenizer.push_to_hub(final_hf_repo, private=hf_private)
             print(f"✓ Model and tokenizer pushed to HuggingFace Hub: {final_hf_repo}")
-            return True
+            push_ok = True
         except Exception as e:
             print(f"⚠️  Warning: Failed to push to HuggingFace Hub: {e}")
             import traceback
             traceback.print_exc()
-            return False
+            push_ok = False
 
+        # Clean up local copy if not requested to keep it. Done after the
+        # HF push so the local dir is available for the upload.
+        if not keep_local:
+            _cleanup_local_dir(output_dir, "final model")
+        return push_ok
+
+    # No HF push happened — clean up here if requested.
+    if not keep_local:
+        _cleanup_local_dir(output_dir, "final model")
     return True
+
+
+def _cleanup_local_dir(path, label):
+    """Remove a local checkpoint dir after it's been uploaded elsewhere."""
+    import shutil
+    try:
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+            print(f"✓ Removed local {label} dir (KEEP_LOCAL_CHECKPOINTS=False): {path}")
+    except Exception as e:
+        print(f"⚠️  Warning: Failed to remove local {label} dir {path}: {e}")
 
 
 def save_training_parameters(args, checkpoint_base_dir):
@@ -410,10 +442,11 @@ def save_training_parameters(args, checkpoint_base_dir):
         print(f"⚠️  Warning: Failed to save training parameters: {e}")
 
 
-def save_checkpoint(model, tokenizer, checkpoint_base_dir, step, 
-                    save_hf_checkpoints=False, hf_checkpoint_repo=None, 
+def save_checkpoint(model, tokenizer, checkpoint_base_dir, step,
+                    save_hf_checkpoints=False, hf_checkpoint_repo=None,
                     hf_checkpoint_private=False, wandb_run_name=None,
-                    wandb_run_id=None, checkpoint_timestamp=None):
+                    wandb_run_id=None, checkpoint_timestamp=None,
+                    keep_local=True):
     """
     Save a training checkpoint locally and optionally to HuggingFace Hub.
     
@@ -503,9 +536,14 @@ def save_checkpoint(model, tokenizer, checkpoint_base_dir, step,
                     traceback.print_exc()
             else:
                 print("⚠️  Warning: --save_hf_checkpoints is set but --hf_checkpoint_repo is not specified and WandB info is not available. Skipping HF Hub upload.")
-        
+
+        # Clean up local copy if not requested to keep it. Done last so the
+        # HF push above can read from the dir.
+        if not keep_local:
+            _cleanup_local_dir(ckpt_dir, f"step-{step} checkpoint")
+
         return True
-        
+
     except Exception as e:
         print(f"❌ Error saving checkpoint: {e}")
         import traceback

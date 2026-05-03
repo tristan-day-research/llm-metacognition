@@ -5,6 +5,7 @@ import sys as _sys
 from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
 
+import math
 import os
 import torch
 import numpy as np
@@ -12,8 +13,6 @@ import pandas as pd
 from datetime import datetime, timezone
 from torch.utils.data import DataLoader, Subset
 from scipy.stats import pearsonr, spearmanr
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from peft import PeftModel  # <--- ADDED FOR LORA
 import random
 from tqdm.auto import tqdm
 
@@ -278,6 +277,98 @@ def evaluate_model(
     return results
 
 
+# =============================================================================
+# Entropy-bin introspective alignment
+# =============================================================================
+# Compares the model's *stated* confidence to its *target* confidence
+# 1 - entropy/ln(4), bucketed by entropy regime. This is an introspective
+# metric, not a truth-calibration metric. Accuracy is logged alongside as a
+# sanity check, not as the calibration target.
+LN4 = math.log(4)
+ENTROPY_BIN_EDGES = (
+    ("low",  0.0,           LN4 / 3.0),
+    ("med",  LN4 / 3.0,     2.0 * LN4 / 3.0),
+    ("high", 2.0 * LN4 / 3.0, LN4),
+)
+
+
+def _empty_entropy_bin_stats():
+    return {
+        "n": 0,
+        "mean_entropy": None,
+        "mean_target_confidence": None,
+        "mean_stated_confidence": None,
+        "mean_signed_error": None,
+        "mean_abs_error": None,
+        "median_abs_error": None,
+        "rmse": None,
+        "spearman_neg_entropy_conf": None,
+        "pearson_neg_entropy_conf": None,
+        "accuracy": None,
+    }
+
+
+def compute_entropy_bin_alignment(entropy_values, expected_conf_values, correctness_flags):
+    """Per-entropy-bin introspective alignment between stated confidence and
+    1 - entropy/ln(4). See ENTROPY_BIN_EDGES for boundaries.
+
+    Bin membership: low [0, ln4/3), med [ln4/3, 2ln4/3), high [2ln4/3, ln4].
+    Correlations require n >= 3 and non-degenerate stated/entropy variance,
+    otherwise they're returned as None.
+    """
+    ent_arr = np.asarray(entropy_values, dtype=np.float64)
+    conf_arr = np.asarray(expected_conf_values, dtype=np.float64)
+    corr_arr = np.asarray(correctness_flags, dtype=np.float64)
+    if ent_arr.size == 0:
+        return {name: _empty_entropy_bin_stats() for name, _, _ in ENTROPY_BIN_EDGES}
+    target_arr = 1.0 - ent_arr / LN4
+
+    out = {}
+    for name, lo, hi in ENTROPY_BIN_EDGES:
+        if name == "high":
+            mask = (ent_arr >= lo) & (ent_arr <= hi)
+        else:
+            mask = (ent_arr >= lo) & (ent_arr < hi)
+        n = int(mask.sum())
+        if n == 0:
+            out[name] = _empty_entropy_bin_stats()
+            continue
+
+        e = ent_arr[mask]
+        s = conf_arr[mask]
+        t = target_arr[mask]
+        c = corr_arr[mask]
+        err = s - t
+
+        spearman_val = None
+        pearson_val = None
+        if n >= 3 and float(np.std(s)) > 1e-8 and float(np.std(e)) > 1e-8:
+            try:
+                sp, _ = spearmanr(-e, s)
+                pe, _ = pearsonr(-e, s)
+                if not np.isnan(sp):
+                    spearman_val = float(sp)
+                if not np.isnan(pe):
+                    pearson_val = float(pe)
+            except Exception:
+                pass
+
+        out[name] = {
+            "n": n,
+            "mean_entropy": float(np.mean(e)),
+            "mean_target_confidence": float(np.mean(t)),
+            "mean_stated_confidence": float(np.mean(s)),
+            "mean_signed_error": float(np.mean(err)),
+            "mean_abs_error": float(np.mean(np.abs(err))),
+            "median_abs_error": float(np.median(np.abs(err))),
+            "rmse": float(np.sqrt(np.mean(err ** 2))),
+            "spearman_neg_entropy_conf": spearman_val,
+            "pearson_neg_entropy_conf": pearson_val,
+            "accuracy": float(np.mean(c)) if c.size else None,
+        }
+    return out
+
+
 def run_evaluation(
     model,
     tokenizer,
@@ -431,9 +522,14 @@ def run_evaluation(
     # complete independence between train and eval sampling
     # This ensures self_live_corr is computed on the same samples across runs
     eval_rng = np.random.default_rng(999)
-    if num_samples is not None:
+    if num_samples is not None and num_samples < len(val_dataset):
         idxs = eval_rng.choice(len(val_dataset), size=num_samples, replace=False)
     else:
+        if num_samples is not None and num_samples > len(val_dataset):
+            print(
+                f"⚠ num_samples={num_samples} exceeds val_dataset size "
+                f"({len(val_dataset)}); evaluating on all {len(val_dataset)} samples."
+            )
         idxs = np.arange(len(val_dataset))
 
     # # At the start of run_evaluation()
@@ -1211,30 +1307,43 @@ def run_evaluation(
     
     # Self live correlation: entropy from live model's output logits correlated with 
     # live model's prediction of its own confidence
-    self_live_corr = 0.0
+    # Correlations are computed against NEGATIVE entropy so that "more confident
+    # when entropy is lower" shows as a POSITIVE correlation — better-calibrated
+    # models should have higher values on the dashboard line.
+    neg_entropy_arr = -entropy_arr
+
+    self_live_corr = 0.0          # spearman ρ (neg_entropy ↔ self_conf)
+    self_live_corr_pearson = 0.0  # pearson r  (neg_entropy ↔ self_conf)
     if compute_confidence and len(conf_arr) > 1 and std_conf > 0.001:
         try:
-            self_live_corr, _ = pearsonr(entropy_arr, conf_arr)
-            self_live_corr = float(self_live_corr)
+            s, _ = spearmanr(neg_entropy_arr, conf_arr)
+            p, _ = pearsonr(neg_entropy_arr, conf_arr)
+            self_live_corr = float(s) if not np.isnan(s) else 0.0
+            self_live_corr_pearson = float(p) if not np.isnan(p) else 0.0
         except Exception:
-            self_live_corr = 0.0
-    
-    # Other live correlation: entropy from live model's output logits correlated with 
+            pass
+
+    # Other live correlation: -entropy from live model's logits correlated with
     # live model's prediction of 'other's' accuracy on the question
     other_live_corr = 0.0
+    other_live_corr_pearson = 0.0
     if compute_other_confidence and len(other_conf_arr) > 1 and std_other_conf > 0.001:
         try:
-            other_live_corr, _ = pearsonr(entropy_arr, other_conf_arr)
-            other_live_corr = float(other_live_corr)
+            s, _ = spearmanr(neg_entropy_arr, other_conf_arr)
+            p, _ = pearsonr(neg_entropy_arr, other_conf_arr)
+            other_live_corr = float(s) if not np.isnan(s) else 0.0
+            other_live_corr_pearson = float(p) if not np.isnan(p) else 0.0
         except Exception:
-            other_live_corr = 0.0
+            pass
     
     # Self frozen correlation: entropy from pre-recorded output logits correlated with 
     # live model's prediction of its own confidence
     # Other frozen correlation: entropy from pre-recorded output logits correlated with 
     # live model's prediction of 'other's' accuracy on the question
     self_frozen_corr = 0.0
+    self_frozen_corr_pearson = 0.0
     other_frozen_corr = 0.0
+    other_frozen_corr_pearson = 0.0
     avg_prerecorded_entropy = None
     std_prerecorded_entropy = None
     if mcq_results_lookup is not None and len(prerecorded_entropy_values) > 0:
@@ -1261,10 +1370,13 @@ def run_evaluation(
                 
                 if std_prerecorded_entropy > 0.001 and std_conf_prerecorded > 0.001 and len(conf_arr_prerecorded) > 1:
                     try:
-                        self_frozen_corr, _ = pearsonr(prerecorded_arr, conf_arr_prerecorded)
-                        self_frozen_corr = float(self_frozen_corr)
+                        neg_prerec = -prerecorded_arr
+                        s, _ = spearmanr(neg_prerec, conf_arr_prerecorded)
+                        p, _ = pearsonr(neg_prerec, conf_arr_prerecorded)
+                        self_frozen_corr = float(s) if not np.isnan(s) else 0.0
+                        self_frozen_corr_pearson = float(p) if not np.isnan(p) else 0.0
                     except Exception:
-                        self_frozen_corr = 0.0
+                        pass
             
             # Correlation between pre-recorded entropy and other confidence
             if compute_other_confidence and len(valid_other_conf_for_prerecorded) > 1:
@@ -1273,19 +1385,81 @@ def run_evaluation(
                 
                 if std_prerecorded_entropy > 0.001 and std_other_conf_prerecorded > 0.001 and len(other_conf_arr_prerecorded) > 1:
                     try:
-                        other_frozen_corr, _ = pearsonr(prerecorded_arr, other_conf_arr_prerecorded)
-                        other_frozen_corr = float(other_frozen_corr)
+                        neg_prerec = -prerecorded_arr
+                        s, _ = spearmanr(neg_prerec, other_conf_arr_prerecorded)
+                        p, _ = pearsonr(neg_prerec, other_conf_arr_prerecorded)
+                        other_frozen_corr = float(s) if not np.isnan(s) else 0.0
+                        other_frozen_corr_pearson = float(p) if not np.isnan(p) else 0.0
                     except Exception:
-                        other_frozen_corr = 0.0
+                        pass
     
     # Calibration: correlation between confidence and correctness
-    calibration_corr = 0.0
+    # (No entropy involved here, so no negation needed.)
+    calibration_corr = 0.0          # spearman ρ
+    calibration_corr_pearson = 0.0  # pearson r
     if compute_confidence and len(conf_arr) > 1 and std_conf > 0.001:
         try:
-            calibration_corr, _ = pearsonr(conf_arr, correctness_arr)
-            calibration_corr = float(calibration_corr)
+            s, _ = spearmanr(conf_arr, correctness_arr)
+            p, _ = pearsonr(conf_arr, correctness_arr)
+            calibration_corr = float(s) if not np.isnan(s) else 0.0
+            calibration_corr_pearson = float(p) if not np.isnan(p) else 0.0
         except Exception:
-            calibration_corr = 0.0
+            pass
+
+    # ---- Print correlations (also captured into print_output.txt) ----
+    print("\n" + "="*60)
+    print(f"{step_name.upper()} — Correlations (Spearman ρ / Pearson r)")
+    print("="*60)
+    print(f"  self_live    (-entropy ↔ self_conf):    ρ={self_live_corr:+.4f}   r={self_live_corr_pearson:+.4f}")
+    print(f"  other_live   (-entropy ↔ other_conf):   ρ={other_live_corr:+.4f}   r={other_live_corr_pearson:+.4f}")
+    if avg_prerecorded_entropy is not None:
+        print(f"  self_frozen  (-prerec_ent ↔ self_conf): ρ={self_frozen_corr:+.4f}   r={self_frozen_corr_pearson:+.4f}")
+        print(f"  other_frozen (-prerec_ent ↔ other_conf):ρ={other_frozen_corr:+.4f}   r={other_frozen_corr_pearson:+.4f}")
+    print(f"  calibration  (self_conf ↔ correctness): ρ={calibration_corr:+.4f}   r={calibration_corr_pearson:+.4f}")
+    print(f"  (n={n}, std_entropy={std_entropy:.4f}, std_self_conf={std_conf:.4f})")
+
+    # ---- Per-entropy-bin introspective alignment (low/med/high) ----
+    # Stated confidence (expected_conf_values) vs target (1 - entropy/ln4),
+    # bucketed by entropy. Accuracy is included as a sanity metric, NOT as a
+    # truth-calibration target — the comparison here is introspective.
+    entropy_bin_alignment = compute_entropy_bin_alignment(
+        entropy_values, expected_conf_values, correctness_flags
+    )
+    results["entropy_bin_confidence_alignment"] = entropy_bin_alignment
+
+    # Concise table (also captured into print_output.txt).
+    print("\n" + "="*60)
+    print(f"{step_name.upper()} — Entropy-bin confidence alignment")
+    print("="*60)
+    print(f"{'bin':<5} {'n':>5} {'target_conf':>12} {'stated_conf':>12} {'signed_err':>11} {'abs_err':>9} {'spearman':>9}")
+    for _name in ("low", "med", "high"):
+        b = entropy_bin_alignment[_name]
+        if b["n"] == 0:
+            print(f"{_name:<5} {0:>5}        —            —           —         —         —")
+        else:
+            sp = b["spearman_neg_entropy_conf"]
+            sp_str = f"{sp:+.4f}" if sp is not None else "    —   "
+            print(
+                f"{_name:<5} {b['n']:>5} "
+                f"{b['mean_target_confidence']:>12.4f} "
+                f"{b['mean_stated_confidence']:>12.4f} "
+                f"{b['mean_signed_error']:>+11.4f} "
+                f"{b['mean_abs_error']:>9.4f} "
+                f"{sp_str:>9}"
+            )
+
+    # Stash correlations into results so they end up in the JSONL summary
+    results["self_live_corr_spearman"] = self_live_corr
+    results["self_live_corr_pearson"] = self_live_corr_pearson
+    results["other_live_corr_spearman"] = other_live_corr
+    results["other_live_corr_pearson"] = other_live_corr_pearson
+    results["self_frozen_corr_spearman"] = self_frozen_corr
+    results["self_frozen_corr_pearson"] = self_frozen_corr_pearson
+    results["other_frozen_corr_spearman"] = other_frozen_corr
+    results["other_frozen_corr_pearson"] = other_frozen_corr_pearson
+    results["calibration_corr_spearman"] = calibration_corr
+    results["calibration_corr_pearson"] = calibration_corr_pearson
+    results["correlations_use_negative_entropy"] = True
 
     # Log the summary as one blob
     if log_file_path is not None:
@@ -1299,8 +1473,9 @@ def run_evaluation(
     # ===========================================================
     if args.save_wandb_artifact:
         try:
-            
-            prefix = "val" 
+            import wandb
+
+            prefix = "val"
             
             wandb_metrics = {
                 f"{prefix}/accuracy": results["mcq_accuracy"],
@@ -1311,18 +1486,25 @@ def run_evaluation(
                 f"{prefix}/std_confidence": std_conf,
                 f"{prefix}/std_other_confidence": std_other_conf,
                 f"{prefix}/std_entropy": std_entropy,
-                f"{prefix}/self_live_corr": self_live_corr,
-                f"{prefix}/other_live_corr": other_live_corr,
-                f"{prefix}/calibration_corr": calibration_corr,
+                # Correlations are between NEGATIVE entropy and stated confidence,
+                # so a well-calibrated model produces a POSITIVE value.
+                f"{prefix}/self_live_corr_spearman": self_live_corr,
+                f"{prefix}/self_live_corr_pearson": self_live_corr_pearson,
+                f"{prefix}/other_live_corr_spearman": other_live_corr,
+                f"{prefix}/other_live_corr_pearson": other_live_corr_pearson,
+                f"{prefix}/calibration_corr_spearman": calibration_corr,
+                f"{prefix}/calibration_corr_pearson": calibration_corr_pearson,
                 f"{prefix}/n_samples": n,
             }
-            
+
             # Add pre-recorded entropy metrics if available
             if avg_prerecorded_entropy is not None:
                 wandb_metrics[f"{prefix}/prerecorded_entropy"] = avg_prerecorded_entropy
                 wandb_metrics[f"{prefix}/std_prerecorded_entropy"] = std_prerecorded_entropy
-                wandb_metrics[f"{prefix}/self_frozen_corr"] = self_frozen_corr
-                wandb_metrics[f"{prefix}/other_frozen_corr"] = other_frozen_corr
+                wandb_metrics[f"{prefix}/self_frozen_corr_spearman"] = self_frozen_corr
+                wandb_metrics[f"{prefix}/self_frozen_corr_pearson"] = self_frozen_corr_pearson
+                wandb_metrics[f"{prefix}/other_frozen_corr_spearman"] = other_frozen_corr
+                wandb_metrics[f"{prefix}/other_frozen_corr_pearson"] = other_frozen_corr_pearson
             
             # Add answer distribution percentages by letter
             for letter in mcq_display_letters_str:
@@ -1335,30 +1517,60 @@ def run_evaluation(
                 wandb_metrics[f"{prefix}/pred_dist_position_{pos}_{letter}_pct"] = pred_dist_positions_pct[pos]
                 wandb_metrics[f"{prefix}/correct_dist_position_{pos}_{letter}_pct"] = gold_dist_positions_pct[pos]
             
-            # Add self confidence distribution percentages by letter (using display letters)
-            for letter in display_letters_str:
-                wandb_metrics[f"{prefix}/self_conf_letter_{letter}_pct"] = conf_dist_letters_pct[letter]
-            
+            def _slug(s):
+                return s.replace('%', 'pct').replace('-', '_').replace('<', 'lt').replace('>', 'gt')
+
+            # Add self confidence distribution percentages by display label
+            for label in display_labels:
+                wandb_metrics[f"{prefix}/self_conf_label_{_slug(label)}_pct"] = conf_dist_letters_pct.get(label, 0.0)
+
             # Add self confidence distribution percentages by bin
-            for bin_idx in range(8):
-                bin_letter = chr(ord('A') + bin_idx)
-                bin_label = confidence_bin_labels[bin_idx].replace('%', 'pct').replace('-', '_').replace('<', 'lt').replace('>', 'gt')
-                wandb_metrics[f"{prefix}/self_conf_bin_{bin_idx}_{bin_letter}_{bin_label}_pct"] = conf_dist_bins_pct[bin_idx]
-            
-            # Add other confidence distribution percentages by letter (using display letters)
-            for letter in display_letters_str:
-                wandb_metrics[f"{prefix}/other_conf_letter_{letter}_pct"] = other_conf_dist_letters_pct[letter]
-            
+            for bin_idx in range(n_conf_bins):
+                bin_label = _slug(bin_labels[bin_idx])
+                wandb_metrics[f"{prefix}/self_conf_bin_{bin_idx}_{bin_label}_pct"] = conf_dist_bins_pct.get(bin_idx, 0.0)
+
+            # Add other confidence distribution percentages by display label
+            for label in display_labels:
+                wandb_metrics[f"{prefix}/other_conf_label_{_slug(label)}_pct"] = other_conf_dist_letters_pct.get(label, 0.0)
+
             # Add other confidence distribution percentages by bin
-            for bin_idx in range(8):
-                bin_letter = chr(ord('A') + bin_idx)
-                bin_label = confidence_bin_labels[bin_idx].replace('%', 'pct').replace('-', '_').replace('<', 'lt').replace('>', 'gt')
-                wandb_metrics[f"{prefix}/other_conf_bin_{bin_idx}_{bin_letter}_{bin_label}_pct"] = other_conf_dist_bins_pct[bin_idx]
+            for bin_idx in range(n_conf_bins):
+                bin_label = _slug(bin_labels[bin_idx])
+                wandb_metrics[f"{prefix}/other_conf_bin_{bin_idx}_{bin_label}_pct"] = other_conf_dist_bins_pct.get(bin_idx, 0.0)
             
+            # ---- Per-entropy-bin introspective alignment ----
+            _abs_errs = []
+            _spearmans = []
+            for _name in ("low", "med", "high"):
+                _b = entropy_bin_alignment[_name]
+                _base = f"{prefix}/entropy_bin/{_name}"
+                wandb_metrics[f"{_base}/n"] = _b["n"]
+                if _b["n"] > 0:
+                    wandb_metrics[f"{_base}/target_confidence"] = _b["mean_target_confidence"]
+                    wandb_metrics[f"{_base}/stated_confidence"] = _b["mean_stated_confidence"]
+                    wandb_metrics[f"{_base}/signed_error"] = _b["mean_signed_error"]
+                    wandb_metrics[f"{_base}/abs_error"] = _b["mean_abs_error"]
+                    wandb_metrics[f"{_base}/rmse"] = _b["rmse"]
+                    if _b["accuracy"] is not None:
+                        wandb_metrics[f"{_base}/accuracy"] = _b["accuracy"]
+                    if _b["spearman_neg_entropy_conf"] is not None:
+                        wandb_metrics[f"{_base}/spearman_neg_entropy_conf"] = _b["spearman_neg_entropy_conf"]
+                        _spearmans.append(_b["spearman_neg_entropy_conf"])
+                    if _b["pearson_neg_entropy_conf"] is not None:
+                        wandb_metrics[f"{_base}/pearson_neg_entropy_conf"] = _b["pearson_neg_entropy_conf"]
+                    _abs_errs.append(_b["mean_abs_error"])
+
+            # Compact "worst bin" summary for config / checkpoint selection
+            if _abs_errs:
+                wandb_metrics[f"{prefix}/entropy_bin/max_abs_error_across_bins"] = max(_abs_errs)
+                wandb_metrics[f"{prefix}/entropy_bin/mean_abs_error_across_bins"] = sum(_abs_errs) / len(_abs_errs)
+            if _spearmans:
+                wandb_metrics[f"{prefix}/entropy_bin/min_spearman_across_bins"] = min(_spearmans)
+
             # Add step if provided
             if step is not None:
                 wandb_metrics["step"] = step
-            
+
             wandb.log(wandb_metrics)
         except (ImportError, AttributeError):
             pass  # Silently fail if wandb not available

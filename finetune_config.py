@@ -68,7 +68,7 @@ class ECTConfig:
     DEVICE = "cuda"
 
     # Soft-label / loss math.
-    SIGMA = 10.0  # Gaussian width for entropy → soft-label conversion
+    SIGMA = 7.5 # Gaussian width for entropy → soft-label conversion
     TEMPERATURE = 0.0  # 0 = deterministic argmax; >0 = sampling
 
     # Loss formulation. Used by training (compute_loss) AND reported by
@@ -109,6 +109,12 @@ class ECTConfig:
     SHUFFLE_OPTIONS = True
     RANDOMIZE_LETTERS_PER_QUESTION = False  # uses letters beyond A-D per question
 
+    # Whether to also run the "other" confidence pass during evaluation
+    # (i.e. predicting how confident a generic college-educated peer would be).
+    # Training (train_step) only ever runs the self pass — this flag toggles
+    # whether eval/baseline/test additionally do the other pass.
+    COMPUTE_OTHER_CONFIDENCE = False
+
     # =========================================================================
     # TRAINING — used solely by run_finetuning.py.
     # =========================================================================
@@ -129,25 +135,47 @@ class ECTConfig:
     VAL_ON_FROZEN = True
 
     # LoRA
-    LORA_R = 8
-    LORA_ALPHA = 16
+    LORA_R = 16
+    LORA_ALPHA = 32
     LORA_DROPOUT = 0.05
     LORA_TARGET_MODULES = ("q_proj", "v_proj", "o_proj")
+    # LORA_TARGET_MODULES = ("q_proj", "v_proj")
 
     # Training loop
-    LEARNING_RATE = 2e-5
-    MAX_STEPS = 3000  
+    LEARNING_RATE = 1e-5
+    MAX_STEPS = 2500
     LOG_INTERVAL = 20
     VAL_INTERVAL = 100
     LIMIT_VAL_BATCHES = None
     VAL_NUM_SAMPLES = 300
     ENABLE_DATA_LEAKAGE_CHECKS = True
 
+    # Gradient clipping (max global L2 norm). Set to None to disable.
+    # Prevents the occasional bf16 overflow from poisoning the LoRA weights
+    # — without this, training runs sometimes hit NaN around step ~400-500
+    # and never recover.
+    MAX_GRAD_NORM = 1.0
+
+    # Per-sample loss weight applied to *high-entropy* training samples
+    # (entropy >= 2*ln(4)/3 ≈ 0.924, matching the high-bin definition used
+    # for the per-bin diagnostics). 1.0 disables the reweighting; values
+    # >1 emphasize hard questions, values <1 deemphasize them.
+    # Implementation: per-sample loss is computed (reduction='none'),
+    # weighted by 1.0 or HIGH_ENTROPY_LOSS_WEIGHT depending on entropy bin,
+    # then averaged. Validation loss reporting is NOT reweighted (so val/loss
+    # stays comparable across runs).
+    HIGH_ENTROPY_LOSS_WEIGHT = 1.3
+
     # Output / checkpointing
     OUTPUT_DIR = FINETUNE_OUTPUTS_DIR / "ect_lora"
     LOGS_DIR = FINETUNE_LOGS_DIR
     CHECKPOINTS_DIR = FINETUNE_CHECKPOINTS_DIR
     CHECKPOINT_STEPS = 500
+    # If False, the local checkpoint dirs (final OUTPUT_DIR + per-step CHECKPOINTS_DIR/...)
+    # are deleted after they've been uploaded to W&B / HF, so no local artifacts
+    # persist on disk. Local saves still happen briefly because wandb artifact
+    # upload reads from a directory; we just clean them up afterwards.
+    KEEP_LOCAL_CHECKPOINTS = False
     SAVE_HF = False
     HF_REPO = None
     SAVE_HF_CHECKPOINTS = False
@@ -159,7 +187,7 @@ class ECTConfig:
     WANDB_RUN_NAME = "1-10 bins anchor only, balanced dataset"
     WANDB_TAGS = None
     WANDB_NOTES = None
-    SAVE_WANDB_ARTIFACT = False
+    SAVE_WANDB_ARTIFACT = True
 
     # =========================================================================
     # EVALUATION — used solely by run_evaluations.py.
@@ -180,7 +208,7 @@ class ECTConfig:
 
     # LoRA adapter — only loaded when EVAL_MODEL_TYPE == "finetuned".
     # Harmless to leave set when evaluating "base" or "instruct"; ignored.
-    EVAL_LORA_REPO = "Tristan-Day/ect_20251222_215412_v0uei7y1_2000"
+    # EVAL_LORA_REPO = "Tristan-Day/ect_20251222_215412_v0uei7y1_2000"
     EVAL_MERGE_LORA = False  # if True, merge LoRA into base before eval
 
     EVAL_DATASETS = (

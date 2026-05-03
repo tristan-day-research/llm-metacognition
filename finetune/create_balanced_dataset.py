@@ -55,9 +55,9 @@ MAX_PROP_FRACTION = 0.25
 N_SUB_BINS = 3
 
 EVAL_FILES = {
-    "TriviaMC": "outputs/evaluations/2026-05-03-18-00-04_meta-llama-Llama-3.1-8B-Instruct_instruct_TriviaMC_n2416.jsonl",
-    "PopMC":    "outputs/evaluations/2026-05-03-17-49-00_meta-llama-Llama-3.1-8B-Instruct_instruct_PopMC_n14267.jsonl",
-    "SimpleMC": "outputs/evaluations/2026-05-03-17-59-22_meta-llama-Llama-3.1-8B-Instruct_instruct_SimpleMC_n500.jsonl",
+    "TriviaMC": "outputs/evaluations/2026-05-03-20-04-26_meta-llama-Llama-3.1-8B-Instruct_instruct_TriviaMC_n2416.jsonl",
+    "PopMC":    "outputs/evaluations/2026-05-03-19-54-00_meta-llama-Llama-3.1-8B-Instruct_instruct_PopMC_n14267.jsonl",
+    "SimpleMC": "outputs/evaluations/2026-05-03-20-03-45_meta-llama-Llama-3.1-8B-Instruct_instruct_SimpleMC_n500.jsonl",
 }
 DATA_FILES = {
     "TriviaMC": "data/TriviaMC.jsonl",

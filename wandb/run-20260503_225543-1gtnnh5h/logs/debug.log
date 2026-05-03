@@ -1,0 +1,24 @@
+2026-05-03 22:55:43,053 INFO    MainThread:170508 [wandb_setup.py:_flush():81] Current SDK version is 0.26.1
+2026-05-03 22:55:43,054 INFO    MainThread:170508 [wandb_setup.py:_flush():81] Configure stats pid to 170508
+2026-05-03 22:55:43,055 INFO    MainThread:170508 [wandb_setup.py:_flush():81] Loading settings from environment variables
+2026-05-03 22:55:43,057 INFO    MainThread:170508 [wandb_init.py:setup_run_log_directory():723] Logging user logs to /workspace/projects/metacognition/wandb/run-20260503_225543-1gtnnh5h/logs/debug.log
+2026-05-03 22:55:43,059 INFO    MainThread:170508 [wandb_init.py:setup_run_log_directory():724] Logging internal logs to /workspace/projects/metacognition/wandb/run-20260503_225543-1gtnnh5h/logs/debug-internal.log
+2026-05-03 22:55:43,060 INFO    MainThread:170508 [wandb_init.py:init():850] calling init triggers
+2026-05-03 22:55:43,062 INFO    MainThread:170508 [wandb_init.py:init():855] wandb.init called with sweep_config: {}
+config: {'model_name': 'meta-llama/Llama-3.1-8B-Instruct', 'device': 'cuda', 'train_data_path': 'data/balanced_metacognition_train.jsonl', 'val_data_path': 'data/balanced_metacognition_val.jsonl', 'test_data_path': 'data/balanced_metacognition_test.jsonl', 'batch_size': 4, 'mcq_results_data': None, 'lora_r': 16, 'lora_alpha': 32, 'lora_dropout': 0.05, 'lora_target_modules': ['q_proj', 'v_proj', 'o_proj'], 'learning_rate': 1e-05, 'max_steps': 2500, 'max_grad_norm': 1.0, 'high_entropy_loss_weight': 1.3, 'log_interval': 20, 'val_interval': 100, 'limit_val_batches': None, 'val_num_samples': 300, 'sigma': 7.5, 'loss_type': 'gaussian_soft_bin_ce', 'temperature': 0.0, 'shuffle_options': True, 'use_recorded_responses': True, 'enable_data_leakage_checks': True, 'val_on_frozen': True, 'confidence_format': 'numeric_1_10', 'compute_other_confidence': False, 'confidence_letter_scheme': 'A-H', 'confidence_letter_random_seed': None, 'mcq_letter_scheme': 'A-D', 'mcq_letter_random_seed': None, 'randomize_letters_per_question': False, 'output_dir': 'outputs/finetuning/ect_lora', 'save_hf': False, 'hf_repo': None, 'save_hf_checkpoints': False, 'hf_checkpoint_repo': None, 'checkpoint_steps': 500, 'hf_checkpoint_private': False, 'keep_local_checkpoints': False, 'wandb_project': 'llm-metacognition-ect', 'wandb_run_name': '20260503-225530_1-10 bins anchor only, balanced dataset', 'wandb_tags': None, 'wandb_notes': None, 'save_wandb_artifact': True, 'confidence_letter_mapping': {'A': 'A', 'B': 'B', 'C': 'C', 'D': 'D', 'E': 'E', 'F': 'F', 'G': 'G', 'H': 'H'}, 'mcq_letter_mapping': {'A': 'A', 'B': 'B', 'C': 'C', 'D': 'D'}, '_wandb': {}}
+2026-05-03 22:55:43,063 INFO    MainThread:170508 [wandb_init.py:init():898] starting backend
+2026-05-03 22:55:44,109 INFO    MainThread:170508 [wandb_init.py:init():913] sending inform_init request
+2026-05-03 22:55:44,605 INFO    MainThread:170508 [wandb_init.py:init():918] backend started and connected
+2026-05-03 22:55:44,611 INFO    MainThread:170508 [wandb_init.py:init():988] updated telemetry
+2026-05-03 22:55:44,694 INFO    MainThread:170508 [wandb_init.py:init():1011] communicating run to backend with 90.0 second timeout
+2026-05-03 22:55:45,068 INFO    MainThread:170508 [wandb_init.py:init():1056] starting run threads in backend
+2026-05-03 22:55:47,164 INFO    MainThread:170508 [wandb_run.py:_console_start():2554] atexit reg
+2026-05-03 22:55:47,166 INFO    MainThread:170508 [wandb_run.py:_redirect():2403] redirect: wrap_raw
+2026-05-03 22:55:47,167 INFO    MainThread:170508 [wandb_run.py:_redirect():2472] Wrapping output streams.
+2026-05-03 22:55:47,168 INFO    MainThread:170508 [wandb_run.py:_redirect():2495] Redirects installed.
+2026-05-03 22:55:47,192 INFO    MainThread:170508 [wandb_init.py:init():1094] run started, returning control to user process
+2026-05-03 23:04:21,942 INFO    MainThread:170508 [wandb_run.py:_finish():2321] finishing run username2490j-teamname3494q-/llm-metacognition-ect/1gtnnh5h
+2026-05-03 23:04:21,945 INFO    MainThread:170508 [wandb_run.py:_atexit_cleanup():2520] got exitcode: 0
+2026-05-03 23:04:21,948 INFO    MainThread:170508 [wandb_run.py:_restore():2502] restore
+2026-05-03 23:04:21,949 INFO    MainThread:170508 [wandb_run.py:_restore():2508] restore done
+2026-05-03 23:04:22,672 INFO    MainThread:170508 [wandb_run.py:_footer_sync_info():3889] logging synced files

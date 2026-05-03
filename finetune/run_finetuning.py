@@ -12,17 +12,18 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
 # load_tokenizer + load_model_with_lora add several more before train() ever
 # prints). Without this, `python finetune/run_finetuning.py` looks frozen.
 _STARTUP_T0 = _time.monotonic()
-print(f"[{_dt.now(_tz.utc).strftime('%H:%M:%SZ')}] run_finetuning.py starting — importing heavy libs (torch/peft/wandb)…", flush=True)
+print(f"[{_dt.now(_tz.utc).strftime('%H:%M:%SZ')}] run_finetuning.py starting — importing heavy libs (torch/peft)…", flush=True)
 
+import math
 import numpy as np
 import os
 import sys
 import torch
-import wandb
 from datetime import datetime, timezone
 from torch.utils.data import DataLoader
 from peft import LoraConfig, get_peft_model
 from types import SimpleNamespace
+# wandb is heavy and only needed when --save_wandb_artifact is set; imported lazily below.
 print(f"[+{_time.monotonic()-_STARTUP_T0:5.1f}s] heavy imports done.", flush=True)
 
 # Defaults live in finetune_config.ECTConfig — edit there to change behavior
@@ -225,18 +226,60 @@ def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=
     # ----------------------------------------------
     # 3. Compute loss
     # ----------------------------------------------
-    loss = compute_loss(
-        conf_logits, soft_targets=soft, entropy=entropy,
-        loss_type=args.loss_type, reduction='mean',
-        confidence_format=confidence_format,
-    )
+    high_w = float(getattr(args, "high_entropy_loss_weight", 1.0) or 1.0)
+    if high_w == 1.0:
+        loss = compute_loss(
+            conf_logits, soft_targets=soft, entropy=entropy,
+            loss_type=args.loss_type, reduction='mean',
+            confidence_format=confidence_format,
+        )
+    else:
+        # Per-sample loss, then entropy-weighted mean. High-entropy samples
+        # (entropy >= 2*ln(4)/3, matching the per-bin diagnostic definition)
+        # get HIGH_ENTROPY_LOSS_WEIGHT; everything else gets 1.0.
+        per_sample_loss = compute_loss(
+            conf_logits, soft_targets=soft, entropy=entropy,
+            loss_type=args.loss_type, reduction='none',
+            confidence_format=confidence_format,
+        )  # [B]
+        high_threshold = 2.0 * math.log(4.0) / 3.0
+        sample_w = torch.where(
+            entropy >= high_threshold,
+            torch.tensor(high_w, device=entropy.device, dtype=per_sample_loss.dtype),
+            torch.tensor(1.0,    device=entropy.device, dtype=per_sample_loss.dtype),
+        )
+        loss = (per_sample_loss * sample_w).sum() / sample_w.sum().clamp_min(1e-8)
 
     # ----------------------------------------------
     # 4. Backprop
     # ----------------------------------------------
     loss.backward()
 
-    return loss.detach()
+    # ----------------------------------------------
+    # 5. Per-batch diagnostics: correlation between -entropy and expected
+    #    confidence over the batch. Noisy at small batch sizes (n=batch_size),
+    #    but useful as a directional signal alongside loss.
+    # ----------------------------------------------
+    step_metrics = {
+        "n": int(entropy.shape[0]),
+        "self_live_corr_spearman": 0.0,
+        "self_live_corr_pearson": 0.0,
+    }
+    try:
+        ent_np = entropy.detach().to("cpu").float().numpy()
+        conf_np = conf_out["expected_conf"].detach().to("cpu").float().numpy()
+        if ent_np.size > 1 and float(np.std(ent_np)) > 1e-6 and float(np.std(conf_np)) > 1e-6:
+            from scipy.stats import spearmanr as _sp, pearsonr as _pe
+            s, _ = _sp(-ent_np, conf_np)
+            p, _ = _pe(-ent_np, conf_np)
+            if not np.isnan(s):
+                step_metrics["self_live_corr_spearman"] = float(s)
+            if not np.isnan(p):
+                step_metrics["self_live_corr_pearson"] = float(p)
+    except Exception:
+        pass
+
+    return loss.detach(), step_metrics
 
     
 # ============================================================
@@ -253,6 +296,24 @@ def train(args):
         - val_step()
         - run_evaluation()
     """
+    # ----- Confirm key training knobs picked up from config -----
+    # Useful sanity check that edits to finetune_config.py actually reach the
+    # running process (catches stale __pycache__ / unreloaded notebook kernels).
+    print(
+        "\n[config] "
+        f"sigma={args.sigma}  "
+        f"loss_type={args.loss_type}  "
+        f"confidence_format={args.confidence_format}  "
+        f"lr={args.learning_rate}  "
+        f"batch_size={args.batch_size}  "
+        f"max_steps={args.max_steps}  "
+        f"max_grad_norm={args.max_grad_norm}  "
+        f"high_entropy_loss_weight={getattr(args, 'high_entropy_loss_weight', 1.0)}  "
+        f"lora_r={args.lora_r}  "
+        f"lora_target_modules={tuple(args.lora_target_modules)}",
+        flush=True,
+    )
+
 
     # ============================================================
     # Setup / Load model and data
@@ -502,6 +563,7 @@ def train(args):
     wandb_init_timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     
     if args.save_wandb_artifact:
+        import wandb
         # Auto-generate run name with current date if not provided
         if args.wandb_run_name is None:
             model_name_safe = args.model_name.replace("/", "-").replace("_", "-")
@@ -509,7 +571,7 @@ def train(args):
         else:
             # Prepend date to provided name to ensure it's current
             args.wandb_run_name = f"{wandb_init_timestamp}_{args.wandb_run_name}"
-        
+
         wandb_run = wandb.init(
             project=args.wandb_project,
             name=args.wandb_run_name,
@@ -601,7 +663,7 @@ def train(args):
         # -----------------------------
         optimizer.zero_grad()
 
-        loss = train_step(
+        ts_out = train_step(
             model=model,
             tokenizer=tokenizer,
             batch=batch,
@@ -612,18 +674,87 @@ def train(args):
             train_dataset_qids=train_dataset_qids,
             train_dataset_questions=train_dataset_questions,
         )
-        
+
         # Skip optimizer step if batch was skipped
-        if loss is None:
+        if ts_out is None or ts_out[0] is None:
             continue  # Don't increment step, try next batch
-        
+
+        loss, step_metrics = ts_out
+
+        # ----- Non-finite guards (loss + gradients) -----
+        # CRITICAL ordering note: we must catch NaN/Inf *gradients* BEFORE
+        # optimizer.step(), because:
+        #   - clip_grad_norm_ does NOT remove NaN — ‖NaN‖ = NaN, so the clip
+        #     rescales by NaN and preserves the corruption.
+        #   - One NaN update poisons the weights permanently; every later
+        #     forward pass yields NaN logits → NaN loss → unrecoverable.
+        # Checking only the loss after-the-fact means the poisoning has
+        # already happened.
+        skip_step = False
+        if not torch.isfinite(loss):
+            print(f"⚠️  Non-finite loss at step {step} (loss={loss.item()}); skipping.", flush=True)
+            skip_step = True
+        else:
+            trainable = [p for p in model.parameters() if p.requires_grad and p.grad is not None]
+            for p in trainable:
+                if not torch.isfinite(p.grad).all():
+                    print(f"⚠️  Non-finite gradient at step {step}; skipping (weights preserved).", flush=True)
+                    skip_step = True
+                    break
+
+        if skip_step:
+            optimizer.zero_grad()
+            step += 1
+            continue
+
+        # Gradient clipping. Grads were populated by loss.backward() inside
+        # train_step. Clip BEFORE optimizer.step() so the actual update uses
+        # the clipped values.
+        if args.max_grad_norm is not None and args.max_grad_norm > 0:
+            grad_norm = torch.nn.utils.clip_grad_norm_(
+                [p for p in model.parameters() if p.requires_grad],
+                max_norm=args.max_grad_norm,
+            )
+            step_metrics["grad_norm"] = float(grad_norm)
+
+        # Defensive: also abort if any LoRA *parameter* is already non-finite
+        # (means we got poisoned despite the guards above — only here so we
+        # don't silently train on a NaN model).
+        for p in model.parameters():
+            if p.requires_grad and not torch.isfinite(p).all():
+                raise RuntimeError(
+                    f"Non-finite LoRA weights detected at step {step}. "
+                    f"Training is unrecoverable; consider lowering LEARNING_RATE "
+                    f"(current={args.learning_rate}) or MAX_GRAD_NORM "
+                    f"(current={args.max_grad_norm})."
+                )
+
         optimizer.step()
 
         losses.append(loss.item())
 
+        # Per-train-step correlation print (also captured into print_output.txt)
+        print(
+            f"[train step {step}] loss={loss.item():.4f}  "
+            f"corr(-entropy, self_conf) over batch n={step_metrics['n']}: "
+            f"ρ={step_metrics['self_live_corr_spearman']:+.4f}  "
+            f"r={step_metrics['self_live_corr_pearson']:+.4f}",
+            flush=True,
+        )
+
         # W&B logging
         if args.save_wandb_artifact:
-            wandb.log({"train/loss": loss.item(), "step": step})
+            import wandb
+            log_payload = {
+                "train/loss": loss.item(),
+                "train/self_live_corr_spearman": step_metrics["self_live_corr_spearman"],
+                "train/self_live_corr_pearson": step_metrics["self_live_corr_pearson"],
+                "train/batch_n": step_metrics["n"],
+                "step": step,
+            }
+            if "grad_norm" in step_metrics:
+                log_payload["train/grad_norm"] = step_metrics["grad_norm"]
+            wandb.log(log_payload)
 
         # -----------------------------
         # Periodic validation (Validation Step)
@@ -673,7 +804,8 @@ def train(args):
                 hf_checkpoint_private=args.hf_checkpoint_private,
                 wandb_run_name=wandb_run_name,
                 wandb_run_id=wandb_run_id,
-                checkpoint_timestamp=checkpoint_timestamp
+                checkpoint_timestamp=checkpoint_timestamp,
+                keep_local=args.keep_local_checkpoints,
             )
 
         step += 1
@@ -720,7 +852,8 @@ def train(args):
         wandb_run_name=wandb_run_name,
         wandb_run_id=wandb_run_id,
         step=step,
-        final_timestamp=final_timestamp
+        final_timestamp=final_timestamp,
+        keep_local=args.keep_local_checkpoints,
     )
     if success:
         print("✓ Model saved successfully!")
@@ -730,6 +863,7 @@ def train(args):
     
     # Finish wandb run after model is saved (so artifact can be logged)
     if args.save_wandb_artifact:
+        import wandb
         wandb.finish()
     
     # Final summary into the structured .txt run record, then unhook the
@@ -774,6 +908,8 @@ def build_args_from_config():
         # Training
         learning_rate=_C.LEARNING_RATE,
         max_steps=_C.MAX_STEPS,
+        max_grad_norm=_C.MAX_GRAD_NORM,
+        high_entropy_loss_weight=_C.HIGH_ENTROPY_LOSS_WEIGHT,
         log_interval=_C.LOG_INTERVAL,
         val_interval=_C.VAL_INTERVAL,
         limit_val_batches=_C.LIMIT_VAL_BATCHES,
@@ -786,6 +922,7 @@ def build_args_from_config():
         enable_data_leakage_checks=_C.ENABLE_DATA_LEAKAGE_CHECKS,
         val_on_frozen=_C.VAL_ON_FROZEN,
         confidence_format=_C.CONFIDENCE_FORMAT,
+        compute_other_confidence=_C.COMPUTE_OTHER_CONFIDENCE,
         confidence_letter_scheme=_C.CONFIDENCE_LETTER_SCHEME,
         confidence_letter_random_seed=_C.CONFIDENCE_LETTER_RANDOM_SEED,
         mcq_letter_scheme=_C.MCQ_LETTER_SCHEME,
@@ -799,6 +936,7 @@ def build_args_from_config():
         hf_checkpoint_repo=_C.HF_CHECKPOINT_REPO,
         checkpoint_steps=_C.CHECKPOINT_STEPS,
         hf_checkpoint_private=_C.HF_CHECKPOINT_PRIVATE,
+        keep_local_checkpoints=_C.KEEP_LOCAL_CHECKPOINTS,
         # Weights & Biases
         wandb_project=_C.WANDB_PROJECT,
         wandb_run_name=_C.WANDB_RUN_NAME,

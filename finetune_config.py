@@ -33,9 +33,9 @@ from experiment_config import (
 # =============================================================================
 # Path constants
 # =============================================================================
-# All finetune outputs land under outputs/finetune/.
+# All finetune outputs land under outputs/finetuning/.
 # Was finetune_evals/ + finetune_logs/ at the repo root in the original repo.
-FINETUNE_OUTPUTS_DIR = OUTPUTS_DIR / "finetune"
+FINETUNE_OUTPUTS_DIR = OUTPUTS_DIR / "finetuning"
 FINETUNE_LOGS_DIR = FINETUNE_OUTPUTS_DIR / "logs"
 FINETUNE_CHECKPOINTS_DIR = FINETUNE_OUTPUTS_DIR / "checkpoints"
 FINETUNE_EVALS_DIR = FINETUNE_OUTPUTS_DIR / "evals"
@@ -58,6 +58,14 @@ class ECTConfig:
     # =========================================================================
     # SHARED — read by BOTH training and eval. Must not drift.
     # =========================================================================
+
+    # Base model. Single source of truth for which Llama version is being
+    # finetuned AND evaluated. Imported from experiment_config so eval and
+    # training cannot disagree on Llama-3 vs Llama-3.1, etc.
+    # Eval uses LLAMA_8B_BASE only when EVAL_MODEL_TYPE == "base"; for
+    # "instruct" and "finetuned" it should use this value.
+    MODEL_NAME = LLAMA_8B_INSTRUCT
+    DEVICE = "cuda"
 
     # Soft-label / loss math.
     SIGMA = 10.0  # Gaussian width for entropy → soft-label conversion
@@ -86,27 +94,29 @@ class ECTConfig:
 
     # MCQ answer letters — ALWAYS used (the model still picks A/B/C/D for the
     # multiple-choice answer regardless of which confidence format you use).
+    # Read by run_evaluations.py and the training prompt builder.
     MCQ_LETTER_SCHEME = "A-D"  # "A-D"/"E-H"/.../"random"
     MCQ_LETTER_RANDOM_SEED = None
 
     # Confidence letters — ONLY used when CONFIDENCE_FORMAT == "letter_8bin".
     # Harmless to leave set when using a numeric format; the code reads it
-    # but ignores it on the numeric path.
+    # but ignores it on the numeric path. Read by run_evaluations.py.
     CONFIDENCE_LETTER_SCHEME = "A-H"  # "A-H", "S-Z", or "random"
     CONFIDENCE_LETTER_RANDOM_SEED = None
+
+    # Prompt-construction knobs that affect what the model sees. If training
+    # and eval disagree on these, the eval distribution drifts from training.
+    SHUFFLE_OPTIONS = True
+    RANDOMIZE_LETTERS_PER_QUESTION = False  # uses letters beyond A-D per question
 
     # =========================================================================
     # TRAINING — used solely by run_finetuning.py.
     # =========================================================================
 
-    # Model
-    MODEL_NAME = "meta-llama/Meta-Llama-3-8B-Instruct"
-    DEVICE = "cuda"
-
     # Data
-    # TRAIN_DATA_PATH = "data/PopMC_0_difficulty_filtered_train.jsonl"
-    # VAL_DATA_PATH = "data/PopMC_0_difficulty_filtered_val.jsonl"
-    # TEST_DATA_PATH = None
+    TRAIN_DATA_PATH = "data/balanced_metacognition_train.jsonl"
+    VAL_DATA_PATH = "data/balanced_metacognition_val.jsonl"
+    TEST_DATA_PATH = "data/balanced_metacognition_test.jsonl"
     BATCH_SIZE = 4
     MCQ_RESULTS_DATA = None  # path to JSON/JSONL with pre-recorded MCQ entropies
 
@@ -115,25 +125,23 @@ class ECTConfig:
     #                        False = dynamic teacher (recompute logits live).
     # VAL_ON_FROZEN:         True = validate against pre-recorded answers/entropy;
     #                        False = validate against live model.
-    USE_RECORDED_RESPONSES = False
-    VAL_ON_FROZEN = False
+    USE_RECORDED_RESPONSES = True
+    VAL_ON_FROZEN = True
 
     # LoRA
-    LORA_R = 16
-    LORA_ALPHA = 32
+    LORA_R = 8
+    LORA_ALPHA = 16
     LORA_DROPOUT = 0.05
-    LORA_TARGET_MODULES = ("q_proj", "k_proj", "v_proj", "o_proj")
+    LORA_TARGET_MODULES = ("q_proj", "v_proj", "o_proj")
 
     # Training loop
-    LEARNING_RATE = 5e-5
-    MAX_STEPS = 1_000_000_000  # effectively no cap; rely on early stopping or manual
+    LEARNING_RATE = 2e-5
+    MAX_STEPS = 3000  # effectively no cap; rely on early stopping or manual
     LOG_INTERVAL = 20
     VAL_INTERVAL = 100
     LIMIT_VAL_BATCHES = None
-    VAL_NUM_SAMPLES = 500
-    SHUFFLE_OPTIONS = True
+    VAL_NUM_SAMPLES = 300
     ENABLE_DATA_LEAKAGE_CHECKS = True
-    RANDOMIZE_LETTERS_PER_QUESTION = False
 
     # Output / checkpointing
     OUTPUT_DIR = FINETUNE_OUTPUTS_DIR / "ect_lora"
@@ -148,7 +156,7 @@ class ECTConfig:
 
     # Weights & Biases (training)
     WANDB_PROJECT = "llm-metacognition-ect"
-    WANDB_RUN_NAME = None
+    WANDB_RUN_NAME = "1-10 bins anchor only, balanced dataset"
     WANDB_TAGS = None
     WANDB_NOTES = None
     SAVE_WANDB_ARTIFACT = False
@@ -177,12 +185,41 @@ class ECTConfig:
 
     EVAL_DATASETS = (
         "data/PopMC.jsonl",
-        # "data/SimpleMC.jsonl",
-        # "data/TriviaMC.jsonl",
+        "data/SimpleMC.jsonl",
+        "data/TriviaMC.jsonl",
+        # 'data/balanced_metacognition_train.jsonl',
+        # 'data/balanced_metacognition.jsonl'
     )
     EVAL_MAX_SAMPLES = None  # None = full dataset
+
+    # ----- Per-task toggles ---------------------------------------------------
+    # Each toggle controls whether one of the four eval prompt types runs.
+    # All four share the same fenced prompt layout so they're directly
+    # comparable (see prompts.py: build_*_prompts).
+    #
+    # EVAL_RUN_MCQ — bare multiple-choice question. Produces the
+    #   entropy/accuracy numbers that loss + calibration metrics depend on, so
+    #   disabling it leaves those fields zero / nan. Leave True unless you ONLY
+    #   want delegate-game numbers.
+    EVAL_RUN_MCQ = True
+    # Self- and other-confidence prompts. Names kept for back-compat — the
+    # rest of the pipeline (evaluation_metrics.run_evaluation) reads these.
     EVAL_COMPUTE_CONFIDENCE = True
-    EVAL_COMPUTE_OTHER_CONFIDENCE = True
+    EVAL_COMPUTE_OTHER_CONFIDENCE = False
+    # Delegate game — two variants. Either, both, or neither can be enabled.
+    #   EVAL_RUN_DELEGATE_ABCDT — single-shot. Model picks one of A/B/C/D
+    #     (display letters follow MCQ_LETTER_SCHEME) to answer, or T to
+    #     delegate. Same option order as the MCQ pass, so shuffling +
+    #     letter-scheme remapping stay wired correctly.
+    #   EVAL_RUN_DELEGATE_AT — binary. A = "answer myself", T = "delegate".
+    #     The MC options are still shown so the model can judge difficulty,
+    #     but it does NOT pick among them.
+    EVAL_RUN_DELEGATE_ABCDT = False
+    EVAL_RUN_DELEGATE_AT = False
+    # Teammate accuracy shown to the model in the delegate-game setup blurb.
+    # 0.7 puts the decision boundary near the strong-model accuracy regime.
+    EVAL_DELEGATE_TEAMMATE_ACCURACY = 0.7
+
     EVAL_LOG_DIR = EVALUATIONS_DIR
 
     # Weights & Biases — when True, sends per-sample metrics + summaries to a

@@ -25,7 +25,7 @@ from pathlib import Path
 LLAMA_8B_BASE = "meta-llama/Llama-3.1-8B"
 LLAMA_8B_INSTRUCT = "meta-llama/Llama-3.1-8B-Instruct"
 LLAMA_70B_INSTRUCT = "meta-llama/Llama-3.3-70B-Instruct"
-DEFAULT_ADAPTER = "Tristan-Day/ect_20251222_215412_v0uei7y1_2000"
+DEFAULT_ADAPTER = None  # set to a HF adapter repo id when one is published
 
 OUTPUTS_DIR = Path("outputs")
 OUTPUTS_DIR.mkdir(exist_ok=True)

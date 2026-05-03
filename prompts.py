@@ -2023,6 +2023,140 @@ def build_self_confidence_prompts_numeric(
     return prompts
 
 
+# ---- delegate-game builders (fenced layout, matches MCQ/confidence) -------
+#
+# Two prompt variants are exposed for the eval pipeline:
+#   * ABCDT: single-shot — the model picks one of A/B/C/D to answer, or T to
+#            delegate to its teammate. Letter labels for A-D follow
+#            mcq_letter_mapping (so position bias diagnostics + shuffled
+#            options stay wired the same way as the bare MCQ pass).
+#   * AT:    binary — A means "answer this question myself", T means "delegate
+#            to teammate". The actual MC options are shown (so the model can
+#            judge difficulty) but it does NOT pick among them.
+#
+# Both render the multiple-choice question with the same fenced layout used
+# by build_multiple_choice_question_prompts, so the model sees a consistent
+# format across all eval prompts. Self/other-confidence already use the same
+# fenced layout via _fenced_meta_question.
+
+DELEGATE_TEAMMATE_LETTER = "T"
+
+
+def _delegate_setup_abcdt(mcq_display: List[str], teammate_accuracy: float) -> str:
+    answer_letters = ", ".join(mcq_display[:-1]) + f", or {mcq_display[-1]}"
+    return (
+        "Let's play a game with a teammate. I'm going to show you a multiple-choice "
+        "question. You may either answer it yourself by responding with one of "
+        f"{answer_letters}, OR delegate the question to your teammate by responding "
+        f"with '{DELEGATE_TEAMMATE_LETTER}'. Your teammate gets approximately "
+        f"{100.0 * teammate_accuracy:.0f}% of questions correct. Pick whichever has "
+        "the better chance of being right. Respond only with one letter; do NOT "
+        "output any other text."
+    )
+
+
+def _delegate_setup_at(teammate_accuracy: float) -> str:
+    return (
+        "Let's play a game with a teammate. I'm going to show you a multiple-choice "
+        "question. You will not be answering it yet — first, decide whether to "
+        "answer it yourself or delegate it to your teammate. Respond with 'A' if you "
+        "want to answer the question yourself, or with 'T' if you want to delegate "
+        f"to your teammate. Your teammate gets approximately {100.0 * teammate_accuracy:.0f}% "
+        "of questions correct. Pick whichever has the better chance of being right. "
+        "Respond only with the letter A or T; do NOT output any other text."
+    )
+
+
+def build_delegate_abcdt_prompts(
+    batch: List[Dict],
+    tokenizer,
+    mcq_letter_mapping: Optional[Dict[str, str]] = None,
+    model_type: str = "instruct",
+    teammate_accuracy: float = DEFAULT_TEAMMATE_ACCURACY,
+) -> List[str]:
+    """ABCDT delegate prompts in the same fenced layout as the MCQ builder.
+
+    The MC question is rendered exactly as build_multiple_choice_question_prompts
+    renders it, plus a trailing T option for "delegate to your teammate". The
+    model's output token space is {mcq_display..., T}; A-D follow
+    mcq_letter_mapping so shuffling / letter-scheme remapping stays consistent
+    with the bare MCQ pass.
+    """
+    if mcq_letter_mapping is None:
+        mcq_letter_mapping = get_mcq_letter_mapping("A-D")
+    mcq_display = [mcq_letter_mapping[chr(ord('A') + i)] for i in range(4)]
+    teammate_letter = DELEGATE_TEAMMATE_LETTER
+    all_letters = mcq_display + [teammate_letter]
+    options_str = _options_str_oxford(all_letters)
+    setup = _delegate_setup_abcdt(mcq_display, teammate_accuracy)
+
+    prompts: List[str] = []
+    for row in batch:
+        # Render the same fenced MC block as the bare MCQ task, then append
+        # the T option as one extra row inside the same block.
+        lines = [
+            "-" * 30,
+            "Question:",
+            row["question"].strip(),
+            "-" * 10,
+        ]
+        for letter, text in zip(mcq_display, _row_option_texts(row)):
+            lines.append(f"  {letter}: {text}")
+        lines.append(f"  {teammate_letter}: Delegate to your teammate")
+        lines.append("-" * 30)
+        q_block = "\n".join(lines)
+
+        user_content = (
+            setup + "\n\n" + q_block + f"\nYour choice ({options_str}): "
+        )
+        prompts.append(_wrap_user_message(user_content, tokenizer, model_type))
+    return prompts
+
+
+def build_delegate_at_prompts(
+    batch: List[Dict],
+    tokenizer,
+    mcq_letter_mapping: Optional[Dict[str, str]] = None,
+    model_type: str = "instruct",
+    teammate_accuracy: float = DEFAULT_TEAMMATE_ACCURACY,
+) -> List[str]:
+    """AT delegate prompts (binary Answer / Teammate) in fenced layout.
+
+    Same nested fenced block as self/other-confidence, but the meta-options
+    are A=Answer-myself / T=Delegate. The MC options are still shown inside
+    the inner question so the model can judge difficulty. Letter A here is
+    the meta-decision token, not an MC option letter — when MCQ display
+    uses A-D this is a deliberate overload (same letter, different token
+    space) and the setup text disambiguates.
+    """
+    if mcq_letter_mapping is None:
+        mcq_letter_mapping = get_mcq_letter_mapping("A-D")
+    mcq_display = [mcq_letter_mapping[chr(ord('A') + i)] for i in range(4)]
+    setup = _delegate_setup_at(teammate_accuracy)
+    inner_question = (
+        "Do you want to answer this question yourself or delegate it to your teammate?"
+    )
+    option_block = [
+        "  A: Answer the question myself",
+        f"  {DELEGATE_TEAMMATE_LETTER}: Delegate to my teammate",
+    ]
+
+    prompts: List[str] = []
+    for row in batch:
+        q_block = _fenced_meta_question(
+            inner_question,
+            row["question"].strip(),
+            mcq_display,
+            _row_option_texts(row),
+            option_block,
+        )
+        user_content = (
+            setup + "\n\n" + q_block + "\nYour choice (A or T): "
+        )
+        prompts.append(_wrap_user_message(user_content, tokenizer, model_type))
+    return prompts
+
+
 def build_other_confidence_prompts_numeric(
     batch: List[Dict],
     tokenizer,
@@ -2231,4 +2365,113 @@ def run_confidence_forward_pass_numeric(
         "pred_digits": [str(i + 1) for i in idx],
         "pred_digit_indices": idx,
         "n_max": n_max,
+    }
+
+
+def run_delegate_abcdt_forward_pass(
+    model,
+    tokenizer,
+    prompts: List[str],
+    device: str = "cuda",
+    requires_grad: bool = False,
+    mcq_letter_mapping: Optional[Dict[str, str]] = None,
+):
+    """Forward pass over ABCDT delegate prompts.
+
+    Logits/probs are returned in canonical [A, B, C, D, T] order (A-D follow
+    mcq_letter_mapping for tokenization, then mapped back to canonical
+    positions). Index 4 is always T (delegate).
+    """
+    if mcq_letter_mapping is None:
+        mcq_letter_mapping = get_mcq_letter_mapping("A-D")
+    reverse_mapping = {v: k for k, v in mcq_letter_mapping.items()}
+    mcq_display = [mcq_letter_mapping[chr(ord('A') + i)] for i in range(4)]
+    teammate_letter = DELEGATE_TEAMMATE_LETTER
+
+    enc = tokenizer(prompts, return_tensors="pt", padding=True).to(device)
+    if requires_grad:
+        out = model(**enc, use_cache=False)
+    else:
+        with _torch.no_grad():
+            out = model(**enc, use_cache=False)
+    final_logits = out.logits[:, -1, :]
+
+    letter_token_ids = {
+        d: get_letter_token_ids(tokenizer, d) for d in mcq_display + [teammate_letter]
+    }
+
+    # Canonical-order logits: A, B, C, D, T (A-D mapped back from display).
+    logits_canon: Dict[str, _torch.Tensor] = {}
+    for d in mcq_display:
+        sub = final_logits[:, letter_token_ids[d]]
+        logits_canon[reverse_mapping[d]] = _torch.logsumexp(sub, dim=-1)
+    logits_canon[teammate_letter] = _torch.logsumexp(
+        final_logits[:, letter_token_ids[teammate_letter]], dim=-1
+    )
+
+    logits5 = _torch.stack(
+        [logits_canon[chr(ord('A') + i)] for i in range(4)] + [logits_canon[teammate_letter]],
+        dim=-1,
+    )
+    probs5 = _torch.softmax(logits5, dim=-1)
+
+    idx = logits5.argmax(dim=-1).tolist()
+    canonical_letters = ["A", "B", "C", "D", teammate_letter]
+    display_letters = mcq_display + [teammate_letter]
+
+    return {
+        "logits5": logits5,
+        "probs5": probs5,
+        # Canonical (positional) — A means "answer with the option in slot 0",
+        # regardless of which display letter was actually shown.
+        "pred_canonical": [canonical_letters[i] for i in idx],
+        "pred_positions": idx,  # 0..4; 4 == delegate
+        # Display letter — what the model actually emits for this prompt.
+        "pred_display": [display_letters[i] for i in idx],
+        # P(answer = T) and P(answer with one of the four MC options).
+        "p_delegate": probs5[:, 4],
+        "p_answer": 1.0 - probs5[:, 4],
+    }
+
+
+def run_delegate_at_forward_pass(
+    model,
+    tokenizer,
+    prompts: List[str],
+    device: str = "cuda",
+    requires_grad: bool = False,
+):
+    """Forward pass over AT (binary Answer / Teammate) delegate prompts.
+
+    Returns logits/probs in [A, T] order. Index 0 = answer, 1 = delegate.
+    """
+    enc = tokenizer(prompts, return_tensors="pt", padding=True).to(device)
+    if requires_grad:
+        out = model(**enc, use_cache=False)
+    else:
+        with _torch.no_grad():
+            out = model(**enc, use_cache=False)
+    final_logits = out.logits[:, -1, :]
+
+    a_ids = get_letter_token_ids(tokenizer, "A")
+    t_ids = get_letter_token_ids(tokenizer, DELEGATE_TEAMMATE_LETTER)
+
+    logits2 = _torch.stack(
+        [
+            _torch.logsumexp(final_logits[:, a_ids], dim=-1),
+            _torch.logsumexp(final_logits[:, t_ids], dim=-1),
+        ],
+        dim=-1,
+    )
+    probs2 = _torch.softmax(logits2, dim=-1)
+
+    idx = logits2.argmax(dim=-1).tolist()
+    pred_letters = ["A" if i == 0 else DELEGATE_TEAMMATE_LETTER for i in idx]
+    return {
+        "logits2": logits2,
+        "probs2": probs2,
+        "pred_letters": pred_letters,
+        "pred_positions": idx,
+        "p_answer": probs2[:, 0],
+        "p_delegate": probs2[:, 1],
     }

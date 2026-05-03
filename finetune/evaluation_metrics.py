@@ -36,9 +36,15 @@ from prompts import (
     build_self_confidence_prompts_numeric,
     build_other_confidence_prompts,
     build_other_confidence_prompts_numeric,
+    build_delegate_abcdt_prompts,
+    build_delegate_at_prompts,
     run_mcq_forward_pass,
     run_confidence_forward_pass,
     run_confidence_forward_pass_numeric,
+    run_delegate_abcdt_forward_pass,
+    run_delegate_at_forward_pass,
+    DEFAULT_TEAMMATE_ACCURACY,
+    DELEGATE_TEAMMATE_LETTER,
 )
 from loss import get_bin_spec
 
@@ -68,11 +74,13 @@ def _confidence_pass(
     if confidence_format == "letter_8bin":
         if kind == "self":
             prompts = build_self_confidence_prompts(
-                batch, tokenizer, confidence_letter_mapping, mcq_letter_mapping
+                batch, tokenizer, confidence_letter_mapping, mcq_letter_mapping,
+                model_type=model_type,
             )
         else:
             prompts = build_other_confidence_prompts(
-                batch, tokenizer, confidence_letter_mapping, mcq_letter_mapping
+                batch, tokenizer, confidence_letter_mapping, mcq_letter_mapping,
+                model_type=model_type,
             )
         out = run_confidence_forward_pass(
             model=model, tokenizer=tokenizer, prompts=prompts,
@@ -146,6 +154,10 @@ def evaluate_model(
     mcq_letter_random_seed=None,
     confidence_format="letter_8bin",
     model_type="instruct",
+    run_mcq=True,
+    run_delegate_abcdt=False,
+    run_delegate_at=False,
+    delegate_teammate_accuracy=DEFAULT_TEAMMATE_ACCURACY,
 ):
     """
     Simplified evaluation function for arbitrary datasets.
@@ -221,7 +233,11 @@ def evaluate_model(
             self.mcq_letter_random_seed = mcq_letter_random_seed
             self.confidence_format = confidence_format
             self.model_type = model_type
-    
+            self.run_mcq = run_mcq
+            self.run_delegate_abcdt = run_delegate_abcdt
+            self.run_delegate_at = run_delegate_at
+            self.delegate_teammate_accuracy = delegate_teammate_accuracy
+
     args = SimpleArgs()
     
     # Generate confidence letter mapping
@@ -427,6 +443,14 @@ def run_evaluation(
     # print(f"Correct: {val_dataset[0].get('correct_letter')}")
     # print(f"Shuffle setting: {args.shuffle_options}")
 
+    # Resolve per-task toggles + delegate-game settings from args.
+    run_mcq = getattr(args, 'run_mcq', True)
+    run_delegate_abcdt = getattr(args, 'run_delegate_abcdt', False)
+    run_delegate_at = getattr(args, 'run_delegate_at', False)
+    delegate_teammate_accuracy = getattr(
+        args, 'delegate_teammate_accuracy', DEFAULT_TEAMMATE_ACCURACY
+    )
+
     # ----- Accumulators -----
     correctness_flags = []
     entropy_values = []
@@ -442,6 +466,20 @@ def run_evaluation(
     predicted_other_confidence_letters = []  # Display letter confidence predictions (other) (e.g., S-Z)
     predicted_other_confidence_bin_indices = []  # Bin indices for other confidence
     prerecorded_entropy_values = []  # Pre-recorded entropy from mcq_results_data
+    # Delegate-game accumulators. Each is filled when the corresponding toggle
+    # is on, otherwise stays empty so the summary block can detect "not run".
+    delegate_abcdt_pred_canonical = []   # canonical letter A/B/C/D/T
+    delegate_abcdt_pred_display = []     # display letter (mcq scheme + T)
+    delegate_abcdt_pred_positions = []   # 0..4; 4 == delegate
+    delegate_abcdt_p_delegate = []
+    delegate_abcdt_p_answer = []
+    delegate_abcdt_is_correct = []       # only meaningful when not delegating
+    delegate_abcdt_is_delegate = []
+    delegate_at_pred_letters = []        # "A" or "T"
+    delegate_at_pred_positions = []      # 0=A, 1=T
+    delegate_at_p_delegate = []
+    delegate_at_p_answer = []
+    delegate_at_is_delegate = []
 
     # ==================== MAIN LOOP ==========================
     total_samples = len(idxs)
@@ -567,7 +605,7 @@ def run_evaluation(
                     f"val_on_frozen=True but no frozen data found for qid={qid} in mcq_results_lookup. "
                     f"Dataset should have been filtered to only include questions with pre-recorded results."
                 )
-        else:
+        elif run_mcq:
             # Use live model (current behavior)
             mcq_prompts = build_multiple_choice_question_prompts(
                 batch, tokenizer, sample_mcq_letter_mapping, model_type=model_type
@@ -588,6 +626,13 @@ def run_evaluation(
             predicted_answer_position = mcq_out["pred_positions"][0]  # Position index (0-3)
             entropy_value = mcq_out["entropy"][0].item()
             probs_ABCD = mcq_out["probs4"][0].detach().float().cpu().tolist()
+        else:
+            # MCQ pass disabled — leave all MCQ-derived signals null/zero so the
+            # rest of the loop (loss, calibration, logging) handles it gracefully.
+            predicted_answer_letter = None
+            predicted_answer_position = None
+            entropy_value = 0.0
+            probs_ABCD = None
         
         # Map correct_answer_letter to position index (0-3 for A-D)
         correct_answer_position = ord(correct_answer_letter) - ord('A') if correct_answer_letter in "ABCD" else None
@@ -702,6 +747,87 @@ def run_evaluation(
         predicted_other_confidence_bin_indices.append(predicted_other_confidence_bin_index)
 
         # ==================================================
+        # 3.6. Delegate-game ABCDT pass (optional)
+        # The model picks one of A/B/C/D to answer, OR T to delegate.
+        # When it picks A-D we check correctness against correct_answer_position
+        # so the position-shuffling and letter-scheme remap stay wired exactly
+        # the way they are for the bare MCQ pass.
+        # ==================================================
+        if run_delegate_abcdt:
+            d_prompts = build_delegate_abcdt_prompts(
+                batch, tokenizer,
+                mcq_letter_mapping=sample_mcq_letter_mapping,
+                model_type=model_type,
+                teammate_accuracy=delegate_teammate_accuracy,
+            )
+            d_out = run_delegate_abcdt_forward_pass(
+                model=model, tokenizer=tokenizer, prompts=d_prompts,
+                device=device,
+                mcq_letter_mapping=sample_mcq_letter_mapping,
+            )
+            d_pred_canonical = d_out["pred_canonical"][0]
+            d_pred_display = d_out["pred_display"][0]
+            d_pred_position = d_out["pred_positions"][0]   # 0..4; 4=delegate
+            d_p_delegate = float(d_out["p_delegate"][0].item())
+            d_p_answer = float(d_out["p_answer"][0].item())
+            d_is_delegate = (d_pred_position == 4)
+            if d_is_delegate or correct_answer_position is None:
+                d_is_correct = None
+            else:
+                d_is_correct = bool(d_pred_position == correct_answer_position)
+        else:
+            d_pred_canonical = None
+            d_pred_display = None
+            d_pred_position = None
+            d_p_delegate = None
+            d_p_answer = None
+            d_is_delegate = None
+            d_is_correct = None
+
+        delegate_abcdt_pred_canonical.append(d_pred_canonical)
+        delegate_abcdt_pred_display.append(d_pred_display)
+        delegate_abcdt_pred_positions.append(d_pred_position)
+        delegate_abcdt_p_delegate.append(d_p_delegate)
+        delegate_abcdt_p_answer.append(d_p_answer)
+        delegate_abcdt_is_correct.append(d_is_correct)
+        delegate_abcdt_is_delegate.append(d_is_delegate)
+
+        # ==================================================
+        # 3.7. Delegate-game AT pass (optional)
+        # Binary meta-decision — A means "answer myself", T means delegate.
+        # The model does NOT pick an MC option here; we only log the binary
+        # delegate decision and its probability.
+        # ==================================================
+        if run_delegate_at:
+            at_prompts = build_delegate_at_prompts(
+                batch, tokenizer,
+                mcq_letter_mapping=sample_mcq_letter_mapping,
+                model_type=model_type,
+                teammate_accuracy=delegate_teammate_accuracy,
+            )
+            at_out = run_delegate_at_forward_pass(
+                model=model, tokenizer=tokenizer, prompts=at_prompts,
+                device=device,
+            )
+            at_pred_letter = at_out["pred_letters"][0]
+            at_pred_position = at_out["pred_positions"][0]
+            at_p_delegate = float(at_out["p_delegate"][0].item())
+            at_p_answer = float(at_out["p_answer"][0].item())
+            at_is_delegate = (at_pred_position == 1)
+        else:
+            at_pred_letter = None
+            at_pred_position = None
+            at_p_delegate = None
+            at_p_answer = None
+            at_is_delegate = None
+
+        delegate_at_pred_letters.append(at_pred_letter)
+        delegate_at_pred_positions.append(at_pred_position)
+        delegate_at_p_delegate.append(at_p_delegate)
+        delegate_at_p_answer.append(at_p_answer)
+        delegate_at_is_delegate.append(at_is_delegate)
+
+        # ==================================================
         # 4. Loss (only if confidence was computed)
         # ==================================================
         if compute_confidence and conf_logits is not None:
@@ -767,6 +893,27 @@ def run_evaluation(
             # Add pre-recorded entropy if available
             if prerecorded_entropy is not None:
                 log_entry["prerecorded_entropy"] = prerecorded_entropy
+            # Delegate-game (ABCDT) per-sample fields. Only added when the
+            # ABCDT pass ran for this sample.
+            if run_delegate_abcdt:
+                log_entry.update({
+                    "delegate_abcdt_pred_canonical": d_pred_canonical,
+                    "delegate_abcdt_pred_display": d_pred_display,
+                    "delegate_abcdt_pred_position": d_pred_position,
+                    "delegate_abcdt_p_delegate": d_p_delegate,
+                    "delegate_abcdt_p_answer": d_p_answer,
+                    "delegate_abcdt_is_delegate": d_is_delegate,
+                    "delegate_abcdt_is_correct": d_is_correct,
+                })
+            # Delegate-game (AT) per-sample fields.
+            if run_delegate_at:
+                log_entry.update({
+                    "delegate_at_pred_letter": at_pred_letter,
+                    "delegate_at_pred_position": at_pred_position,
+                    "delegate_at_p_delegate": at_p_delegate,
+                    "delegate_at_p_answer": at_p_answer,
+                    "delegate_at_is_delegate": at_is_delegate,
+                })
             write_jsonl(log_file_path, log_entry)
 
     # ===========================================================
@@ -956,6 +1103,56 @@ def run_evaluation(
         "predicted_other_confidence_distribution_by_bin_raw": other_conf_dist_bins,
         "predicted_other_confidence_distribution_by_bin_pct": other_conf_dist_bins_pct,
     }
+
+    # -----------------------------------------------------------------
+    # Delegate-game summary metrics. Each sub-block is only added if the
+    # corresponding pass actually ran for this evaluation.
+    # -----------------------------------------------------------------
+    if run_delegate_abcdt:
+        d_total = len(delegate_abcdt_is_delegate)
+        d_n_delegate = sum(1 for x in delegate_abcdt_is_delegate if x is True)
+        d_answered_correct = [x for x in delegate_abcdt_is_correct if x is not None]
+        # Position distribution over [A,B,C,D,T] (canonical positions).
+        d_pos_dist = {p: 0 for p in range(5)}
+        for p in delegate_abcdt_pred_positions:
+            if p is not None:
+                d_pos_dist[p] = d_pos_dist.get(p, 0) + 1
+        d_pos_dist_pct = {p: (v / d_total) * 100.0 for p, v in d_pos_dist.items()} if d_total else d_pos_dist
+        # Team score: P(correct | answered) * P(answer) + teammate_acc * P(delegate).
+        n_answered = d_total - d_n_delegate
+        team_acc_when_answered = (
+            float(np.mean(d_answered_correct)) if d_answered_correct else float("nan")
+        )
+        if d_total:
+            team_score = (
+                (n_answered / d_total) * (team_acc_when_answered if not np.isnan(team_acc_when_answered) else 0.0)
+                + (d_n_delegate / d_total) * delegate_teammate_accuracy
+            )
+        else:
+            team_score = float("nan")
+        results["delegate_abcdt"] = {
+            "n_samples": d_total,
+            "delegate_rate": (d_n_delegate / d_total) if d_total else float("nan"),
+            "answer_rate": ((d_total - d_n_delegate) / d_total) if d_total else float("nan"),
+            "answer_accuracy_given_answered": team_acc_when_answered,
+            "expected_team_score": team_score,
+            "avg_p_delegate": float(np.mean([v for v in delegate_abcdt_p_delegate if v is not None])) if d_total else float("nan"),
+            "position_distribution_raw": d_pos_dist,
+            "position_distribution_pct": d_pos_dist_pct,
+            "teammate_accuracy_shown": delegate_teammate_accuracy,
+        }
+
+    if run_delegate_at:
+        at_total = len(delegate_at_is_delegate)
+        at_n_delegate = sum(1 for x in delegate_at_is_delegate if x is True)
+        at_p_delegate_vals = [v for v in delegate_at_p_delegate if v is not None]
+        results["delegate_at"] = {
+            "n_samples": at_total,
+            "delegate_rate": (at_n_delegate / at_total) if at_total else float("nan"),
+            "answer_rate": ((at_total - at_n_delegate) / at_total) if at_total else float("nan"),
+            "avg_p_delegate": float(np.mean(at_p_delegate_vals)) if at_p_delegate_vals else float("nan"),
+            "teammate_accuracy_shown": delegate_teammate_accuracy,
+        }
 
     # Compute additional metrics for wandb
     correctness_arr = np.array(correctness_flags)

@@ -56,9 +56,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
 import contextlib
 import io
 import json
-import os
 import traceback
-import warnings
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -79,158 +77,19 @@ if not torch.cuda.is_available():
 from core.model_utils import load_model_and_tokenizer
 from data_handling import load_jsonl_dataset
 from evaluation_metrics import evaluate_model
-from experiment_config import LLAMA_8B_BASE, LLAMA_8B_INSTRUCT
+from experiment_config import LLAMA_8B_BASE
 from finetune_config import ECTConfig
 from prompts import (
-    build_multiple_choice_question_prompts,
-    build_other_confidence_prompts,
-    build_other_confidence_prompts_numeric,
-    build_self_confidence_prompts,
-    build_self_confidence_prompts_numeric,
     get_confidence_letter_mapping,
     get_mcq_letter_mapping,
 )
+from run_logging import (
+    RunLogger,
+    dump_config_snapshot,
+    install_warning_capture,
+    log_sample_prompts_and_replies,
+)
 from utils import prepare_model_and_tokenizer
-
-
-###############################################################################
-# Run logger — incremental .txt log paired with the JSONL output
-###############################################################################
-class RunLogger:
-    """Append-only text log that flushes on every write.
-
-    A crash mid-run leaves a partial but readable file at ``self.path``,
-    which is the whole point — never wait until run-end to commit logs.
-    """
-
-    def __init__(self, path: Path):
-        self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text("")  # truncate at start
-
-    def write(self, *lines, blank_after: bool = False) -> None:
-        with self.path.open("a") as f:
-            for line in lines:
-                s = str(line)
-                f.write(s)
-                if not s.endswith("\n"):
-                    f.write("\n")
-            if blank_after:
-                f.write("\n")
-            f.flush()
-            os.fsync(f.fileno())
-
-    def section(self, title: str) -> None:
-        self.write("", "=" * 70, f" {title}", "=" * 70)
-
-    def subsection(self, title: str) -> None:
-        self.write("", "-" * 70, f" {title}", "-" * 70)
-
-
-def _install_warning_capture(logger: RunLogger):
-    """Route Python warnings into the run log AND to the original handler."""
-    original = warnings.showwarning
-
-    def capture(message, category, filename, lineno, file=None, line=None):
-        logger.write(
-            f"[WARNING {category.__name__}] {message}  ({filename}:{lineno})"
-        )
-        original(message, category, filename, lineno, file, line)
-
-    warnings.showwarning = capture
-    return lambda: setattr(warnings, "showwarning", original)
-
-
-def _dump_config_snapshot(logger: RunLogger) -> None:
-    """Write every ECTConfig field to the log so the run is fully reconstructable."""
-    logger.section("CONFIG SNAPSHOT (finetune_config.ECTConfig)")
-    rows = []
-    for name in sorted(vars(ECTConfig)):
-        if name.startswith("_"):
-            continue
-        value = getattr(ECTConfig, name)
-        if callable(value):
-            continue
-        rows.append((name, value))
-    width = max(len(n) for n, _ in rows) if rows else 0
-    for name, value in rows:
-        logger.write(f"  {name.ljust(width)} = {value!r}")
-
-
-def _generate_short_reply(model, tokenizer, prompt: str, max_new_tokens: int = 8) -> str:
-    """Run a tiny greedy generate() so the .txt can show what the model would
-    actually emit on this prompt. Special tokens kept visible — the user wants
-    to see exactly what comes out of the tokenizer."""
-    enc = tokenizer(prompt, return_tensors="pt").to(model.device)
-    with torch.no_grad():
-        out = model.generate(
-            **enc,
-            max_new_tokens=max_new_tokens,
-            do_sample=False,
-            pad_token_id=tokenizer.pad_token_id or tokenizer.eos_token_id,
-        )
-    reply_ids = out[0, enc["input_ids"].shape[1]:]
-    return tokenizer.decode(reply_ids, skip_special_tokens=False)
-
-
-def _log_sample_prompts_and_replies(
-    logger: RunLogger,
-    model,
-    tokenizer,
-    sample_row: dict,
-    model_type: str,
-    confidence_format: str,
-    confidence_letter_mapping,
-    mcq_letter_mapping,
-) -> None:
-    """For one sample row, dump each prompt type (MCQ / self-conf / other-conf)
-    exactly as the model sees it, then run a short generate() to capture the
-    model's actual reply.
-
-    Confidence prompt variants follow CONFIDENCE_FORMAT
-    ("letter_8bin" → letter prompts, "numeric_1_5" / "numeric_1_10" → numeric).
-    Self- and other-confidence always use the same scheme. Prompt formatting
-    follows model_type ("base" → raw text, otherwise → chat tags).
-    """
-    # MCQ
-    mcq_prompt = build_multiple_choice_question_prompts(
-        [sample_row], tokenizer, mcq_letter_mapping, model_type=model_type
-    )[0]
-    logger.subsection(f"[{model_type}] sample MCQ prompt (qid={sample_row.get('id')})")
-    logger.write(mcq_prompt)
-    logger.subsection(f"[{model_type}] sample MCQ reply (greedy, max_new_tokens=8)")
-    logger.write(_generate_short_reply(model, tokenizer, mcq_prompt))
-
-    # Self- and other-confidence (same scheme)
-    if confidence_format in ("numeric_1_5", "numeric_1_10"):
-        n_max = 5 if confidence_format == "numeric_1_5" else 10
-        self_prompt = build_self_confidence_prompts_numeric(
-            [sample_row], tokenizer, mcq_letter_mapping, n_max=n_max,
-            model_type=model_type,
-        )[0]
-        other_prompt = build_other_confidence_prompts_numeric(
-            [sample_row], tokenizer, mcq_letter_mapping, n_max=n_max,
-            model_type=model_type,
-        )[0]
-        scheme_label = f"numeric 1-{n_max}"
-    else:
-        self_prompt = build_self_confidence_prompts(
-            [sample_row], tokenizer, confidence_letter_mapping, mcq_letter_mapping
-        )[0]
-        other_prompt = build_other_confidence_prompts(
-            [sample_row], tokenizer, confidence_letter_mapping, mcq_letter_mapping
-        )[0]
-        scheme_label = "letter A-H"
-
-    logger.subsection(f"[{model_type}] sample self-confidence ({scheme_label}) prompt")
-    logger.write(self_prompt)
-    logger.subsection(f"[{model_type}] sample self-confidence ({scheme_label}) reply")
-    logger.write(_generate_short_reply(model, tokenizer, self_prompt))
-
-    logger.subsection(f"[{model_type}] sample other-confidence ({scheme_label}) prompt")
-    logger.write(other_prompt)
-    logger.subsection(f"[{model_type}] sample other-confidence ({scheme_label}) reply")
-    logger.write(_generate_short_reply(model, tokenizer, other_prompt))
 
 
 def _print_letter_diagnostics(
@@ -290,11 +149,16 @@ def _print_letter_diagnostics(
 # Per-dataset evaluation — single model, no comparison
 ###############################################################################
 def _resolve_model_spec(model_type: str):
-    """Map EVAL_MODEL_TYPE → (base_model_name, adapter_path_or_None)."""
+    """Map EVAL_MODEL_TYPE → (base_model_name, adapter_path_or_None).
+
+    "instruct" and "finetuned" both use ECTConfig.MODEL_NAME so the eval
+    target tracks whatever training is configured to use. "base" uses
+    LLAMA_8B_BASE because that's a fundamentally different model.
+    """
     if model_type == "base":
         return LLAMA_8B_BASE, None
     if model_type == "instruct":
-        return LLAMA_8B_INSTRUCT, None
+        return ECTConfig.MODEL_NAME, None
     if model_type == "finetuned":
         adapter = ECTConfig.EVAL_LORA_REPO
         if not adapter:
@@ -302,7 +166,7 @@ def _resolve_model_spec(model_type: str):
                 "EVAL_MODEL_TYPE='finetuned' requires EVAL_LORA_REPO to be set "
                 "in ECTConfig."
             )
-        return LLAMA_8B_INSTRUCT, adapter
+        return ECTConfig.MODEL_NAME, adapter
     raise ValueError(
         f"EVAL_MODEL_TYPE must be 'base', 'instruct', or 'finetuned'; got {model_type!r}"
     )
@@ -313,6 +177,7 @@ def run_evaluation_on_dataset(
     model_type: str,
     dataset_path: str,
     sigma: float,
+    temperature: float,
     confidence_format: str,
     merge: bool,
     max_samples,
@@ -324,6 +189,10 @@ def run_evaluation_on_dataset(
     log_dir,
     confidence_letter_scheme: str,
     confidence_letter_random_seed,
+    run_mcq: bool = True,
+    run_delegate_abcdt: bool = False,
+    run_delegate_at: bool = False,
+    delegate_teammate_accuracy: float = 0.7,
 ):
     """Evaluate one (model_type, dataset) pair into a JSONL + .txt pair."""
     dataset_path = Path(dataset_path)
@@ -358,7 +227,7 @@ def run_evaluation_on_dataset(
     print(f"Logging  TXT  to: {txt_file}")
 
     logger = RunLogger(txt_file)
-    restore_warnings = _install_warning_capture(logger)
+    restore_warnings = install_warning_capture(logger)
 
     confidence_letter_mapping = get_confidence_letter_mapping(
         confidence_letter_scheme, seed=confidence_letter_random_seed
@@ -375,7 +244,7 @@ def run_evaluation_on_dataset(
     logger.write(f"jsonl out:         {log_file}")
     logger.write(f"n samples:         {len(data)}")
     logger.write(f"confidence_format: {confidence_format}")
-    _dump_config_snapshot(logger)
+    dump_config_snapshot(logger, ECTConfig, "CONFIG SNAPSHOT (finetune_config.ECTConfig)")
 
     sample_row = data[0] if data else None
     log_prefix = f"{model_type}_"
@@ -397,12 +266,18 @@ def run_evaluation_on_dataset(
         model, tokenizer = prepare_model_and_tokenizer(model, tokenizer)
 
         if sample_row is not None:
-            _log_sample_prompts_and_replies(
+            log_sample_prompts_and_replies(
                 logger, model, tokenizer, sample_row,
                 model_type=model_type,
                 confidence_format=confidence_format,
                 confidence_letter_mapping=confidence_letter_mapping,
                 mcq_letter_mapping=mcq_letter_mapping,
+                run_mcq=run_mcq,
+                run_self_confidence=compute_confidence,
+                run_other_confidence=compute_other_confidence,
+                run_delegate_abcdt=run_delegate_abcdt,
+                run_delegate_at=run_delegate_at,
+                delegate_teammate_accuracy=delegate_teammate_accuracy,
             )
 
         try:
@@ -411,6 +286,7 @@ def run_evaluation_on_dataset(
                 tokenizer=tokenizer,
                 dataset=data,
                 sigma=sigma,
+                temperature=temperature,
                 compute_confidence=compute_confidence,
                 compute_other_confidence=compute_other_confidence,
                 loss_type=loss_type,
@@ -424,6 +300,10 @@ def run_evaluation_on_dataset(
                 confidence_letter_random_seed=confidence_letter_random_seed,
                 confidence_format=confidence_format,
                 model_type=model_type,
+                run_mcq=run_mcq,
+                run_delegate_abcdt=run_delegate_abcdt,
+                run_delegate_at=run_delegate_at,
+                delegate_teammate_accuracy=delegate_teammate_accuracy,
             )
         except Exception:
             logger.section(f"ERROR DURING {model_type.upper()} EVAL")
@@ -475,6 +355,14 @@ def main():
     print(f" mcq_scheme:        {cfg.MCQ_LETTER_SCHEME}            (shared with training)")
     print(f" max_samples:       {cfg.EVAL_MAX_SAMPLES}")
     print(f" log_dir:           {cfg.EVAL_LOG_DIR}")
+    print(" tasks:             "
+          f"mcq={cfg.EVAL_RUN_MCQ}, "
+          f"self_conf={cfg.EVAL_COMPUTE_CONFIDENCE}, "
+          f"other_conf={cfg.EVAL_COMPUTE_OTHER_CONFIDENCE}, "
+          f"delegate_abcdt={cfg.EVAL_RUN_DELEGATE_ABCDT}, "
+          f"delegate_at={cfg.EVAL_RUN_DELEGATE_AT}")
+    if cfg.EVAL_RUN_DELEGATE_ABCDT or cfg.EVAL_RUN_DELEGATE_AT:
+        print(f" teammate_accuracy: {cfg.EVAL_DELEGATE_TEAMMATE_ACCURACY}")
     print("=" * 60)
 
     all_results = {}
@@ -483,6 +371,7 @@ def main():
             model_type=cfg.EVAL_MODEL_TYPE,
             dataset_path=dataset_path,
             sigma=cfg.SIGMA,
+            temperature=cfg.TEMPERATURE,
             confidence_format=cfg.CONFIDENCE_FORMAT,
             merge=cfg.EVAL_MERGE_LORA,
             max_samples=cfg.EVAL_MAX_SAMPLES,
@@ -494,6 +383,10 @@ def main():
             log_dir=cfg.EVAL_LOG_DIR,
             confidence_letter_scheme=cfg.CONFIDENCE_LETTER_SCHEME,
             confidence_letter_random_seed=cfg.CONFIDENCE_LETTER_RANDOM_SEED,
+            run_mcq=cfg.EVAL_RUN_MCQ,
+            run_delegate_abcdt=cfg.EVAL_RUN_DELEGATE_ABCDT,
+            run_delegate_at=cfg.EVAL_RUN_DELEGATE_AT,
+            delegate_teammate_accuracy=cfg.EVAL_DELEGATE_TEAMMATE_ACCURACY,
         )
         all_results[dataset_path] = out
 

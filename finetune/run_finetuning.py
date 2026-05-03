@@ -46,6 +46,12 @@ from prompts import (
     get_confidence_letter_mapping,
     get_mcq_letter_mapping,
 )
+from run_logging import (
+    RunLogger,
+    dump_config_snapshot,
+    install_warning_capture,
+    log_sample_prompts_and_replies,
+)
 from data_handling import (
     load_mcq_results_data,
     get_batch,
@@ -140,9 +146,14 @@ def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=
     # ----------------------------------------------
 
     else:
-        # Use the MCQ letter mapping already defined above
-        mcq_prompts = build_multiple_choice_question_prompts(batch, tokenizer, mcq_letter_mapping)
-        
+        # Use the MCQ letter mapping already defined above.
+        # model_type="instruct" is passed explicitly so this call matches
+        # run_evaluations.py byte-for-byte (LoRA is always trained on the
+        # instruct base model, so the prompt is always chat-templated).
+        mcq_prompts = build_multiple_choice_question_prompts(
+            batch, tokenizer, mcq_letter_mapping, model_type="instruct"
+        )
+
         mcq_out = run_mcq_forward_pass(
             model=model,
             tokenizer=tokenizer,
@@ -177,7 +188,8 @@ def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=
             confidence_letter_mapping = args.confidence_letter_mapping
 
         conf_prompts = build_self_confidence_prompts(
-            batch, tokenizer, confidence_letter_mapping, mcq_letter_mapping
+            batch, tokenizer, confidence_letter_mapping, mcq_letter_mapping,
+            model_type="instruct",
         )
         conf_out = run_confidence_forward_pass(
             model=model, tokenizer=tokenizer, prompts=conf_prompts,
@@ -188,7 +200,8 @@ def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=
     elif confidence_format in ("numeric_1_5", "numeric_1_10"):
         n_max = 5 if confidence_format == "numeric_1_5" else 10
         conf_prompts = build_self_confidence_prompts_numeric(
-            batch, tokenizer, mcq_letter_mapping, n_max=n_max
+            batch, tokenizer, mcq_letter_mapping, n_max=n_max,
+            model_type="instruct",
         )
         conf_out = run_confidence_forward_pass_numeric(
             model=model, tokenizer=tokenizer, prompts=conf_prompts,
@@ -247,7 +260,23 @@ def train(args):
     os.makedirs(log_dir, exist_ok=True)
     model_name_safe = args.model_name.replace("/", "-").replace("_", "-")
     log_file_path = os.path.join(log_dir, f"{timestamp}_{model_name_safe}_evaluation_metrics.jsonl")
-    
+
+    # Structured .txt run record (mirrors the one run_evaluations.py writes).
+    # Same RunLogger / log_sample_prompts_and_replies helpers as eval, so the
+    # config snapshot + sample-prompt block is byte-identical between
+    # finetuning and eval runs.
+    run_record_path = os.path.join(log_dir, f"{timestamp}_{model_name_safe}_finetune.txt")
+    run_logger = RunLogger(run_record_path)
+    restore_warnings = install_warning_capture(run_logger)
+    run_logger.write(f"run_finetuning.py — {timestamp}Z")
+    run_logger.write(f"model_name:        {args.model_name}")
+    run_logger.write(f"train_data_path:   {args.train_data_path}")
+    run_logger.write(f"val_data_path:     {args.val_data_path}")
+    run_logger.write(f"test_data_path:    {args.test_data_path}")
+    run_logger.write(f"confidence_format: {args.confidence_format}")
+    run_logger.write(f"jsonl out:         {log_file_path}")
+    dump_config_snapshot(run_logger, _C, "CONFIG SNAPSHOT (finetune_config.ECTConfig)")
+
     # Setup print log file to capture all printed output
     print_log_path = os.path.join(log_dir, f"{timestamp}_{model_name_safe}_print_output.txt")
     print_log_file = open(print_log_path, 'w', encoding='utf-8')
@@ -481,32 +510,28 @@ def train(args):
     save_training_parameters(args, checkpoint_base_dir)
 
     # ============================================================
-    # Print first MCQ and confidence prompts
+    # Sample prompts + actual model replies — written to the structured
+    # .txt run record so we can verify the model sees the exact same prompt
+    # (chat tags included) that run_evaluations.py uses. Routes through the
+    # shared run_logging helper, which dispatches to numeric vs letter
+    # confidence prompts based on CONFIDENCE_FORMAT.
     # ============================================================
-    print("\n" + "="*80)
-    print("First Multiple Choice Question Prompt:")
-    print("="*80)
-    first_batch = train_dataset[0:1]
-    # Generate mapping for display (use sample mapping if per-question randomization)
     if args.randomize_letters_per_question:
         display_mcq_mapping = get_mcq_letter_mapping(args.mcq_letter_scheme, seed=None)
-    else:
-        display_mcq_mapping = mcq_letter_mapping
-    mcq_prompts = build_multiple_choice_question_prompts(first_batch, tokenizer, display_mcq_mapping)
-    print(mcq_prompts[0])
-    print("="*80 + "\n")
-    
-    print("="*80)
-    print("First Confidence Question Prompt:")
-    print("="*80)
-    # Generate mapping for display (use sample mapping if per-question randomization)
-    if args.randomize_letters_per_question:
         display_conf_mapping = get_confidence_letter_mapping(args.confidence_letter_scheme, seed=None)
     else:
+        display_mcq_mapping = mcq_letter_mapping
         display_conf_mapping = confidence_letter_mapping
-    conf_prompts = build_self_confidence_prompts(first_batch, tokenizer, display_conf_mapping, display_mcq_mapping)
-    print(conf_prompts[0])
-    print("="*80 + "\n")
+
+    run_logger.section("SAMPLE PROMPTS + REPLIES (pre-training)")
+    log_sample_prompts_and_replies(
+        run_logger, model, tokenizer, train_dataset[0],
+        model_type="instruct",
+        confidence_format=args.confidence_format,
+        confidence_letter_mapping=display_conf_mapping,
+        mcq_letter_mapping=display_mcq_mapping,
+    )
+    print(f"✓ Sample prompts + replies written to: {run_record_path}")
 
     # ============================================================
     # Baseline evaluation BEFORE training
@@ -685,11 +710,20 @@ def train(args):
     if args.save_wandb_artifact:
         wandb.finish()
     
+    # Final summary into the structured .txt run record, then unhook the
+    # warnings handler so we don't leak it past this run.
+    run_logger.section("FINAL METRICS")
+    run_logger.write(f"final_accuracy:   {final_metrics['mcq_accuracy']:.4f}")
+    run_logger.write(f"final_loss:       {final_metrics['avg_loss']:.4f}")
+    run_logger.write(f"final_confidence: {final_metrics['avg_confidence']:.4f}")
+    restore_warnings()
+
     # Restore original print and close print log file
     import builtins
     builtins.print = original_print
     print_log_file.close()
     print(f"✓ Print output saved to: {print_log_path}")
+    print(f"✓ Run record saved to:   {run_record_path}")
     
 
 

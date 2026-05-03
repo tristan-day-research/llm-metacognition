@@ -65,6 +65,17 @@ from pathlib import Path
 
 import torch
 
+# Fail-fast: this script is meaningless on CPU (8B model, single-sample loop ≈
+# 13 s/iter on CPU vs ≈ 0.3 s/iter on H100). If CUDA isn't available at import
+# time, abort before loading the model — silently running on CPU costs hours.
+if not torch.cuda.is_available():
+    raise RuntimeError(
+        "run_evaluations.py: torch.cuda.is_available() is False. Refusing to "
+        "run on CPU. Check the driver / torch CUDA build (nvidia-smi, then "
+        "`pip install --upgrade --index-url https://download.pytorch.org/whl/cuXXX torch` "
+        "matching your driver)."
+    )
+
 from core.model_utils import load_model_and_tokenizer
 from data_handling import load_jsonl_dataset
 from evaluation_metrics import evaluate_model

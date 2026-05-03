@@ -119,79 +119,82 @@ def load_data_file(path: str) -> dict[str, dict]:
     return out
 
 
-def _load_options_by_qid(raw_data_path: str) -> dict[str, dict]:
-    """Run the canonical training loader on the raw data so the option order
-    matches what the eval pass saw. Returns {qid: {options dict, correct_letter}}.
-
-    This is what makes the balanced rows usable for frozen training: by
-    freezing options now, the recorded ``model_answer`` letter and
-    ``probs_ABCD`` indices stay aligned with what the finetuning model will
-    later see in its prompt.
-    """
-    from data_handling import load_jsonl_dataset
-    out = {}
-    for row in load_jsonl_dataset(raw_data_path):
-        qid = row.get("qid")
-        if qid is not None:
-            out[qid] = {
-                "options": row["options"],
-                "correct_letter": row["correct_letter"],
-            }
-    return out
+# Eval-row fields the source-of-truth that must NOT be overwritten by
+# raw-data merge. These are measured against the exact option order the
+# model saw at eval time; clobbering any one of them would re-introduce
+# the off-by-permutation bug.
+_EVAL_PROTECTED_FIELDS = frozenset({
+    "options", "correct_letter", "correct_answer", "correct_answer_text",
+    "model_answer", "model_answer_text", "model_answer_position",
+    "correct_answer_position", "probs_ABCD", "entropy",
+    "is_correct", "top_prob", "second_prob", "prob_gap",
+    "predicted_confidence_letter", "predicted_confidence_bin_index",
+    "predicted_other_confidence_letter", "predicted_other_confidence_bin_index",
+    "expected_confidence", "expected_other_confidence", "loss",
+})
 
 
 def build_cells(root: Path) -> dict[str, dict[str, list[dict]]]:
-    """cells[source][bin] = list of enriched records."""
+    """cells[source][bin] = list of enriched records.
+
+    Strategy: the eval JSONL row is the source of truth for everything
+    measured against the option order the model saw at eval time
+    (options, correct_letter, model_answer, probs_ABCD, entropy, …). We
+    take that record verbatim, then merge in raw-dataset metadata
+    (distractors, prop/s_pop/o_pop, …) for fields the eval JSONL doesn't
+    carry. Raw-data fields NEVER overwrite eval-row fields.
+    """
     cells: dict[str, dict[str, list]] = {
         ds: {"low": [], "med": [], "high": []} for ds in EVAL_FILES
     }
     for ds in EVAL_FILES:
         eval_map = load_eval_rows(str(root / EVAL_FILES[ds]))
         data_map = load_data_file(str(root / DATA_FILES[ds]))
-        opts_by_qid = _load_options_by_qid(str(root / DATA_FILES[ds]))
+        skipped_legacy = 0
         for qid, eval_row in eval_map.items():
             row = data_map.get(qid)
             if row is None:
                 continue
             if len(row.get("distractors", [])) < 3:
                 continue
-            opts_info = opts_by_qid.get(qid)
-            if opts_info is None:
-                # Couldn't reconstruct options for this qid — skip rather than
-                # emit a row that can't be replayed at training time.
+            # Hard requirement: eval row must record the exact options it
+            # showed the model. Older eval files (pre-options-recording)
+            # are unsafe for frozen training and are skipped with a warning.
+            options = eval_row.get("options")
+            correct_letter = eval_row.get("correct_letter")
+            if not (
+                isinstance(options, dict)
+                and set(options.keys()) == set("ABCD")
+                and correct_letter in {"A", "B", "C", "D"}
+            ):
+                skipped_legacy += 1
                 continue
-            # Sanity check: the eval row's recorded correct_answer letter must
-            # match the letter we get from the deterministic shuffle. If it
-            # doesn't, something has drifted and the row is unsafe to use.
-            if eval_row.get("correct_answer") != opts_info["correct_letter"]:
-                continue
-            # Start from the full eval row (keeps type, is_correct, top_prob,
-            # probs_ABCD, expected_confidence, model_answer_position, etc. so
-            # downstream analysis can plot the balanced split with the same
-            # tools used on raw eval files), then merge in EVERY field from
-            # the raw data row so no source-side metadata is lost. Two fields
-            # mean different things in each source and need explicit handling:
-            #   - correct_answer: eval row stores the LETTER (A-D), raw stores
-            #     the TEXT. Keep the letter under correct_answer and surface
-            #     the text as correct_answer_text.
-            #   - distractors: take the first 3 from the raw row (raw is the
-            #     authoritative source).
-            # All other raw-row fields (prop, s_pop, o_pop, and anything
-            # source-specific that may exist now or be added later) are
-            # copied verbatim if they don't already exist on the eval row.
+            # Merge raw-dataset fields the eval JSONL doesn't carry, but
+            # never let them overwrite the eval-side source of truth.
             record = dict(eval_row)
             for key, value in row.items():
+                if key in _EVAL_PROTECTED_FIELDS:
+                    continue
                 if key == "correct_answer":
-                    record["correct_answer_text"] = value
+                    # raw correct_answer is the TEXT; surface as
+                    # correct_answer_text only if eval didn't already.
+                    record.setdefault("correct_answer_text", value)
                 elif key == "distractors":
-                    record["distractors"] = value[:3]
+                    record.setdefault("distractors", list(value)[:3])
                 elif key not in record:
                     record[key] = value
-            record["options"] = opts_info["options"]
-            record["correct_letter"] = opts_info["correct_letter"]
             record["source"] = ds
             record["entropy"] = round(eval_row["entropy"], 6)
             cells[ds][entropy_bin(eval_row["entropy"])].append(record)
+        if skipped_legacy:
+            total = len(eval_map)
+            pct = 100.0 * skipped_legacy / max(total, 1)
+            print(
+                f"  ⚠️  {ds}: dropped {skipped_legacy}/{total} eval rows "
+                f"({pct:.1f}%) that don't record their displayed options "
+                f"(legacy eval file). Rerun run_evaluations.py on this "
+                f"dataset and update EVAL_FILES."
+            )
     return cells
 
 
@@ -402,6 +405,49 @@ def sample_bin(
 # output
 # ---------------------------------------------------------------------------
 
+def _stratified_split(
+    records: list[dict],
+    train_ratio: float,
+    val_ratio: float,
+    seed: int,
+) -> dict[str, list[dict]]:
+    """80/10/10 split that preserves (source, entropy_bin) composition.
+
+    Within each (source, entropy_bin) cell: shuffle, then deal samples in
+    a 8:1:1 round-robin so even tiny cells (e.g. SimpleMC-low when only
+    18 are available) split predictably. Without this, with n_val ≈ 100
+    the random global shuffle can hand val a noticeably easier or harder
+    mix than train.
+    """
+    rng = random.Random(seed + 1)
+    by_cell: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    for r in records:
+        by_cell[(r["source"], entropy_bin(r["entropy"]))].append(r)
+
+    splits: dict[str, list[dict]] = {"train": [], "val": [], "test": []}
+    test_ratio = 1.0 - train_ratio - val_ratio
+    # Round-robin proportional dealing: build a length-10 pattern and walk it.
+    pattern = (
+        ["train"] * round(train_ratio * 10)
+        + ["val"]   * round(val_ratio   * 10)
+        + ["test"]  * round(test_ratio  * 10)
+    )
+    # Pad/trim to length 10 in case rounding gives 9 or 11.
+    while len(pattern) < 10:
+        pattern.append("train")
+    pattern = pattern[:10]
+
+    for cell, rows in by_cell.items():
+        rng.shuffle(rows)
+        for i, r in enumerate(rows):
+            splits[pattern[i % 10]].append(r)
+
+    # Final shuffle within each split so rows aren't grouped by cell on disk.
+    for split in splits.values():
+        rng.shuffle(split)
+    return splits
+
+
 def split_and_write(
     records: list[dict],
     output_dir: Path,
@@ -410,19 +456,8 @@ def split_and_write(
     val_ratio: float,
     seed: int,
 ) -> None:
-    rng = random.Random(seed + 1)
-    shuffled = list(records)
-    rng.shuffle(shuffled)
+    splits = _stratified_split(records, train_ratio, val_ratio, seed)
 
-    n = len(shuffled)
-    train_end = int(n * train_ratio)
-    val_end   = int(n * (train_ratio + val_ratio))
-
-    splits = {
-        "train": shuffled[:train_end],
-        "val":   shuffled[train_end:val_end],
-        "test":  shuffled[val_end:],
-    }
     output_dir.mkdir(parents=True, exist_ok=True)
     for split_name, rows in splits.items():
         path = output_dir / f"{prefix}_{split_name}.jsonl"
@@ -432,10 +467,79 @@ def split_and_write(
         print(f"  {split_name:5s}: {len(rows):>5d} → {path}")
 
     combined = output_dir / f"{prefix}.jsonl"
+    all_rows = splits["train"] + splits["val"] + splits["test"]
     with open(combined, "w") as f:
-        for r in shuffled:
+        for r in all_rows:
             f.write(json.dumps(r) + "\n")
-    print(f"  {'all':5s}: {n:>5d} → {combined}")
+    print(f"  {'all':5s}: {len(all_rows):>5d} → {combined}")
+
+    # Per-split (source, entropy_bin) breakdown so drift between splits
+    # is obvious from the run log.
+    print("\nSplit composition (source × entropy_bin):")
+    cells = ("low", "med", "high")
+    for split_name, rows in splits.items():
+        from collections import Counter
+        counts = Counter((r["source"], entropy_bin(r["entropy"])) for r in rows)
+        print(f"  {split_name}:")
+        for src in ("TriviaMC", "PopMC", "SimpleMC"):
+            line = "    " + src.ljust(10)
+            for c in cells:
+                line += f"  {c}={counts.get((src, c), 0):>4d}"
+            print(line)
+
+
+def audit_dataset(records: list[dict], splits: dict[str, list[dict]] | None = None) -> None:
+    """Hard-checks every emitted row carries the contract its consumers rely on.
+
+    Prints any violations and raises if a critical contract is broken so
+    bad data never silently makes it into a training run.
+    """
+    problems: list[str] = []
+    qid_to_split: dict[str, str] = {}
+
+    def _check(row: dict, where: str) -> None:
+        opts = row.get("options")
+        if not (isinstance(opts, dict) and set(opts.keys()) == set("ABCD")):
+            problems.append(f"{where} {row.get('qid')}: bad options dict")
+            return
+        cl = row.get("correct_letter")
+        if cl not in {"A", "B", "C", "D"}:
+            problems.append(f"{where} {row.get('qid')}: correct_letter={cl!r}")
+        if "correct_answer_text" in row and row["correct_answer_text"] != opts.get(cl):
+            problems.append(
+                f"{where} {row.get('qid')}: correct_answer_text != options[correct_letter]"
+            )
+        ma = row.get("model_answer")
+        if ma is not None and ma in opts:
+            mat = row.get("model_answer_text")
+            if mat is not None and mat != opts[ma]:
+                problems.append(
+                    f"{where} {row.get('qid')}: model_answer_text != options[model_answer]"
+                )
+        probs = row.get("probs_ABCD")
+        if probs is not None and len(probs) != 4:
+            problems.append(f"{where} {row.get('qid')}: probs_ABCD len={len(probs)}")
+
+    for r in records:
+        _check(r, "all")
+
+    if splits is not None:
+        for name, rows in splits.items():
+            for r in rows:
+                qid = r.get("qid")
+                if qid in qid_to_split and qid_to_split[qid] != name:
+                    problems.append(f"qid {qid} in both {qid_to_split[qid]} and {name}")
+                else:
+                    qid_to_split[qid] = name
+
+    if problems:
+        print("\n⚠️  AUDIT FAILURES (showing up to 10):")
+        for p in problems[:10]:
+            print(f"  {p}")
+        print(f"  ({len(problems)} total)")
+        raise SystemExit(1)
+    print("\n✓ Audit passed — every row has options/correct_letter/probs_ABCD "
+          "and no qid leaks across splits.")
 
 
 def print_summary(records: list[dict]) -> None:
@@ -506,6 +610,14 @@ def main() -> None:
 
     print(f"\nWriting splits (train={args.train_ratio:.0%} / val={args.val_ratio:.0%} / test={1-args.train_ratio-args.val_ratio:.0%}):")
     split_and_write(all_records, root / args.output_dir, args.prefix, args.train_ratio, args.val_ratio, args.seed)
+
+    # Re-read what we just wrote and audit it as a final tripwire.
+    splits = {}
+    for split_name in ("train", "val", "test"):
+        path = root / args.output_dir / f"{args.prefix}_{split_name}.jsonl"
+        with open(path) as f:
+            splits[split_name] = [json.loads(line) for line in f]
+    audit_dataset(all_records, splits)
     print("\nDone.")
 
 

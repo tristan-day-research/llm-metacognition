@@ -868,10 +868,41 @@ def run_evaluation(
                 top_prob = None
                 second_prob = None
                 prob_gap = None
+            # Record the EXACT options the model saw, plus the joining keys
+            # downstream code needs. Frozen-response training must replay
+            # this exact option order (not re-shuffle), because probs_ABCD,
+            # model_answer, correct_answer, and entropy are all measured
+            # against this specific A→D mapping.
+            #
+            # Use *_position (canonical 0-3) to index into the recorded
+            # options dict (which is keyed A-D). predicted_answer_letter and
+            # correct_answer_letter may be display letters under non-A-D
+            # MCQ_LETTER_SCHEME ("E-H", "S-Z", "random", …), so they can't
+            # be used as keys into the options dict directly.
+            _CANONICAL = ["A", "B", "C", "D"]
+            recorded_options = dict(batch[0].get("options", {}))
+            recorded_correct_letter = batch[0].get("correct_letter")
+            correct_answer_text = (
+                recorded_options.get(_CANONICAL[correct_answer_position])
+                if correct_answer_position is not None and 0 <= correct_answer_position < 4
+                else None
+            )
+            model_answer_text = (
+                recorded_options.get(_CANONICAL[predicted_answer_position])
+                if predicted_answer_position is not None and 0 <= predicted_answer_position < 4
+                else None
+            )
             log_entry = {
                 "type": f"{log_prefix}eval_sample" if log_prefix else "eval_sample",
                 "qid": batch[0].get("qid"),
                 "question": batch[0]["question"],
+                # Recorded option order at eval time — source of truth for
+                # everything below it. Same value goes through unchanged into
+                # the balanced dataset and is replayed at training time.
+                "options": recorded_options,
+                "correct_letter": recorded_correct_letter,
+                "correct_answer_text": correct_answer_text,
+                "model_answer_text": model_answer_text,
                 "model_answer": predicted_answer_letter,  # Display letter (e.g., E, F, G, H)
                 "model_answer_position": predicted_answer_position,  # Position index (0-3 for A-D)
                 "correct_answer": correct_answer_letter,  # Display letter

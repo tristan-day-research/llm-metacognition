@@ -2,8 +2,17 @@
 # --- repo path bootstrap (so root-level imports like `prompts`,
 # `finetune_config` resolve when run from anywhere) ---
 import sys as _sys
+import time as _time
+from datetime import datetime as _dt, timezone as _tz
 from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
+
+# Immediate startup banner so the user sees activity before the slow imports
+# (torch/transformers/peft/wandb take 5-10 s combined on a cold cache, and
+# load_tokenizer + load_model_with_lora add several more before train() ever
+# prints). Without this, `python finetune/run_finetuning.py` looks frozen.
+_STARTUP_T0 = _time.monotonic()
+print(f"[{_dt.now(_tz.utc).strftime('%H:%M:%SZ')}] run_finetuning.py starting — importing heavy libs (torch/peft/wandb)…", flush=True)
 
 import numpy as np
 import os
@@ -14,6 +23,7 @@ from datetime import datetime, timezone
 from torch.utils.data import DataLoader
 from peft import LoraConfig, get_peft_model
 from types import SimpleNamespace
+print(f"[+{_time.monotonic()-_STARTUP_T0:5.1f}s] heavy imports done.", flush=True)
 
 # Defaults live in finetune_config.ECTConfig — edit there to change behavior
 # globally; CLI flags still override per-run.
@@ -248,8 +258,11 @@ def train(args):
     # Setup / Load model and data
     # ============================================================
     device = args.device
+    print(f"[+{_time.monotonic()-_STARTUP_T0:5.1f}s] loading tokenizer ({args.model_name})…", flush=True)
     tokenizer = load_tokenizer(args)
+    print(f"[+{_time.monotonic()-_STARTUP_T0:5.1f}s] loading model + LoRA adapter onto {device}…", flush=True)
     model = load_model_with_lora(args, tokenizer).to(device)
+    print(f"[+{_time.monotonic()-_STARTUP_T0:5.1f}s] model ready.", flush=True)
 
     # Canonicalize model/tokenizer setup (fix pad_token warnings)
     model, tokenizer = prepare_model_and_tokenizer(model, tokenizer)

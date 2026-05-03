@@ -5,6 +5,7 @@ import sys as _sys
 from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
 
+import hashlib
 import json
 import os
 import re
@@ -13,6 +14,19 @@ import numpy as np
 import traceback
 from datetime import datetime, timezone
 from torch.utils.data import Dataset
+
+
+def stable_int_hash(text: str, modulo: int | None = None) -> int:
+    """Cross-process-stable integer hash of ``text``.
+
+    builtin ``hash(str)`` randomizes its output per Python process
+    (PYTHONHASHSEED), so it cannot be used as a deterministic seed. Use
+    md5(text)[:4] reinterpreted as a 32-bit int instead. Modulo is applied
+    afterward if provided.
+    """
+    digest = hashlib.md5(text.encode("utf-8")).digest()[:4]
+    n = int.from_bytes(digest, "big")
+    return n % modulo if modulo else n
 
 
 # Separate RNGs for training and evaluation to prevent any shared state
@@ -66,11 +80,21 @@ def load_jsonl_dataset(path, dataset_type="unknown"):
     (e.g. inline-results mode in run_finetuning.py) can read them without
     a second pass over the JSONL.
     """
-    # Path-seeded RNG so raw-row shuffles are reproducible across processes.
-    # Pre-baked rows ignore this — their options are already frozen.
-    dataset_seed = hash(path) % (2**31)
-    local_rng = np.random.default_rng(dataset_seed)
-    random.seed(dataset_seed)
+    # Path-seeded RNG so raw-row shuffles inside this single process are
+    # reproducible (e.g. logs that print the first sample). This is NOT a
+    # correctness guarantee for cross-process replay — downstream code that
+    # needs to know the exact option order the model saw at eval time must
+    # read it off the recorded ``options`` field on each row, never
+    # reconstruct it by re-running this loader.
+    #
+    # Pre-baked rows ignore this — their options are already frozen on disk.
+    #
+    # Use a LOCAL random.Random() so we don't perturb the global RNG state.
+    # The previous random.seed(dataset_seed) was a footgun: any caller that
+    # later relied on random.shuffle / random.choice from the same process
+    # (e.g. exemplar shuffling in prompts.py) would inherit our seed.
+    dataset_seed = stable_int_hash(str(path), modulo=2**31)
+    local_random = random.Random(dataset_seed)
 
     out = []
     with open(path, "r") as f:
@@ -108,7 +132,7 @@ def load_jsonl_dataset(path, dataset_type="unknown"):
             if len(opts) != 4:
                 continue
 
-            random.shuffle(opts)
+            local_random.shuffle(opts)
 
             options = {}
             correct_letter = None
@@ -130,54 +154,25 @@ def load_jsonl_dataset(path, dataset_type="unknown"):
 
 
 class MCQDataset(Dataset):
-    """Dataset for Multiple Choice Questions."""
+    """Dataset for Multiple Choice Questions.
+
+    Backs onto ``load_jsonl_dataset`` so pre-baked rows (balanced/eval JSONLs
+    that already carry an ``options`` dict) are replayed verbatim, and raw
+    rows go through the same path-seeded shuffle as the rest of the pipeline.
+    Without this, balanced rows would land in MCQ training with corrupted
+    options because the fixed-layout fallback below assumed
+    ``correct_answer`` was the answer text, while balanced rows store it as
+    a letter (A-D).
+    """
 
     def __init__(self, path):
-        """
-        Initialize MCQ dataset from JSONL file.
-
-        Args:
-            path: Path to JSONL file containing questions
-        """
-        with open(path, 'r', encoding='utf-8') as f:
-            self.rows = [json.loads(line) for line in f]
+        self.rows = load_jsonl_dataset(path, dataset_type="mcq_dataset")
 
     def __len__(self):
-        """Return number of questions in dataset."""
         return len(self.rows)
 
     def __getitem__(self, idx):
-        """
-        Get a single question from the dataset.
-
-        Args:
-            idx: Index of question to retrieve
-
-        Returns:
-            Dictionary with question, options, and correct answer
-        """
-        row = self.rows[idx]
-
-        question = row["question"]
-        correct = row["correct_answer"]
-        distractors = row["distractors"][:3]  # ensure 3
-
-        # No shuffling: fixed layout
-        options = [(correct, True)] + [(d, False) for d in distractors]
-
-        labeled = {}
-        correct_letter = None
-        for label, (text, is_correct) in zip("ABCD", options):
-            labeled[label] = text
-            if is_correct:
-                correct_letter = label
-
-        return {
-            "qid": row.get("qid", str(idx)),
-            "question": question,
-            "options": labeled,
-            "correct_letter": correct_letter,
-        }
+        return self.rows[idx]
 
 
 def normalize_text(s):

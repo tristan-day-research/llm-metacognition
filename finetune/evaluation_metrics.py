@@ -1,5 +1,5 @@
 
-# --- repo path bootstrap (so root-level imports like `finetune_prompting`,
+# --- repo path bootstrap (so root-level imports like `prompts`,
 # `finetune_config` resolve when run from anywhere) ---
 import sys as _sys
 from pathlib import Path as _Path
@@ -30,7 +30,7 @@ from loss import (
     compute_loss,
     build_soft_targets_from_entropy
 )
-from finetune_prompting import (
+from prompts import (
     build_multiple_choice_question_prompts,
     build_self_confidence_prompts,
     build_self_confidence_prompts_numeric,
@@ -225,7 +225,7 @@ def evaluate_model(
     args = SimpleArgs()
     
     # Generate confidence letter mapping
-    from finetune_prompting import get_confidence_letter_mapping, get_mcq_letter_mapping
+    from prompts import get_confidence_letter_mapping, get_mcq_letter_mapping
     confidence_letter_mapping = get_confidence_letter_mapping(
         confidence_letter_scheme,
         seed=confidence_letter_random_seed
@@ -338,14 +338,14 @@ def run_evaluation(
         if hasattr(args, 'confidence_letter_mapping') and args.confidence_letter_mapping is not None:
             confidence_letter_mapping = args.confidence_letter_mapping
         elif hasattr(args, 'confidence_letter_scheme') and args.confidence_letter_scheme is not None:
-            from finetune_prompting import get_confidence_letter_mapping
+            from prompts import get_confidence_letter_mapping
             confidence_letter_mapping = get_confidence_letter_mapping(
                 args.confidence_letter_scheme,
                 seed=getattr(args, 'confidence_letter_random_seed', None)
             )
         else:
             # Default to A-H if nothing specified
-            from finetune_prompting import get_confidence_letter_mapping
+            from prompts import get_confidence_letter_mapping
             confidence_letter_mapping = get_confidence_letter_mapping("A-H")
 
     # Resolve confidence_format from args if not passed explicitly. Determines
@@ -368,14 +368,14 @@ def run_evaluation(
         if hasattr(args, 'mcq_letter_mapping') and args.mcq_letter_mapping is not None:
             mcq_letter_mapping = args.mcq_letter_mapping
         elif hasattr(args, 'mcq_letter_scheme') and args.mcq_letter_scheme is not None:
-            from finetune_prompting import get_mcq_letter_mapping
+            from prompts import get_mcq_letter_mapping
             mcq_letter_mapping = get_mcq_letter_mapping(
                 args.mcq_letter_scheme,
                 seed=getattr(args, 'mcq_letter_random_seed', None)
             )
         else:
             # Default to A-D if nothing specified
-            from finetune_prompting import get_mcq_letter_mapping
+            from prompts import get_mcq_letter_mapping
             mcq_letter_mapping = get_mcq_letter_mapping("A-D")
     
     # Get confidence letter mapping (only if NOT randomizing per question)
@@ -386,14 +386,14 @@ def run_evaluation(
         if hasattr(args, 'confidence_letter_mapping') and args.confidence_letter_mapping is not None:
             confidence_letter_mapping = args.confidence_letter_mapping
         elif hasattr(args, 'confidence_letter_scheme') and args.confidence_letter_scheme is not None:
-            from finetune_prompting import get_confidence_letter_mapping
+            from prompts import get_confidence_letter_mapping
             confidence_letter_mapping = get_confidence_letter_mapping(
                 args.confidence_letter_scheme,
                 seed=getattr(args, 'confidence_letter_random_seed', None)
             )
         else:
             # Default to A-H if nothing specified
-            from finetune_prompting import get_confidence_letter_mapping
+            from prompts import get_confidence_letter_mapping
             confidence_letter_mapping = get_confidence_letter_mapping("A-H")
     
     # Validate val_on_frozen requirements
@@ -452,7 +452,7 @@ def run_evaluation(
 
         # Generate letter mappings for this sample if per-question randomization is enabled
         if randomize_per_question:
-            from finetune_prompting import get_mcq_letter_mapping, get_confidence_letter_mapping
+            from prompts import get_mcq_letter_mapping, get_confidence_letter_mapping
             # Generate new mappings for this sample
             sample_mcq_letter_mapping = get_mcq_letter_mapping(
                 args.mcq_letter_scheme,

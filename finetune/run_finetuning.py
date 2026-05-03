@@ -1,5 +1,5 @@
 
-# --- repo path bootstrap (so root-level imports like `finetune_prompting`,
+# --- repo path bootstrap (so root-level imports like `prompts`,
 # `finetune_config` resolve when run from anywhere) ---
 import sys as _sys
 from pathlib import Path as _Path
@@ -36,7 +36,7 @@ from loss import (
     build_soft_targets_from_entropy,
     compute_loss
 )
-from finetune_prompting import (
+from prompts import (
     build_self_confidence_prompts,
     build_self_confidence_prompts_numeric,
     build_multiple_choice_question_prompts,

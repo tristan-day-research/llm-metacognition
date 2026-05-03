@@ -46,7 +46,7 @@ OUTPUT FILES (per dataset, same stem):
         - Position-bias diagnostics + final summary at end
 """
 
-# --- repo path bootstrap (so root-level imports like `finetune_prompting`,
+# --- repo path bootstrap (so root-level imports like `prompts`,
 # `finetune_config` resolve when run from anywhere) ---
 import sys as _sys
 from pathlib import Path as _Path
@@ -81,7 +81,7 @@ from data_handling import load_jsonl_dataset
 from evaluation_metrics import evaluate_model
 from experiment_config import LLAMA_8B_BASE, LLAMA_8B_INSTRUCT
 from finetune_config import ECTConfig
-from finetune_prompting import (
+from prompts import (
     build_multiple_choice_question_prompts,
     build_other_confidence_prompts,
     build_other_confidence_prompts_numeric,

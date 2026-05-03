@@ -177,8 +177,8 @@ class ECTConfig:
 
     EVAL_DATASETS = (
         "data/PopMC.jsonl",
-        "data/SimpleMC.jsonl",
-        "data/TriviaMC.jsonl",
+        # "data/SimpleMC.jsonl",
+        # "data/TriviaMC.jsonl",
     )
     EVAL_MAX_SAMPLES = None  # None = full dataset
     EVAL_COMPUTE_CONFIDENCE = True

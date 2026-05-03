@@ -29,9 +29,8 @@ def load_evaluation_jsonl(
     path: str | Path,
     type_filter: Optional[str] = None,
 ) -> tuple[pd.DataFrame, dict]:
-    """Load a JSONL produced by ``finetune/run_evaluations.py`` (or
-    ``finetune/question_difficulty_sweep.py``) into a DataFrame plus a dict
-    of summary blobs.
+    """Load a JSONL produced by ``finetune/run_evaluations.py`` into a
+    DataFrame plus a dict of summary blobs.
 
     The JSONL contains two row kinds:
         - ``{"type": "<prefix>eval_sample", ...}`` — one per question, with
@@ -42,10 +41,8 @@ def load_evaluation_jsonl(
           (accuracy, ECE, Brier, etc.) written once per ``evaluate_model``
           call.
 
-    The ``<prefix>`` is set by the wrapper. ``run_evaluations.py`` uses
-    ``"instruct_"`` and ``"finetuned_"`` when comparing two models in one
-    file. ``question_difficulty_sweep.py`` uses dataset names like
-    ``"PopMC_"``, ``"TriviaMC_"``, ``"SimpleMC_"``.
+    The ``<prefix>`` matches ``EVAL_MODEL_TYPE``: ``"base_"``, ``"instruct_"``,
+    or ``"finetuned_"``.
 
     Parameters
     ----------

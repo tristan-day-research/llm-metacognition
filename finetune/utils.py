@@ -1,5 +1,5 @@
 
-# --- repo path bootstrap (so root-level imports like `finetune_prompting`,
+# --- repo path bootstrap (so root-level imports like `prompts`,
 # `finetune_config` resolve when run from anywhere) ---
 import sys as _sys
 from pathlib import Path as _Path

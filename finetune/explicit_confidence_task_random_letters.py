@@ -1,5 +1,5 @@
 
-# --- repo path bootstrap (so root-level imports like `finetune_prompting`,
+# --- repo path bootstrap (so root-level imports like `prompts`,
 # `finetune_config` resolve when run from anywhere) ---
 import sys as _sys
 from pathlib import Path as _Path
@@ -7,7 +7,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
 
 from core.model_utils import load_model_and_tokenizer
 from data_handling import load_jsonl_dataset
-from finetune_prompting import (
+from prompts import (
     get_letter_token_ids,
     run_confidence_forward_pass,
 )

@@ -53,6 +53,24 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
 
 
+# --- Pre-flight checks (before heavy imports so failures are instant) ---
+import os as _os
+
+def _check_hf_login():
+    try:
+        from huggingface_hub import HfFolder
+    except ImportError:
+        return
+    if HfFolder.get_token() is None and not _os.environ.get("HF_TOKEN") and not _os.environ.get("HUGGING_FACE_HUB_TOKEN"):
+        raise SystemExit(
+            "\n✗  Not logged in to Hugging Face.\n"
+            "   Run:  huggingface-cli login\n"
+            "   or set the HF_TOKEN environment variable.\n"
+        )
+
+_check_hf_login()
+
+
 import contextlib
 import io
 import json

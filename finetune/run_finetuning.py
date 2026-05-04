@@ -7,6 +7,42 @@ from datetime import datetime as _dt, timezone as _tz
 from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
 
+
+# --- Pre-flight checks (before heavy imports so failures are instant) ---
+def _check_hf_login():
+    try:
+        from huggingface_hub import HfFolder
+    except ImportError:
+        return  # will fail later with a clearer error
+    if HfFolder.get_token() is None and not _os.environ.get("HF_TOKEN") and not _os.environ.get("HUGGING_FACE_HUB_TOKEN"):
+        raise SystemExit(
+            "\n✗  Not logged in to Hugging Face.\n"
+            "   Run:  huggingface-cli login\n"
+            "   or set the HF_TOKEN environment variable.\n"
+        )
+
+def _check_wandb_login():
+    try:
+        import wandb as _wandb
+    except ImportError:
+        return
+    if not _wandb.api.api_key:
+        raise SystemExit(
+            "\n✗  Not logged in to Weights & Biases.\n"
+            "   Run:  wandb login\n"
+            "   or set the WANDB_API_KEY environment variable.\n"
+        )
+
+import os as _os
+_check_hf_login()
+# Only check wandb if we'll actually use it (read config before heavy imports)
+try:
+    from finetune_config import ECTConfig as _ECTConfigPreflight
+    if _ECTConfigPreflight.SAVE_WANDB_ARTIFACT:
+        _check_wandb_login()
+except Exception:
+    pass  # if config fails to import here, the real import below will surface the error
+
 # Immediate startup banner so the user sees activity before the slow imports
 # (torch/transformers/peft/wandb take 5-10 s combined on a cold cache, and
 # load_tokenizer + load_model_with_lora add several more before train() ever
@@ -45,6 +81,7 @@ from utils import (
 )
 from loss import (
     build_soft_targets_from_entropy,
+    build_soft_targets,
     compute_loss
 )
 from prompts import (
@@ -120,39 +157,50 @@ def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=
     # This is selected with --no_use_recorded_responses flag when running this file
     # ----------------------------------------------
 
+    finetuning_target = getattr(args, "finetuning_target", "entropy")
+
     if args.use_recorded_responses:
         if mcq_results_lookup is None:
             raise ValueError(
                 "--use_recorded_responses is True but no mcq_results_data provided!"
             )
-        
-        # Look up pre-recorded entropy for each question in batch
+
+        # Look up pre-recorded signals for each question in batch
         entropies = []
+        top_probs = []
+        second_probs = []
         valid_indices = []  # Track which samples in batch are valid
-        
+
         for i, row in enumerate(batch):
             qid = row.get("qid")
             if qid and qid in mcq_results_lookup:
-                entropies.append(mcq_results_lookup[qid]["entropy"])
+                record = mcq_results_lookup[qid]
+                entropies.append(record["entropy"])
+                # top_prob / second_prob derived from stored probs dict (A-D order)
+                probs_list = sorted(record["probs"].values(), reverse=True)
+                top_probs.append(probs_list[0])
+                second_probs.append(probs_list[1] if len(probs_list) > 1 else 1e-12)
                 valid_indices.append(i)
             else:
                 # Skip this question
                 print(f"⏭️  Skipping question without pre-recorded data: qid={qid}")
-        
+
         # If no valid samples in batch, skip this training step
         if len(entropies) == 0:
             print(f"⚠️  Entire batch skipped - no pre-recorded data available")
             return None
-        
+
         # Filter batch to only valid samples
         if len(valid_indices) < len(batch):
             batch = [batch[i] for i in valid_indices]
             print(f"  Batch reduced from {len(valid_indices)} to {len(batch)} samples")
-        
+
         entropy = torch.tensor(entropies, dtype=torch.float32, device=device)
+        top_prob = torch.tensor(top_probs, dtype=torch.float32, device=device)
+        second_prob = torch.tensor(second_probs, dtype=torch.float32, device=device)
 
     # ----------------------------------------------
-    # If using dynamic teacher: compute entropy live from current model
+    # If using dynamic teacher: compute signals live from current model
     # This is  selected with --use_recorded_responses flag when  running this file
     # ----------------------------------------------
 
@@ -174,13 +222,22 @@ def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=
             requires_grad=True,  # KEEP GRADIENTS for dynamic teacher
             mcq_letter_mapping=mcq_letter_mapping,
         )
-        
+
         entropy = mcq_out["entropy"]  # [B]
+        probs4 = mcq_out["probs4"]   # [B, 4]
+        sorted_probs = probs4.sort(dim=-1, descending=True).values
+        top_prob = sorted_probs[:, 0]
+        second_prob = sorted_probs[:, 1]
 
     # Convert to soft labels (size depends on confidence_format)
     confidence_format = getattr(args, "confidence_format", "letter_8bin")
-    soft = build_soft_targets_from_entropy(
-        entropy, sigma=sigma, confidence_format=confidence_format
+    soft = build_soft_targets(
+        finetuning_target,
+        entropy=entropy,
+        top_prob=top_prob,
+        second_prob=second_prob,
+        sigma=sigma,
+        confidence_format=confidence_format,
     )
 
 
@@ -208,8 +265,8 @@ def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=
             confidence_letter_mapping=confidence_letter_mapping,
         )
         conf_logits = conf_out["logits8"]  # [B, 8]
-    elif confidence_format in ("numeric_1_5", "numeric_1_10"):
-        n_max = 5 if confidence_format == "numeric_1_5" else 10
+    elif confidence_format in ("1-5", "1-10"):
+        n_max = 5 if confidence_format == "1-5" else 10
         conf_prompts = build_self_confidence_prompts_numeric(
             batch, tokenizer, mcq_letter_mapping, n_max=n_max,
             model_type="instruct",
@@ -353,6 +410,7 @@ def train(args):
         "\n[config] "
         f"sigma={args.sigma}  "
         f"loss_type={args.loss_type}  "
+        f"finetuning_target={getattr(args, 'finetuning_target', 'entropy')}  "
         f"confidence_format={args.confidence_format}  "
         f"lr={args.learning_rate}  "
         f"batch_size={args.batch_size}  "
@@ -610,6 +668,7 @@ def train(args):
     wandb_run = None
     wandb_run_id = None
     wandb_run_name = None
+    wandb_local_run_dir = None
     wandb_init_timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     
     if args.save_wandb_artifact:
@@ -629,14 +688,24 @@ def train(args):
         )
         wandb_run_id = wandb_run.id
         wandb_run_name = wandb_run.name
+        # Capture the local run dir so we can delete it after wandb.finish()
+        # (wandb_run.dir points at .../files/; the parent is the per-run dir).
+        wandb_local_run_dir = os.path.dirname(wandb_run.dir) if wandb_run.dir else None
         print(f"✓ WandB run initialized: {wandb_run_name} (ID: {wandb_run_id})")
 
     # Output / checkpoints
     output_dir = args.output_dir
     os.makedirs(output_dir, exist_ok=True)
 
-    # Setup checkpoint directory with datetime
-    checkpoint_base_dir = os.path.join(str(_C.CHECKPOINTS_DIR), f"{timestamp}_checkpoints")
+    # Setup checkpoint directory — use the (timestamp-prefixed) WandB run name
+    # so the same identifier appears both on disk and in W&B / HF. Falls back
+    # to `{timestamp}_checkpoints` when no run name is available.
+    from utils import _sanitize_for_hf
+    if args.wandb_run_name:
+        checkpoint_dir_name = _sanitize_for_hf(args.wandb_run_name)
+    else:
+        checkpoint_dir_name = f"{timestamp}_checkpoints"
+    checkpoint_base_dir = os.path.join(str(_C.CHECKPOINTS_DIR), checkpoint_dir_name)
     os.makedirs(checkpoint_base_dir, exist_ok=True)
     print(f"✓ Checkpoints will be saved to: {os.path.abspath(checkpoint_base_dir)}")
     
@@ -920,10 +989,19 @@ def train(args):
         print("❌ Model save failed! Check error messages above.")
         raise RuntimeError("Failed to save model")
     
-    # Finish wandb run after model is saved (so artifact can be logged)
+    # Finish wandb run after model is saved (so artifact can be logged).
+    # wandb.finish() blocks until all metrics + artifacts are uploaded, so
+    # the local per-run directory is safe to delete afterwards.
     if args.save_wandb_artifact:
         import wandb
+        import shutil
         wandb.finish()
+        if wandb_local_run_dir and os.path.isdir(wandb_local_run_dir):
+            try:
+                shutil.rmtree(wandb_local_run_dir)
+                print(f"✓ Removed local W&B run dir: {wandb_local_run_dir}")
+            except Exception as _e:
+                print(f"⚠️  Could not delete W&B run dir {wandb_local_run_dir}: {_e}")
     
     # Final summary into the structured .txt run record, then unhook the
     # warnings handler so we don't leak it past this run.
@@ -975,6 +1053,7 @@ def build_args_from_config():
         val_num_samples=_C.VAL_NUM_SAMPLES,
         sigma=_C.SIGMA,
         loss_type=_C.LOSS_TYPE,
+        finetuning_target=_C.FINETUNING_TARGET,
         temperature=_C.TEMPERATURE,
         shuffle_options=_C.SHUFFLE_OPTIONS,
         use_recorded_responses=_C.USE_RECORDED_RESPONSES,

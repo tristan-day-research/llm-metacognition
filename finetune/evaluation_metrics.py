@@ -27,7 +27,8 @@ from utils import (
 from loss import (
     convert_entropy_to_soft_labels,
     compute_loss,
-    build_soft_targets_from_entropy
+    build_soft_targets_from_entropy,
+    build_soft_targets,
 )
 from prompts import (
     build_multiple_choice_question_prompts,
@@ -94,9 +95,9 @@ def _confidence_pass(
             "pred_index": out["pred_bin_indices"],
         }
 
-    if confidence_format == "numeric_1_5":
+    if confidence_format == "1-5":
         n_max = 5
-    elif confidence_format == "numeric_1_10":
+    elif confidence_format == "1-10":
         n_max = 10
     else:
         raise ValueError(f"Unknown confidence_format: {confidence_format!r}")
@@ -563,6 +564,13 @@ def run_evaluation(
     predicted_other_confidence_letters = []  # Display letter confidence predictions (other) (e.g., S-Z)
     predicted_other_confidence_bin_indices = []  # Bin indices for other confidence
     prerecorded_entropy_values = []  # Pre-recorded entropy from mcq_results_data
+    # Per-sample top/second probabilities, used to compute top_logit and
+    # logit_gap correlations against stated confidence. Stored as floats or
+    # None so they remain index-aligned with expected_conf_values.
+    live_top_prob_values = []
+    live_second_prob_values = []
+    frozen_top_prob_values = []
+    frozen_second_prob_values = []
     # Delegate-game accumulators. Each is filled when the corresponding toggle
     # is on, otherwise stays empty so the summary block can detect "not run".
     delegate_abcdt_pred_canonical = []   # canonical letter A/B/C/D/T
@@ -605,18 +613,23 @@ def run_evaluation(
         # 0. Look up pre-recorded entropy if available (before any option changes)
         # We do this BEFORE verify_and_resolve_options to avoid option mismatches
         prerecorded_entropy = None
+        frozen_top_prob = None
+        frozen_second_prob = None
         if mcq_results_lookup is not None:
             qid = batch[0].get("qid")
             if qid and str(qid) in mcq_results_lookup:
-                prerecorded_entropy = mcq_results_lookup[str(qid)].get("entropy")
-                if prerecorded_entropy is not None:
-                    prerecorded_entropy_values.append(prerecorded_entropy)
-                else:
-                    prerecorded_entropy_values.append(None)
-            else:
-                prerecorded_entropy_values.append(None)
-        else:
-            prerecorded_entropy_values.append(None)
+                _frozen_record = mcq_results_lookup[str(qid)]
+                prerecorded_entropy = _frozen_record.get("entropy")
+                _frozen_probs = _frozen_record.get("probs")
+                if isinstance(_frozen_probs, dict) and len(_frozen_probs) >= 2:
+                    _sorted_frozen = sorted(
+                        (float(v) for v in _frozen_probs.values()), reverse=True
+                    )
+                    frozen_top_prob = _sorted_frozen[0]
+                    frozen_second_prob = _sorted_frozen[1]
+        prerecorded_entropy_values.append(prerecorded_entropy)
+        frozen_top_prob_values.append(frozen_top_prob)
+        frozen_second_prob_values.append(frozen_second_prob)
         
         # 0.5. Resolve options (but don't change them for evaluation - keep shuffled options)
         # We pass None to avoid replacing options with unshuffled recorded options
@@ -767,15 +780,59 @@ def run_evaluation(
             )
         entropy_values.append(entropy_value)
 
+        # Record live top/second probabilities for top_logit / logit_gap
+        # correlations. probs_ABCD is None when val_on_frozen=True or when
+        # the live MCQ pass was disabled.
+        if probs_ABCD is not None and len(probs_ABCD) >= 2:
+            _sorted_live = sorted(probs_ABCD, reverse=True)
+            live_top_prob_values.append(float(_sorted_live[0]))
+            live_second_prob_values.append(float(_sorted_live[1]))
+        else:
+            live_top_prob_values.append(None)
+            live_second_prob_values.append(None)
+
         # ==================================================
         # 2. Soft targets
         # ==================================================
-        # entropy_value is a scalar float from MCQ evaluation or prerecorded data
-        # Convert to tensor and use the resolved sigma (from parameter or args.sigma)
+        # Build soft targets from the SAME signal that training uses
+        # (args.finetuning_target). Using entropy here would produce a val
+        # loss that isn't comparable to train loss when FINETUNING_TARGET
+        # is "top_logit" or "logit_gap".
+        # Active teacher = frozen when val_on_frozen, else live.
         entropy_tensor = torch.tensor([entropy_value], dtype=torch.float32, device=device)
-        soft_targets = build_soft_targets_from_entropy(
-            entropy_tensor, sigma=sigma, confidence_format=confidence_format
-        )
+        if val_on_frozen:
+            active_top_prob = frozen_top_prob
+            active_second_prob = frozen_second_prob
+        else:
+            active_top_prob = (
+                live_top_prob_values[-1] if live_top_prob_values else None
+            )
+            active_second_prob = (
+                live_second_prob_values[-1] if live_second_prob_values else None
+            )
+        _ft_target = getattr(args, "finetuning_target", "entropy")
+        if _ft_target in ("top_logit", "logit_gap") and active_top_prob is not None:
+            top_prob_tensor = torch.tensor(
+                [active_top_prob], dtype=torch.float32, device=device
+            )
+            second_prob_tensor = (
+                torch.tensor([active_second_prob], dtype=torch.float32, device=device)
+                if active_second_prob is not None
+                else None
+            )
+            soft_targets = build_soft_targets(
+                _ft_target,
+                entropy=entropy_tensor,
+                top_prob=top_prob_tensor,
+                second_prob=second_prob_tensor,
+                sigma=sigma,
+                confidence_format=confidence_format,
+            )
+        else:
+            # Default / fallback: entropy-based targets.
+            soft_targets = build_soft_targets_from_entropy(
+                entropy_tensor, sigma=sigma, confidence_format=confidence_format
+            )
  
 
 
@@ -1394,6 +1451,78 @@ def run_evaluation(
                     except Exception:
                         pass
     
+    # ---------------------------------------------------------------
+    # top_logit and logit_gap correlations against stated confidence.
+    # Computed for both the LIVE teacher (current model's MCQ probs) and
+    # the FROZEN teacher (pre-recorded probs) regardless of which signal
+    # is being used in the loss — useful for monitoring all three targets
+    # in parallel during a run.
+    #
+    # Sign convention: top_prob and logit_gap are POSITIVELY correlated
+    # with confidence (high top_prob / large gap → certain), so unlike
+    # entropy these are NOT negated.
+    # ---------------------------------------------------------------
+    def _safe_corr(x, y):
+        """Return (spearman, pearson) over rows where both are finite,
+        or (0.0, 0.0) when not enough valid points."""
+        x_arr = np.asarray(
+            [float('nan') if v is None else float(v) for v in x],
+            dtype=np.float64,
+        )
+        y_arr = np.asarray(
+            [float('nan') if v is None else float(v) for v in y],
+            dtype=np.float64,
+        )
+        mask = np.isfinite(x_arr) & np.isfinite(y_arr)
+        if mask.sum() < 3:
+            return 0.0, 0.0
+        xv, yv = x_arr[mask], y_arr[mask]
+        if float(np.std(xv)) < 1e-8 or float(np.std(yv)) < 1e-8:
+            return 0.0, 0.0
+        try:
+            s, _ = spearmanr(xv, yv)
+            p, _ = pearsonr(xv, yv)
+            return (
+                float(s) if not np.isnan(s) else 0.0,
+                float(p) if not np.isnan(p) else 0.0,
+            )
+        except Exception:
+            return 0.0, 0.0
+
+    def _log_gap_series(top_vals, second_vals):
+        """log(top/second) per sample, with None where either input is missing."""
+        out = []
+        for tp, sp in zip(top_vals, second_vals):
+            if tp is None or sp is None or tp <= 0 or sp <= 0:
+                out.append(None)
+            else:
+                out.append(math.log(tp) - math.log(sp))
+        return out
+
+    self_live_top_logit_corr_spearman = 0.0
+    self_live_top_logit_corr_pearson = 0.0
+    self_live_logit_gap_corr_spearman = 0.0
+    self_live_logit_gap_corr_pearson = 0.0
+    self_frozen_top_logit_corr_spearman = 0.0
+    self_frozen_top_logit_corr_pearson = 0.0
+    self_frozen_logit_gap_corr_spearman = 0.0
+    self_frozen_logit_gap_corr_pearson = 0.0
+    if compute_confidence:
+        self_live_top_logit_corr_spearman, self_live_top_logit_corr_pearson = _safe_corr(
+            live_top_prob_values, expected_conf_values
+        )
+        self_live_logit_gap_corr_spearman, self_live_logit_gap_corr_pearson = _safe_corr(
+            _log_gap_series(live_top_prob_values, live_second_prob_values),
+            expected_conf_values,
+        )
+        self_frozen_top_logit_corr_spearman, self_frozen_top_logit_corr_pearson = _safe_corr(
+            frozen_top_prob_values, expected_conf_values
+        )
+        self_frozen_logit_gap_corr_spearman, self_frozen_logit_gap_corr_pearson = _safe_corr(
+            _log_gap_series(frozen_top_prob_values, frozen_second_prob_values),
+            expected_conf_values,
+        )
+
     # Calibration: correlation between confidence and correctness
     # (No entropy involved here, so no negation needed.)
     calibration_corr = 0.0          # spearman ρ
@@ -1412,9 +1541,13 @@ def run_evaluation(
     print(f"{step_name.upper()} — Correlations (Spearman ρ / Pearson r)")
     print("="*60)
     print(f"  self_live    (-entropy ↔ self_conf):    ρ={self_live_corr:+.4f}   r={self_live_corr_pearson:+.4f}")
+    print(f"  self_live    (top_logit ↔ self_conf):   ρ={self_live_top_logit_corr_spearman:+.4f}   r={self_live_top_logit_corr_pearson:+.4f}")
+    print(f"  self_live    (logit_gap ↔ self_conf):   ρ={self_live_logit_gap_corr_spearman:+.4f}   r={self_live_logit_gap_corr_pearson:+.4f}")
     print(f"  other_live   (-entropy ↔ other_conf):   ρ={other_live_corr:+.4f}   r={other_live_corr_pearson:+.4f}")
     if avg_prerecorded_entropy is not None:
         print(f"  self_frozen  (-prerec_ent ↔ self_conf): ρ={self_frozen_corr:+.4f}   r={self_frozen_corr_pearson:+.4f}")
+        print(f"  self_frozen  (top_logit ↔ self_conf):   ρ={self_frozen_top_logit_corr_spearman:+.4f}   r={self_frozen_top_logit_corr_pearson:+.4f}")
+        print(f"  self_frozen  (logit_gap ↔ self_conf):   ρ={self_frozen_logit_gap_corr_spearman:+.4f}   r={self_frozen_logit_gap_corr_pearson:+.4f}")
         print(f"  other_frozen (-prerec_ent ↔ other_conf):ρ={other_frozen_corr:+.4f}   r={other_frozen_corr_pearson:+.4f}")
     print(f"  calibration  (self_conf ↔ correctness): ρ={calibration_corr:+.4f}   r={calibration_corr_pearson:+.4f}")
     print(f"  (n={n}, std_entropy={std_entropy:.4f}, std_self_conf={std_conf:.4f})")
@@ -1461,6 +1594,16 @@ def run_evaluation(
     results["calibration_corr_spearman"] = calibration_corr
     results["calibration_corr_pearson"] = calibration_corr_pearson
     results["correlations_use_negative_entropy"] = True
+    # New: top_logit / logit_gap correlations against stated confidence.
+    # These are NOT negated because top_prob and logit_gap rise with confidence.
+    results["self_live_top_logit_corr_spearman"] = self_live_top_logit_corr_spearman
+    results["self_live_top_logit_corr_pearson"] = self_live_top_logit_corr_pearson
+    results["self_live_logit_gap_corr_spearman"] = self_live_logit_gap_corr_spearman
+    results["self_live_logit_gap_corr_pearson"] = self_live_logit_gap_corr_pearson
+    results["self_frozen_top_logit_corr_spearman"] = self_frozen_top_logit_corr_spearman
+    results["self_frozen_top_logit_corr_pearson"] = self_frozen_top_logit_corr_pearson
+    results["self_frozen_logit_gap_corr_spearman"] = self_frozen_logit_gap_corr_spearman
+    results["self_frozen_logit_gap_corr_pearson"] = self_frozen_logit_gap_corr_pearson
 
     # Log the summary as one blob
     if log_file_path is not None:
@@ -1492,6 +1635,13 @@ def run_evaluation(
                 # so a well-calibrated model produces a POSITIVE value.
                 f"{prefix}/self_live_corr_spearman": self_live_corr,
                 f"{prefix}/self_live_corr_pearson": self_live_corr_pearson,
+                # top_logit and logit_gap correlations from the LIVE teacher.
+                # Always logged — useful for monitoring all three potential
+                # training signals in parallel regardless of which is active.
+                f"{prefix}/self_live_top_logit_corr_spearman": self_live_top_logit_corr_spearman,
+                f"{prefix}/self_live_top_logit_corr_pearson": self_live_top_logit_corr_pearson,
+                f"{prefix}/self_live_logit_gap_corr_spearman": self_live_logit_gap_corr_spearman,
+                f"{prefix}/self_live_logit_gap_corr_pearson": self_live_logit_gap_corr_pearson,
                 f"{prefix}/other_live_corr_spearman": other_live_corr,
                 f"{prefix}/other_live_corr_pearson": other_live_corr_pearson,
                 f"{prefix}/calibration_corr_spearman": calibration_corr,
@@ -1505,6 +1655,11 @@ def run_evaluation(
                 wandb_metrics[f"{prefix}/std_prerecorded_entropy"] = std_prerecorded_entropy
                 wandb_metrics[f"{prefix}/self_frozen_corr_spearman"] = self_frozen_corr
                 wandb_metrics[f"{prefix}/self_frozen_corr_pearson"] = self_frozen_corr_pearson
+                # top_logit / logit_gap correlations from the FROZEN teacher.
+                wandb_metrics[f"{prefix}/self_frozen_top_logit_corr_spearman"] = self_frozen_top_logit_corr_spearman
+                wandb_metrics[f"{prefix}/self_frozen_top_logit_corr_pearson"] = self_frozen_top_logit_corr_pearson
+                wandb_metrics[f"{prefix}/self_frozen_logit_gap_corr_spearman"] = self_frozen_logit_gap_corr_spearman
+                wandb_metrics[f"{prefix}/self_frozen_logit_gap_corr_pearson"] = self_frozen_logit_gap_corr_pearson
                 wandb_metrics[f"{prefix}/other_frozen_corr_spearman"] = other_frozen_corr
                 wandb_metrics[f"{prefix}/other_frozen_corr_pearson"] = other_frozen_corr_pearson
             

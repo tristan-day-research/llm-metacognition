@@ -22,6 +22,8 @@ Analyzes the confidence contrast JSON to identify potential issues:
 import sys as _sys
 from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
+from preflight import check_hf_login; check_hf_login()
+
 
 
 import json

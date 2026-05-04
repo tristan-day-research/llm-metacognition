@@ -134,7 +134,7 @@ def log_sample_prompts_and_replies(
     model's actual reply.
 
     Confidence prompt variants follow CONFIDENCE_FORMAT
-    ("letter_8bin" → letter prompts, "numeric_1_5" / "numeric_1_10" → numeric).
+    ("letter_8bin" → letter prompts, "1-5" / "1-10" → numeric).
     Self- and other-confidence always use the same scheme. Prompt formatting
     follows model_type ("base" → raw text, otherwise → chat tags).
     """
@@ -152,8 +152,8 @@ def log_sample_prompts_and_replies(
 
     # Self- and other-confidence (same scheme)
     if run_self_confidence or run_other_confidence:
-        if confidence_format in ("numeric_1_5", "numeric_1_10"):
-            n_max = 5 if confidence_format == "numeric_1_5" else 10
+        if confidence_format in ("1-5", "1-10"):
+            n_max = 5 if confidence_format == "1-5" else 10
             self_prompt = build_self_confidence_prompts_numeric(
                 [sample_row], tokenizer, mcq_letter_mapping, n_max=n_max,
                 model_type=model_type,

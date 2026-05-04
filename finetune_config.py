@@ -68,12 +68,18 @@ class ECTConfig:
     DEVICE = "cuda"
 
     # Soft-label / loss math.
-    SIGMA = 5 # Gaussian width for entropy → soft-label conversion
+    SIGMA = 12 # Gaussian width for entropy → soft-label conversion
     TEMPERATURE = 0.0  # 0 = deterministic argmax; >0 = sampling
 
     # Loss formulation. Used by training (compute_loss) AND reported by
     # evaluation_metrics as a validation-loss metric.
     LOSS_TYPE = "gaussian_soft_bin_ce"  # or "scalar_confidence_mse"
+
+    # Signal used to build the soft confidence target during training.
+    # "entropy"   — normalised MCQ entropy (existing behaviour).
+    # "top_logit" — probability of the top MCQ choice, mapped [0.25,1]→[0,100].
+    # "logit_gap" — log-prob gap between top and second choice, mapped via tanh.
+    FINETUNING_TARGET = "entropy"
 
     # Confidence response format — controls which prompt builder, forward
     # pass, and loss bin spec are used. Self- and other-confidence ALWAYS
@@ -83,14 +89,14 @@ class ECTConfig:
     #                    "<5%, 5-10%, 10-20%, 20-40%, 40-60%, 60-80%, 80-90%, >90%".
     #                    Soft labels weight each bin by its width since the
     #                    bins aren't uniform.
-    #   "numeric_1_5"  — single-digit tokens 1..5. 5 uniform bins of 20% each,
-    #                    midpoints at [10, 30, 50, 70, 90].
-    #   "numeric_1_10" — single-digit tokens 1..10. 10 uniform bins of 10%
-    #                    each, midpoints at [5, 15, 25, …, 95]. Llama 3
-    #                    tokenizes "10" as a single token, so this is clean.
+    #   "1-5"  — single-digit tokens 1..5. 5 uniform bins of 20% each,
+    #            midpoints at [10, 30, 50, 70, 90].
+    #   "1-10" — single-digit tokens 1..10. 10 uniform bins of 10%
+    #            each, midpoints at [5, 15, 25, …, 95]. Llama 3
+    #            tokenizes "10" as a single token, so this is clean.
     # All three are wired end-to-end: prompt builder → forward pass → loss
     # → evaluation_metrics. Switching this knob is the only change needed.
-    CONFIDENCE_FORMAT = "numeric_1_10"
+    CONFIDENCE_FORMAT = "1-10"
 
     # MCQ answer letters — ALWAYS used (the model still picks A/B/C/D for the
     # multiple-choice answer regardless of which confidence format you use).
@@ -120,9 +126,12 @@ class ECTConfig:
     # =========================================================================
 
     # Data
-    TRAIN_DATA_PATH = "data/balanced_metacognition_train.jsonl"
-    VAL_DATA_PATH = "data/balanced_metacognition_val.jsonl"
-    TEST_DATA_PATH = "data/balanced_metacognition_test.jsonl"
+    # TRAIN_DATA_PATH = "data/balanced_metacognition_train.jsonl"
+    # VAL_DATA_PATH = "data/balanced_metacognition_val.jsonl"
+    # TEST_DATA_PATH = "data/balanced_metacognition_test.jsonl"
+    TRAIN_DATA_PATH = "data/balanced_popMC_train.jsonl"
+    VAL_DATA_PATH = "data/balanced_popMC_val.jsonl"
+    TEST_DATA_PATH = "data/balanced_popMC_test.jsonl"
     BATCH_SIZE = 4
     MCQ_RESULTS_DATA = None  # path to JSON/JSONL with pre-recorded MCQ entropies
 
@@ -151,8 +160,8 @@ class ECTConfig:
     # LORA_TARGET_MODULES = ("q_proj", "v_proj")
 
     # Training loop
-    LEARNING_RATE = 1e-5
-    MAX_STEPS = 3000
+    LEARNING_RATE = 2e-5
+    MAX_STEPS = 2500
     LOG_INTERVAL = 20
     VAL_INTERVAL = 100
     LIMIT_VAL_BATCHES = None
@@ -179,21 +188,24 @@ class ECTConfig:
     OUTPUT_DIR = FINETUNE_OUTPUTS_DIR / "ect_lora"
     LOGS_DIR = FINETUNE_LOGS_DIR
     CHECKPOINTS_DIR = FINETUNE_CHECKPOINTS_DIR
-    CHECKPOINT_STEPS = 500
-    # If False, the local checkpoint dirs (final OUTPUT_DIR + per-step CHECKPOINTS_DIR/...)
-    # are deleted after they've been uploaded to W&B / HF, so no local artifacts
-    # persist on disk. Local saves still happen briefly because wandb artifact
-    # upload reads from a directory; we just clean them up afterwards.
-    KEEP_LOCAL_CHECKPOINTS = False
+    CHECKPOINT_STEPS = 250
+    # When True, local checkpoint dirs are preserved on disk after the run.
+    # When False, they are deleted after being uploaded to W&B / HF.
+    # Default workflow: keep everything local during training, then use
+    # finetune/push_checkpoint.py to push only the few checkpoints worth saving.
+    KEEP_LOCAL_CHECKPOINTS = True
     SAVE_HF = False
     HF_REPO = None
+    # Periodic HF checkpoint pushes during training. Off by default — see
+    # finetune/push_checkpoint.py to upload selected local checkpoints
+    # post-hoc instead, so HF doesn't fill up with throwaway runs.
     SAVE_HF_CHECKPOINTS = False
     HF_CHECKPOINT_REPO = None
     HF_CHECKPOINT_PRIVATE = False
 
     # Weights & Biases (training)
     WANDB_PROJECT = "llm-metacognition-ect"
-    WANDB_RUN_NAME = "1-10 bins anchor only, balanced dataset"
+    WANDB_RUN_NAME = f"popMC_balanced_{FINETUNING_TARGET}_{LEARNING_RATE}_CONFIDENCE_FORMAT_{LORA_TARGET_MODULES}_sigma{SIGMA}_Lora_{LORA_R}_{LORA_ALPHA}"
     WANDB_TAGS = None
     WANDB_NOTES = None
     SAVE_WANDB_ARTIFACT = True

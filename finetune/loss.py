@@ -19,8 +19,8 @@ import torch
 #
 # letter_8bin   — non-uniform bins matching the prompt
 #                 "<5%, 5-10%, 10-20%, 20-40%, 40-60%, 60-80%, 80-90%, >90%"
-# numeric_1_5   — 5 uniform bins of 20% each
-# numeric_1_10  — 10 uniform bins of 10% each
+# 1-5   — 5 uniform bins of 20% each
+# 1-10  — 10 uniform bins of 10% each
 
 _BIN_SPECS = {
     "letter_8bin": {
@@ -28,12 +28,12 @@ _BIN_SPECS = {
         "midpoints": [2.5, 7.5, 15.0, 30.0, 50.0, 70.0, 85.0, 95.0],
         "widths":    [5.0, 5.0, 10.0, 20.0, 20.0, 20.0, 10.0, 10.0],
     },
-    "numeric_1_5": {
+    "1-5": {
         "n_bins": 5,
         "midpoints": [10.0, 30.0, 50.0, 70.0, 90.0],
         "widths":    [20.0, 20.0, 20.0, 20.0, 20.0],
     },
-    "numeric_1_10": {
+    "1-10": {
         "n_bins": 10,
         "midpoints": [5.0, 15.0, 25.0, 35.0, 45.0, 55.0, 65.0, 75.0, 85.0, 95.0],
         "widths":    [10.0] * 10,
@@ -87,7 +87,7 @@ def compute_soft_labels(
     Args:
         logits4: tensor of shape [..., 4] with logits for A, B, C, D
         sigma: Gaussian width in percentage space (REQUIRED)
-        confidence_format: "letter_8bin" / "numeric_1_5" / "numeric_1_10".
+        confidence_format: "letter_8bin" / "1-5" / "1-10".
 
     Returns:
         soft_targets of shape [..., N] where N matches the format's bin count.
@@ -158,6 +158,86 @@ def build_soft_targets_from_entropy(
     """Small wrapper so both train_step and run_evaluation use the same call site."""
     return convert_entropy_to_soft_labels(
         entropy, sigma=sigma, confidence_format=confidence_format
+    )
+
+
+# ============================================================
+# Alternative finetuning targets: top_logit and logit_gap
+# ============================================================
+
+def _confidence_percent_to_soft_labels(
+    confidence_percent: torch.Tensor,
+    *,
+    sigma: float,
+    confidence_format: str = "letter_8bin",
+) -> torch.Tensor:
+    """Shared Gaussian-kernel step: confidence_percent [0,100] → soft N-bin labels."""
+    device = confidence_percent.device
+    dtype = confidence_percent.dtype
+    midpoints, widths, _ = _bin_tensors(confidence_format, device, dtype)
+    if confidence_percent.ndim == 0:
+        distances = (midpoints - confidence_percent) ** 2
+        weights = torch.exp(-distances / (2 * sigma * sigma)) * widths
+    else:
+        distances = (midpoints.unsqueeze(0) - confidence_percent.unsqueeze(-1)) ** 2
+        weights = torch.exp(-distances / (2 * sigma * sigma)) * widths
+    return weights / weights.sum(dim=-1, keepdim=True)
+
+
+def top_prob_to_confidence_percent(top_prob: torch.Tensor) -> torch.Tensor:
+    """Top MCQ probability [0.25, 1.0] → confidence_percent [0, 100].
+
+    0.25 = uniform over 4 choices (fully uncertain), 1.0 = certain.
+    """
+    return ((top_prob - 0.25) / 0.75).clamp(0.0, 1.0) * 100.0
+
+
+def logit_gap_to_confidence_percent(
+    top_prob: torch.Tensor, second_prob: torch.Tensor
+) -> torch.Tensor:
+    """Log-probability gap (≈ logit gap) [0, ∞) → confidence_percent [0, 100].
+
+    gap = log(top_prob) - log(second_prob) = log(top_prob / second_prob).
+    Mapped via tanh(gap/2): gap=0 → 0%, gap≈2 → 76%, gap→∞ → 100%.
+    """
+    gap = torch.log(top_prob.clamp(min=1e-12)) - torch.log(second_prob.clamp(min=1e-12))
+    return torch.tanh(gap / 2.0) * 100.0
+
+
+def build_soft_targets(
+    finetuning_target: str,
+    *,
+    entropy: torch.Tensor = None,
+    top_prob: torch.Tensor = None,
+    second_prob: torch.Tensor = None,
+    sigma: float,
+    confidence_format: str = "letter_8bin",
+) -> torch.Tensor:
+    """Build soft N-bin targets from one of three supported signals.
+
+    finetuning_target: "entropy" | "top_logit" | "logit_gap"
+    """
+    if finetuning_target == "entropy":
+        if entropy is None:
+            raise ValueError("entropy required for finetuning_target='entropy'")
+        confidence_percent = (
+            (1.0 - entropy / math.log(4)).clamp(0.0, 1.0) * 100.0
+        )
+    elif finetuning_target == "top_logit":
+        if top_prob is None:
+            raise ValueError("top_prob required for finetuning_target='top_logit'")
+        confidence_percent = top_prob_to_confidence_percent(top_prob)
+    elif finetuning_target == "logit_gap":
+        if top_prob is None or second_prob is None:
+            raise ValueError("top_prob and second_prob required for finetuning_target='logit_gap'")
+        confidence_percent = logit_gap_to_confidence_percent(top_prob, second_prob)
+    else:
+        raise ValueError(
+            f"Unknown finetuning_target {finetuning_target!r}. "
+            "Must be one of: 'entropy', 'top_logit', 'logit_gap'"
+        )
+    return _confidence_percent_to_soft_labels(
+        confidence_percent, sigma=sigma, confidence_format=confidence_format
     )
 
 

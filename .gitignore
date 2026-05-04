@@ -28,3 +28,7 @@ CLAUDE.md
 
 # Jupyter
 .ipynb_checkpoints/
+
+# Weights & Biases local cache (run buffers, system metrics, debug logs).
+# Cloud sync reads from this dir; safe to delete after runs have uploaded.
+wandb/

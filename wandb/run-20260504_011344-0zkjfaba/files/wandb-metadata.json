@@ -1,0 +1,40 @@
+{
+  "os":  "Linux-6.8.0-90-generic-x86_64-with-glibc2.35",
+  "python":  "CPython 3.11.10",
+  "startedAt":  "2026-05-04T01:13:44.684597Z",
+  "program":  "/workspace/projects/metacognition/finetune/run_finetuning.py",
+  "codePath":  "finetune/run_finetuning.py",
+  "codePathLocal":  "finetune/run_finetuning.py",
+  "git":  {
+    "remote":  "https://github.com/tristan-day-research/llm-metacognition.git",
+    "commit":  "86ed49d83c52c128043b8962eae24378e2f33d2c"
+  },
+  "email":  "daylight444@proton.me",
+  "root":  "/workspace/projects/metacognition",
+  "host":  "4c854486ffbf",
+  "executable":  "/workspace/venvs/metacognition/bin/python",
+  "cpu_count":  104,
+  "cpu_count_logical":  208,
+  "gpu":  "NVIDIA H100 80GB HBM3",
+  "gpu_count":  1,
+  "disk":  {
+    "/":  {
+      "total":  "60129542144",
+      "used":  "17363234816"
+    }
+  },
+  "memory":  {
+    "total":  "2164111147008"
+  },
+  "gpu_nvidia":  [
+    {
+      "name":  "NVIDIA H100 80GB HBM3",
+      "memoryTotal":  "85520809984",
+      "cudaCores":  16896,
+      "architecture":  "Hopper",
+      "uuid":  "GPU-79263017-b2b6-f8d0-a60e-e78fa2c2b500"
+    }
+  ],
+  "cudaVersion":  "13.0",
+  "writerId":  "s1vdyzsdupttap55cuadmu4ubfkivlk8"
+}

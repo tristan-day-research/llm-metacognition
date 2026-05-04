@@ -389,6 +389,7 @@ def run_evaluation(
     mcq_letter_mapping=None,
     confidence_format=None,
     model_type=None,
+    wandb_prefix="val",
 ):
     """
     Evaluation loop:
@@ -1475,8 +1476,9 @@ def run_evaluation(
         try:
             import wandb
 
-            prefix = "val"
-            
+            prefix = wandb_prefix or "val"
+
+
             wandb_metrics = {
                 f"{prefix}/accuracy": results["mcq_accuracy"],
                 f"{prefix}/loss": results["avg_loss"],

@@ -134,6 +134,15 @@ class ECTConfig:
     USE_RECORDED_RESPONSES = True
     VAL_ON_FROZEN = True
 
+    # If True, every validation (baseline + periodic + final) runs TWICE:
+    # once with val_on_frozen=True and once with val_on_frozen=False. Frozen
+    # uses pre-recorded teacher entropy (apples-to-apples with the training
+    # target); live recomputes entropy from the current model. Metrics are
+    # logged to separate W&B namespaces (val_frozen/* and val_live/*) so you
+    # can chart both. Doubles per-validation wall time.
+    # When False, only the mode in VAL_ON_FROZEN runs (logs under val/*).
+    VAL_RUN_BOTH_FROZEN_AND_LIVE = True
+
     # LoRA
     LORA_R = 16
     LORA_ALPHA = 32
@@ -142,8 +151,8 @@ class ECTConfig:
     # LORA_TARGET_MODULES = ("q_proj", "v_proj")
 
     # Training loop
-    LEARNING_RATE = 1e-5
-    MAX_STEPS = 2500
+    LEARNING_RATE = 1e-6
+    MAX_STEPS = 9000
     LOG_INTERVAL = 20
     VAL_INTERVAL = 100
     LIMIT_VAL_BATCHES = None

@@ -283,6 +283,56 @@ def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=
 
     
 # ============================================================
+# Validation dispatch (single or dual frozen+live)
+# ============================================================
+
+def _run_validation(args, *, base_kwargs, primary_step_name):
+    """Run validation eval(s). When args.val_run_both_frozen_and_live is True,
+    runs frozen FIRST under the canonical val/* namespace (preserving existing
+    W&B charts), then ADDITIONALLY runs the live pass under val_live/*.
+    Otherwise runs the single mode in args.val_on_frozen under val/*.
+
+    Returns: dict with key 'primary' (single mode) OR both 'frozen' and 'live'.
+    The dict's values are run_evaluation result dicts.
+    """
+    if not getattr(args, "val_run_both_frozen_and_live", False):
+        m = run_evaluation(
+            **base_kwargs,
+            step_name=primary_step_name,
+            val_on_frozen=args.val_on_frozen,
+            log_prefix="",
+            wandb_prefix="val",
+        )
+        return {"primary": m}
+
+    # Frozen keeps the original val/* keys so all existing dashboards keep
+    # working unchanged. The live pass adds NEW keys under val_live/*.
+    frozen = run_evaluation(
+        **base_kwargs,
+        step_name=f"{primary_step_name}_frozen",
+        val_on_frozen=True,
+        log_prefix="",
+        wandb_prefix="val",
+    )
+    live = run_evaluation(
+        **base_kwargs,
+        step_name=f"{primary_step_name}_live",
+        val_on_frozen=False,
+        log_prefix="live_",
+        wandb_prefix="val_live",
+    )
+    return {"frozen": frozen, "live": live}
+
+
+def _print_val_summary(label, m):
+    print(
+        f"{label:>10s}  acc={m['mcq_accuracy']:.4f}  "
+        f"loss={m['avg_loss']:.4f}  ent={m['avg_entropy']:.4f}  "
+        f"conf={m['avg_confidence']:.4f}  n={m['n_samples']}"
+    )
+
+
+# ============================================================
 # Main training
 # ============================================================
 
@@ -624,13 +674,12 @@ def train(args):
     print("Running baseline validation (before training)...")
     print("="*60)
 
-    baseline_metrics = run_evaluation(
+    baseline_kwargs = dict(
         model=model,
         tokenizer=tokenizer,
         val_dataset=val_dataset,
         device=device,
         args=args,
-        step_name="baseline",
         num_samples=args.val_num_samples,
         log_file_path=log_file_path,
         step=0,
@@ -638,13 +687,20 @@ def train(args):
         train_dataset_qids=train_dataset_qids,
         train_dataset_questions=train_dataset_questions,
         sigma=args.sigma,
-        val_on_frozen=args.val_on_frozen,
     )
-
-    print(f"\nBaseline Accuracy: {baseline_metrics['mcq_accuracy']:.4f}")
-    print(f"Baseline Avg Entropy: {baseline_metrics['avg_entropy']:.4f}")
-    print(f"Baseline Avg Confidence: {baseline_metrics['avg_confidence']:.4f}")
-    print(f"- samples: {baseline_metrics['n_samples']}\n")
+    baseline_results = _run_validation(args, base_kwargs=baseline_kwargs, primary_step_name="baseline")
+    print()
+    if "primary" in baseline_results:
+        _print_val_summary("baseline", baseline_results["primary"])
+        baseline_metrics = baseline_results["primary"]
+    else:
+        _print_val_summary("frozen", baseline_results["frozen"])
+        _print_val_summary("live",   baseline_results["live"])
+        # Use frozen as the canonical baseline_metrics for downstream code that
+        # expects a single dict (none does, but this matches the prior behavior
+        # when VAL_ON_FROZEN was True).
+        baseline_metrics = baseline_results["frozen"]
+    print()
 
 
     # ============================================================
@@ -764,13 +820,12 @@ def train(args):
             print(f"Validation at step {step}")
             print("="*60)
 
-            val_metrics = run_evaluation(
+            val_kwargs = dict(
                 model=model,
                 tokenizer=tokenizer,
                 val_dataset=val_dataset,
                 device=device,
                 args=args,
-                step_name="validation",
                 num_samples=args.val_num_samples,
                 log_file_path=log_file_path,
                 step=step,
@@ -778,14 +833,14 @@ def train(args):
                 train_dataset_qids=train_dataset_qids,
                 train_dataset_questions=train_dataset_questions,
                 sigma=args.sigma,
-                val_on_frozen=args.val_on_frozen,
             )
-
-            print(f"Val Accuracy: {val_metrics['mcq_accuracy']:.4f}")
-            print(f"Val Loss:     {val_metrics['avg_loss']:.4f}")
-            print(f"Val Entropy:  {val_metrics['avg_entropy']:.4f}")
-            print(f"Val Conf:     {val_metrics['avg_confidence']:.4f}")
-            print(f"Samples:      {val_metrics['n_samples']}")
+            val_results = _run_validation(args, base_kwargs=val_kwargs, primary_step_name="validation")
+            print()
+            if "primary" in val_results:
+                _print_val_summary("val", val_results["primary"])
+            else:
+                _print_val_summary("val/frozen", val_results["frozen"])
+                _print_val_summary("val/live",   val_results["live"])
 
         # -----------------------------
         # Periodic checkpointing
@@ -817,13 +872,12 @@ def train(args):
     print("Final evaluation:")
     print("="*60)
 
-    final_metrics = run_evaluation(
+    final_kwargs = dict(
         model=model,
         tokenizer=tokenizer,
         val_dataset=val_dataset,
         device=device,
         args=args,
-        step_name="final",
         num_samples=args.val_num_samples,
         log_file_path=log_file_path,
         step=step,
@@ -831,12 +885,17 @@ def train(args):
         train_dataset_qids=train_dataset_qids,
         train_dataset_questions=train_dataset_questions,
         sigma=args.sigma,
-        val_on_frozen=args.val_on_frozen,
     )
-
-    print(f"\nFinal Accuracy:  {final_metrics['mcq_accuracy']:.4f}")
-    print(f"Final Loss:      {final_metrics['avg_loss']:.4f}")
-    print(f"Final Confidence:{final_metrics['avg_confidence']:.4f}")
+    final_results = _run_validation(args, base_kwargs=final_kwargs, primary_step_name="final")
+    print()
+    if "primary" in final_results:
+        _print_val_summary("final", final_results["primary"])
+        final_metrics = final_results["primary"]
+    else:
+        _print_val_summary("final/frozen", final_results["frozen"])
+        _print_val_summary("final/live",   final_results["live"])
+        # Downstream summary fields use a single dict; pick frozen as canonical.
+        final_metrics = final_results["frozen"]
 
     # Generate timestamp for final model save
     final_timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
@@ -921,6 +980,7 @@ def build_args_from_config():
         use_recorded_responses=_C.USE_RECORDED_RESPONSES,
         enable_data_leakage_checks=_C.ENABLE_DATA_LEAKAGE_CHECKS,
         val_on_frozen=_C.VAL_ON_FROZEN,
+        val_run_both_frozen_and_live=_C.VAL_RUN_BOTH_FROZEN_AND_LIVE,
         confidence_format=_C.CONFIDENCE_FORMAT,
         compute_other_confidence=_C.COMPUTE_OTHER_CONFIDENCE,
         confidence_letter_scheme=_C.CONFIDENCE_LETTER_SCHEME,

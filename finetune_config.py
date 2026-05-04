@@ -68,7 +68,7 @@ class ECTConfig:
     DEVICE = "cuda"
 
     # Soft-label / loss math.
-    SIGMA = 7.5 # Gaussian width for entropy → soft-label conversion
+    SIGMA = 5 # Gaussian width for entropy → soft-label conversion
     TEMPERATURE = 0.0  # 0 = deterministic argmax; >0 = sampling
 
     # Loss formulation. Used by training (compute_loss) AND reported by
@@ -151,8 +151,8 @@ class ECTConfig:
     # LORA_TARGET_MODULES = ("q_proj", "v_proj")
 
     # Training loop
-    LEARNING_RATE = 1e-6
-    MAX_STEPS = 9000
+    LEARNING_RATE = 1e-5
+    MAX_STEPS = 3000
     LOG_INTERVAL = 20
     VAL_INTERVAL = 100
     LIMIT_VAL_BATCHES = None

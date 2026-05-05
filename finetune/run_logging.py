@@ -30,6 +30,8 @@ from prompts import (
     build_self_confidence_prompts_numeric,
     build_delegate_abcdt_prompts,
     build_delegate_at_prompts,
+    build_delegate_tabcd_prompts,
+    build_delegate_ta_prompts,
     DEFAULT_TEAMMATE_ACCURACY,
 )
 
@@ -127,6 +129,8 @@ def log_sample_prompts_and_replies(
     run_other_confidence: bool = True,
     run_delegate_abcdt: bool = False,
     run_delegate_at: bool = False,
+    run_delegate_tabcd: bool = False,
+    run_delegate_ta: bool = False,
     delegate_teammate_accuracy: float = DEFAULT_TEAMMATE_ACCURACY,
 ) -> None:
     """For one sample row, dump each prompt type (MCQ / self-conf / other-conf)
@@ -209,3 +213,25 @@ def log_sample_prompts_and_replies(
         logger.write(at_prompt)
         logger.subsection(f"[{model_type}] sample delegate-game AT reply")
         logger.write(generate_short_reply(model, tokenizer, at_prompt))
+
+    if run_delegate_tabcd:
+        tabcd_prompt = build_delegate_tabcd_prompts(
+            [sample_row], tokenizer, mcq_letter_mapping,
+            model_type=model_type,
+            teammate_accuracy=delegate_teammate_accuracy,
+        )[0]
+        logger.subsection(f"[{model_type}] sample delegate-game TABCD prompt")
+        logger.write(tabcd_prompt)
+        logger.subsection(f"[{model_type}] sample delegate-game TABCD reply")
+        logger.write(generate_short_reply(model, tokenizer, tabcd_prompt))
+
+    if run_delegate_ta:
+        ta_prompt = build_delegate_ta_prompts(
+            [sample_row], tokenizer, mcq_letter_mapping,
+            model_type=model_type,
+            teammate_accuracy=delegate_teammate_accuracy,
+        )[0]
+        logger.subsection(f"[{model_type}] sample delegate-game TA prompt")
+        logger.write(ta_prompt)
+        logger.subsection(f"[{model_type}] sample delegate-game TA reply")
+        logger.write(generate_short_reply(model, tokenizer, ta_prompt))

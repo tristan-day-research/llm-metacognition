@@ -38,6 +38,8 @@ from prompts import (
     build_other_confidence_prompts_numeric,
     build_delegate_abcdt_prompts,
     build_delegate_at_prompts,
+    build_delegate_tabcd_prompts,
+    build_delegate_ta_prompts,
     run_mcq_forward_pass,
     run_confidence_forward_pass,
     run_confidence_forward_pass_numeric,
@@ -157,6 +159,8 @@ def evaluate_model(
     run_mcq=True,
     run_delegate_abcdt=False,
     run_delegate_at=False,
+    run_delegate_tabcd=False,
+    run_delegate_ta=False,
     delegate_teammate_accuracy=DEFAULT_TEAMMATE_ACCURACY,
 ):
     """
@@ -236,6 +240,8 @@ def evaluate_model(
             self.run_mcq = run_mcq
             self.run_delegate_abcdt = run_delegate_abcdt
             self.run_delegate_at = run_delegate_at
+            self.run_delegate_tabcd = run_delegate_tabcd
+            self.run_delegate_ta = run_delegate_ta
             self.delegate_teammate_accuracy = delegate_teammate_accuracy
 
     args = SimpleArgs()
@@ -545,6 +551,8 @@ def run_evaluation(
     run_mcq = getattr(args, 'run_mcq', True)
     run_delegate_abcdt = getattr(args, 'run_delegate_abcdt', False)
     run_delegate_at = getattr(args, 'run_delegate_at', False)
+    run_delegate_tabcd = getattr(args, 'run_delegate_tabcd', False)
+    run_delegate_ta = getattr(args, 'run_delegate_ta', False)
     delegate_teammate_accuracy = getattr(
         args, 'delegate_teammate_accuracy', DEFAULT_TEAMMATE_ACCURACY
     )
@@ -585,6 +593,21 @@ def run_evaluation(
     delegate_at_p_delegate = []
     delegate_at_p_answer = []
     delegate_at_is_delegate = []
+    # TABCD / TA — same option sets as ABCDT / AT but T is shown FIRST in
+    # the visual option block. Same forward pass (the letter token space is
+    # unchanged), separate accumulators so the wandb keys don't collide.
+    delegate_tabcd_pred_canonical = []
+    delegate_tabcd_pred_display = []
+    delegate_tabcd_pred_positions = []
+    delegate_tabcd_p_delegate = []
+    delegate_tabcd_p_answer = []
+    delegate_tabcd_is_correct = []
+    delegate_tabcd_is_delegate = []
+    delegate_ta_pred_letters = []
+    delegate_ta_pred_positions = []
+    delegate_ta_p_delegate = []
+    delegate_ta_p_answer = []
+    delegate_ta_is_delegate = []
 
     # ==================== MAIN LOOP ==========================
     total_samples = len(idxs)
@@ -982,6 +1005,84 @@ def run_evaluation(
         delegate_at_is_delegate.append(at_is_delegate)
 
         # ==================================================
+        # 3.8. Delegate-game TABCD pass (optional)
+        # Same option set {A,B,C,D,T} as ABCDT but T is shown FIRST in the
+        # visual block. Forward pass is unchanged — the canonical [A,B,C,D,T]
+        # ordering of the returned logits doesn't depend on visual order.
+        # ==================================================
+        if run_delegate_tabcd:
+            tabcd_prompts = build_delegate_tabcd_prompts(
+                batch, tokenizer,
+                mcq_letter_mapping=sample_mcq_letter_mapping,
+                model_type=model_type,
+                teammate_accuracy=delegate_teammate_accuracy,
+            )
+            tabcd_out = run_delegate_abcdt_forward_pass(
+                model=model, tokenizer=tokenizer, prompts=tabcd_prompts,
+                device=device,
+                mcq_letter_mapping=sample_mcq_letter_mapping,
+            )
+            tabcd_pred_canonical = tabcd_out["pred_canonical"][0]
+            tabcd_pred_display = tabcd_out["pred_display"][0]
+            tabcd_pred_position = tabcd_out["pred_positions"][0]
+            tabcd_p_delegate = float(tabcd_out["p_delegate"][0].item())
+            tabcd_p_answer = float(tabcd_out["p_answer"][0].item())
+            tabcd_is_delegate = (tabcd_pred_position == 4)
+            if tabcd_is_delegate or correct_answer_position is None:
+                tabcd_is_correct = None
+            else:
+                tabcd_is_correct = bool(tabcd_pred_position == correct_answer_position)
+        else:
+            tabcd_pred_canonical = None
+            tabcd_pred_display = None
+            tabcd_pred_position = None
+            tabcd_p_delegate = None
+            tabcd_p_answer = None
+            tabcd_is_delegate = None
+            tabcd_is_correct = None
+
+        delegate_tabcd_pred_canonical.append(tabcd_pred_canonical)
+        delegate_tabcd_pred_display.append(tabcd_pred_display)
+        delegate_tabcd_pred_positions.append(tabcd_pred_position)
+        delegate_tabcd_p_delegate.append(tabcd_p_delegate)
+        delegate_tabcd_p_answer.append(tabcd_p_answer)
+        delegate_tabcd_is_correct.append(tabcd_is_correct)
+        delegate_tabcd_is_delegate.append(tabcd_is_delegate)
+
+        # ==================================================
+        # 3.9. Delegate-game TA pass (optional)
+        # Binary {A,T} like AT but T comes first visually.
+        # ==================================================
+        if run_delegate_ta:
+            ta_prompts = build_delegate_ta_prompts(
+                batch, tokenizer,
+                mcq_letter_mapping=sample_mcq_letter_mapping,
+                model_type=model_type,
+                teammate_accuracy=delegate_teammate_accuracy,
+            )
+            ta_out = run_delegate_at_forward_pass(
+                model=model, tokenizer=tokenizer, prompts=ta_prompts,
+                device=device,
+            )
+            ta_pred_letter = ta_out["pred_letters"][0]
+            ta_pred_position = ta_out["pred_positions"][0]
+            ta_p_delegate = float(ta_out["p_delegate"][0].item())
+            ta_p_answer = float(ta_out["p_answer"][0].item())
+            ta_is_delegate = (ta_pred_position == 1)
+        else:
+            ta_pred_letter = None
+            ta_pred_position = None
+            ta_p_delegate = None
+            ta_p_answer = None
+            ta_is_delegate = None
+
+        delegate_ta_pred_letters.append(ta_pred_letter)
+        delegate_ta_pred_positions.append(ta_pred_position)
+        delegate_ta_p_delegate.append(ta_p_delegate)
+        delegate_ta_p_answer.append(ta_p_answer)
+        delegate_ta_is_delegate.append(ta_is_delegate)
+
+        # ==================================================
         # 4. Loss (only if confidence was computed)
         # ==================================================
         if compute_confidence and conf_logits is not None:
@@ -1098,6 +1199,26 @@ def run_evaluation(
                     "delegate_at_p_delegate": at_p_delegate,
                     "delegate_at_p_answer": at_p_answer,
                     "delegate_at_is_delegate": at_is_delegate,
+                })
+            # Delegate-game (TABCD) per-sample fields.
+            if run_delegate_tabcd:
+                log_entry.update({
+                    "delegate_tabcd_pred_canonical": tabcd_pred_canonical,
+                    "delegate_tabcd_pred_display": tabcd_pred_display,
+                    "delegate_tabcd_pred_position": tabcd_pred_position,
+                    "delegate_tabcd_p_delegate": tabcd_p_delegate,
+                    "delegate_tabcd_p_answer": tabcd_p_answer,
+                    "delegate_tabcd_is_delegate": tabcd_is_delegate,
+                    "delegate_tabcd_is_correct": tabcd_is_correct,
+                })
+            # Delegate-game (TA) per-sample fields.
+            if run_delegate_ta:
+                log_entry.update({
+                    "delegate_ta_pred_letter": ta_pred_letter,
+                    "delegate_ta_pred_position": ta_pred_position,
+                    "delegate_ta_p_delegate": ta_p_delegate,
+                    "delegate_ta_p_answer": ta_p_answer,
+                    "delegate_ta_is_delegate": ta_is_delegate,
                 })
             write_jsonl(log_file_path, log_entry)
 
@@ -1293,6 +1414,80 @@ def run_evaluation(
     # Delegate-game summary metrics. Each sub-block is only added if the
     # corresponding pass actually ran for this evaluation.
     # -----------------------------------------------------------------
+    # Confidence-alignment helper for the delegate game. Compares each
+    # variant's binary delegate decision against two confidence signals:
+    #   stated_conf  — model's stated probability it would get the question
+    #                  right, in percent (from the self-confidence pass)
+    #   top_prob     — model's top MCQ option probability, in [0, 1] (from
+    #                  the bare MCQ pass)
+    # Threshold is the advertised teammate accuracy; delegating is rational
+    # iff the model's expected self-accuracy is below the teammate's.
+    # Returns six scalars per variant:
+    #   conditional   P(<signal> < thresh | delegated)   — "was the delegate
+    #                                                       decision justified
+    #                                                       by low conf?"
+    #   converse      P(delegated | <signal> < thresh)   — "when conf is
+    #                                                       low, does the
+    #                                                       model actually
+    #                                                       delegate?"
+    # Plus the joint "both signals below threshold" version of each.
+    # Any signal that wasn't produced (compute_confidence=False, no MCQ
+    # pass on this row) drops the sample from that ratio's denominator.
+    compute_confidence_flag = getattr(args, 'compute_confidence', True)
+    teammate_thresh_pct = 100.0 * delegate_teammate_accuracy
+    teammate_thresh_prob = float(delegate_teammate_accuracy)
+
+    def _delegate_conf_alignment(is_delegate_list):
+        def _safe_ratio(num, den):
+            return float(num) / float(den) if den else float("nan")
+
+        # Per-sample tuples (is_delegate, stated_lt, top_lt) where each
+        # comparison is None when its signal is unavailable.
+        rows = []
+        for i, is_del in enumerate(is_delegate_list):
+            if is_del is None:
+                continue
+            stated_lt = None
+            if compute_confidence_flag and i < len(expected_conf_values):
+                stated_lt = float(expected_conf_values[i]) < teammate_thresh_pct
+            top_lt = None
+            if i < len(live_top_prob_values) and live_top_prob_values[i] is not None:
+                top_lt = float(live_top_prob_values[i]) < teammate_thresh_prob
+            rows.append((bool(is_del), stated_lt, top_lt))
+
+        n_delegated = sum(1 for d, _, _ in rows if d)
+
+        # Conditional: P(signal_low | delegated)
+        n_del_stated = sum(1 for d, s, _ in rows if d and s is not None)
+        n_del_stated_lt = sum(1 for d, s, _ in rows if d and s)
+        n_del_top = sum(1 for d, _, t in rows if d and t is not None)
+        n_del_top_lt = sum(1 for d, _, t in rows if d and t)
+        n_del_both = sum(1 for d, s, t in rows if d and s is not None and t is not None)
+        n_del_both_lt = sum(1 for d, s, t in rows if d and s and t)
+
+        # Converse: P(delegated | signal_low)
+        n_stated_lt = sum(1 for _, s, _ in rows if s)
+        n_stated_lt_del = sum(1 for d, s, _ in rows if s and d)
+        n_top_lt = sum(1 for _, _, t in rows if t)
+        n_top_lt_del = sum(1 for d, _, t in rows if t and d)
+        n_both_lt = sum(1 for _, s, t in rows if s and t)
+        n_both_lt_del = sum(1 for d, s, t in rows if s and t and d)
+
+        return {
+            "n_samples_with_decision": len(rows),
+            "n_delegated": n_delegated,
+            "threshold_stated_pct": teammate_thresh_pct,
+            "threshold_top_prob": teammate_thresh_prob,
+            # P(signal < thresh | delegated)
+            "p_stated_lt_given_delegated": _safe_ratio(n_del_stated_lt, n_del_stated),
+            "p_top_lt_given_delegated": _safe_ratio(n_del_top_lt, n_del_top),
+            "p_both_lt_given_delegated": _safe_ratio(n_del_both_lt, n_del_both),
+            # P(delegated | signal < thresh)
+            "p_delegated_given_stated_lt": _safe_ratio(n_stated_lt_del, n_stated_lt),
+            "p_delegated_given_top_lt": _safe_ratio(n_top_lt_del, n_top_lt),
+            "p_delegated_given_both_lt": _safe_ratio(n_both_lt_del, n_both_lt),
+        }
+
     if run_delegate_abcdt:
         d_total = len(delegate_abcdt_is_delegate)
         d_n_delegate = sum(1 for x in delegate_abcdt_is_delegate if x is True)
@@ -1325,18 +1520,111 @@ def run_evaluation(
             "position_distribution_raw": d_pos_dist,
             "position_distribution_pct": d_pos_dist_pct,
             "teammate_accuracy_shown": delegate_teammate_accuracy,
+            "confidence_alignment": _delegate_conf_alignment(delegate_abcdt_is_delegate),
         }
 
     if run_delegate_at:
         at_total = len(delegate_at_is_delegate)
         at_n_delegate = sum(1 for x in delegate_at_is_delegate if x is True)
         at_p_delegate_vals = [v for v in delegate_at_p_delegate if v is not None]
+
+        # Expected team score: when AT says delegate → teammate accuracy;
+        # when AT says answer → use the model's MCQ correctness on the same
+        # sample. Requires the bare MCQ pass (correctness_flags), since the
+        # AT prompt itself does not pick an MC option.
+        at_team_score = float("nan")
+        if (
+            at_total
+            and len(correctness_flags) == at_total
+            and any(x is not None for x in delegate_at_is_delegate)
+        ):
+            per_sample = []
+            for is_del, mcq_correct in zip(delegate_at_is_delegate, correctness_flags):
+                if is_del is None:
+                    continue
+                per_sample.append(
+                    delegate_teammate_accuracy if is_del else float(mcq_correct)
+                )
+            if per_sample:
+                at_team_score = float(np.mean(per_sample))
+
         results["delegate_at"] = {
             "n_samples": at_total,
             "delegate_rate": (at_n_delegate / at_total) if at_total else float("nan"),
             "answer_rate": ((at_total - at_n_delegate) / at_total) if at_total else float("nan"),
+            "expected_team_score": at_team_score,
             "avg_p_delegate": float(np.mean(at_p_delegate_vals)) if at_p_delegate_vals else float("nan"),
             "teammate_accuracy_shown": delegate_teammate_accuracy,
+            "confidence_alignment": _delegate_conf_alignment(delegate_at_is_delegate),
+        }
+
+    # TABCD summary — same shape as ABCDT (single-shot, picks A/B/C/D or T).
+    if run_delegate_tabcd:
+        tabcd_total = len(delegate_tabcd_is_delegate)
+        tabcd_n_delegate = sum(1 for x in delegate_tabcd_is_delegate if x is True)
+        tabcd_answered_correct = [x for x in delegate_tabcd_is_correct if x is not None]
+        tabcd_pos_dist = {p: 0 for p in range(5)}
+        for p in delegate_tabcd_pred_positions:
+            if p is not None:
+                tabcd_pos_dist[p] = tabcd_pos_dist.get(p, 0) + 1
+        tabcd_pos_dist_pct = (
+            {p: (v / tabcd_total) * 100.0 for p, v in tabcd_pos_dist.items()}
+            if tabcd_total else tabcd_pos_dist
+        )
+        tabcd_n_answered = tabcd_total - tabcd_n_delegate
+        tabcd_acc_when_answered = (
+            float(np.mean(tabcd_answered_correct)) if tabcd_answered_correct else float("nan")
+        )
+        if tabcd_total:
+            tabcd_team_score = (
+                (tabcd_n_answered / tabcd_total) * (tabcd_acc_when_answered if not np.isnan(tabcd_acc_when_answered) else 0.0)
+                + (tabcd_n_delegate / tabcd_total) * delegate_teammate_accuracy
+            )
+        else:
+            tabcd_team_score = float("nan")
+        results["delegate_tabcd"] = {
+            "n_samples": tabcd_total,
+            "delegate_rate": (tabcd_n_delegate / tabcd_total) if tabcd_total else float("nan"),
+            "answer_rate": ((tabcd_total - tabcd_n_delegate) / tabcd_total) if tabcd_total else float("nan"),
+            "answer_accuracy_given_answered": tabcd_acc_when_answered,
+            "expected_team_score": tabcd_team_score,
+            "avg_p_delegate": float(np.mean([v for v in delegate_tabcd_p_delegate if v is not None])) if tabcd_total else float("nan"),
+            "position_distribution_raw": tabcd_pos_dist,
+            "position_distribution_pct": tabcd_pos_dist_pct,
+            "teammate_accuracy_shown": delegate_teammate_accuracy,
+            "confidence_alignment": _delegate_conf_alignment(delegate_tabcd_is_delegate),
+        }
+
+    # TA summary — same shape as AT (binary meta-decision, T first visually).
+    if run_delegate_ta:
+        ta_total = len(delegate_ta_is_delegate)
+        ta_n_delegate = sum(1 for x in delegate_ta_is_delegate if x is True)
+        ta_p_delegate_vals = [v for v in delegate_ta_p_delegate if v is not None]
+
+        ta_team_score = float("nan")
+        if (
+            ta_total
+            and len(correctness_flags) == ta_total
+            and any(x is not None for x in delegate_ta_is_delegate)
+        ):
+            per_sample = []
+            for is_del, mcq_correct in zip(delegate_ta_is_delegate, correctness_flags):
+                if is_del is None:
+                    continue
+                per_sample.append(
+                    delegate_teammate_accuracy if is_del else float(mcq_correct)
+                )
+            if per_sample:
+                ta_team_score = float(np.mean(per_sample))
+
+        results["delegate_ta"] = {
+            "n_samples": ta_total,
+            "delegate_rate": (ta_n_delegate / ta_total) if ta_total else float("nan"),
+            "answer_rate": ((ta_total - ta_n_delegate) / ta_total) if ta_total else float("nan"),
+            "expected_team_score": ta_team_score,
+            "avg_p_delegate": float(np.mean(ta_p_delegate_vals)) if ta_p_delegate_vals else float("nan"),
+            "teammate_accuracy_shown": delegate_teammate_accuracy,
+            "confidence_alignment": _delegate_conf_alignment(delegate_ta_is_delegate),
         }
 
     # Compute additional metrics for wandb
@@ -1723,6 +2011,49 @@ def run_evaluation(
                 wandb_metrics[f"{prefix}/entropy_bin/mean_abs_error_across_bins"] = sum(_abs_errs) / len(_abs_errs)
             if _spearmans:
                 wandb_metrics[f"{prefix}/entropy_bin/min_spearman_across_bins"] = min(_spearmans)
+
+            # Delegate-game metrics. Two scalars per variant: delegation
+            # rate and expected team score (the headline numbers the user
+            # cares about during validation).
+            def _log_delegate_alignment(variant_key: str, variant_results: dict):
+                align = variant_results.get("confidence_alignment")
+                if not align:
+                    return
+                base = f"{prefix}/{variant_key}/alignment"
+                # P(low confidence | delegated) — was the delegate decision
+                # justified by low stated/entropy-derived confidence?
+                wandb_metrics[f"{base}/p_stated_lt_given_delegated"] = align["p_stated_lt_given_delegated"]
+                wandb_metrics[f"{base}/p_top_lt_given_delegated"] = align["p_top_lt_given_delegated"]
+                wandb_metrics[f"{base}/p_both_lt_given_delegated"] = align["p_both_lt_given_delegated"]
+                # P(delegated | low confidence) — when confidence is low,
+                # does the model actually delegate?
+                wandb_metrics[f"{base}/p_delegated_given_stated_lt"] = align["p_delegated_given_stated_lt"]
+                wandb_metrics[f"{base}/p_delegated_given_top_lt"] = align["p_delegated_given_top_lt"]
+                wandb_metrics[f"{base}/p_delegated_given_both_lt"] = align["p_delegated_given_both_lt"]
+
+            def _log_delegate_singleshot(variant_key: str, vr: dict):
+                """Log ABCDT-style scalars (also used for TABCD)."""
+                wandb_metrics[f"{prefix}/{variant_key}/delegate_rate"] = vr["delegate_rate"]
+                wandb_metrics[f"{prefix}/{variant_key}/expected_team_score"] = vr["expected_team_score"]
+                wandb_metrics[f"{prefix}/{variant_key}/answer_accuracy_given_answered"] = vr["answer_accuracy_given_answered"]
+                wandb_metrics[f"{prefix}/{variant_key}/avg_p_delegate"] = vr["avg_p_delegate"]
+                _log_delegate_alignment(variant_key, vr)
+
+            def _log_delegate_binary(variant_key: str, vr: dict):
+                """Log AT-style scalars (also used for TA)."""
+                wandb_metrics[f"{prefix}/{variant_key}/delegate_rate"] = vr["delegate_rate"]
+                wandb_metrics[f"{prefix}/{variant_key}/expected_team_score"] = vr["expected_team_score"]
+                wandb_metrics[f"{prefix}/{variant_key}/avg_p_delegate"] = vr["avg_p_delegate"]
+                _log_delegate_alignment(variant_key, vr)
+
+            if "delegate_abcdt" in results:
+                _log_delegate_singleshot("delegate_abcdt", results["delegate_abcdt"])
+            if "delegate_tabcd" in results:
+                _log_delegate_singleshot("delegate_tabcd", results["delegate_tabcd"])
+            if "delegate_at" in results:
+                _log_delegate_binary("delegate_at", results["delegate_at"])
+            if "delegate_ta" in results:
+                _log_delegate_binary("delegate_ta", results["delegate_ta"])
 
             # Add step if provided
             if step is not None:

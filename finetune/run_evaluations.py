@@ -210,6 +210,8 @@ def run_evaluation_on_dataset(
     run_mcq: bool = True,
     run_delegate_abcdt: bool = False,
     run_delegate_at: bool = False,
+    run_delegate_tabcd: bool = False,
+    run_delegate_ta: bool = False,
     delegate_teammate_accuracy: float = 0.7,
 ):
     """Evaluate one (model_type, dataset) pair into a JSONL + .txt pair."""
@@ -295,6 +297,8 @@ def run_evaluation_on_dataset(
                 run_other_confidence=compute_other_confidence,
                 run_delegate_abcdt=run_delegate_abcdt,
                 run_delegate_at=run_delegate_at,
+                run_delegate_tabcd=run_delegate_tabcd,
+                run_delegate_ta=run_delegate_ta,
                 delegate_teammate_accuracy=delegate_teammate_accuracy,
             )
 
@@ -321,6 +325,8 @@ def run_evaluation_on_dataset(
                 run_mcq=run_mcq,
                 run_delegate_abcdt=run_delegate_abcdt,
                 run_delegate_at=run_delegate_at,
+                run_delegate_tabcd=run_delegate_tabcd,
+                run_delegate_ta=run_delegate_ta,
                 delegate_teammate_accuracy=delegate_teammate_accuracy,
             )
         except Exception:
@@ -378,8 +384,11 @@ def main():
           f"self_conf={cfg.EVAL_COMPUTE_CONFIDENCE}, "
           f"other_conf={cfg.EVAL_COMPUTE_OTHER_CONFIDENCE}, "
           f"delegate_abcdt={cfg.EVAL_RUN_DELEGATE_ABCDT}, "
-          f"delegate_at={cfg.EVAL_RUN_DELEGATE_AT}")
-    if cfg.EVAL_RUN_DELEGATE_ABCDT or cfg.EVAL_RUN_DELEGATE_AT:
+          f"delegate_at={cfg.EVAL_RUN_DELEGATE_AT}, "
+          f"delegate_tabcd={cfg.EVAL_RUN_DELEGATE_TABCD}, "
+          f"delegate_ta={cfg.EVAL_RUN_DELEGATE_TA}")
+    if (cfg.EVAL_RUN_DELEGATE_ABCDT or cfg.EVAL_RUN_DELEGATE_AT
+            or cfg.EVAL_RUN_DELEGATE_TABCD or cfg.EVAL_RUN_DELEGATE_TA):
         print(f" teammate_accuracy: {cfg.EVAL_DELEGATE_TEAMMATE_ACCURACY}")
     print("=" * 60)
 
@@ -404,6 +413,8 @@ def main():
             run_mcq=cfg.EVAL_RUN_MCQ,
             run_delegate_abcdt=cfg.EVAL_RUN_DELEGATE_ABCDT,
             run_delegate_at=cfg.EVAL_RUN_DELEGATE_AT,
+            run_delegate_tabcd=cfg.EVAL_RUN_DELEGATE_TABCD,
+            run_delegate_ta=cfg.EVAL_RUN_DELEGATE_TA,
             delegate_teammate_accuracy=cfg.EVAL_DELEGATE_TEAMMATE_ACCURACY,
         )
         all_results[dataset_path] = out

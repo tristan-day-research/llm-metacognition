@@ -387,6 +387,30 @@ def _print_val_summary(label, m):
         f"loss={m['avg_loss']:.4f}  ent={m['avg_entropy']:.4f}  "
         f"conf={m['avg_confidence']:.4f}  n={m['n_samples']}"
     )
+    if "delegate_abcdt" in m:
+        d = m["delegate_abcdt"]
+        print(
+            f"{'':>10s}  delegate_abcdt: rate={d['delegate_rate']:.3f}  "
+            f"team_acc={d['expected_team_score']:.4f}"
+        )
+    if "delegate_tabcd" in m:
+        d = m["delegate_tabcd"]
+        print(
+            f"{'':>10s}  delegate_tabcd: rate={d['delegate_rate']:.3f}  "
+            f"team_acc={d['expected_team_score']:.4f}"
+        )
+    if "delegate_at" in m:
+        a = m["delegate_at"]
+        print(
+            f"{'':>10s}  delegate_at:    rate={a['delegate_rate']:.3f}  "
+            f"team_acc={a['expected_team_score']:.4f}"
+        )
+    if "delegate_ta" in m:
+        a = m["delegate_ta"]
+        print(
+            f"{'':>10s}  delegate_ta:    rate={a['delegate_rate']:.3f}  "
+            f"team_acc={a['expected_team_score']:.4f}"
+        )
 
 
 # ============================================================
@@ -1062,6 +1086,13 @@ def build_args_from_config():
         val_run_both_frozen_and_live=_C.VAL_RUN_BOTH_FROZEN_AND_LIVE,
         confidence_format=_C.CONFIDENCE_FORMAT,
         compute_other_confidence=_C.COMPUTE_OTHER_CONFIDENCE,
+        # Delegate-game validation toggles. Read by run_evaluation() via
+        # getattr(args, ...) so they only fire when at least one is True.
+        run_delegate_abcdt=_C.VAL_RUN_DELEGATE_ABCDT,
+        run_delegate_at=_C.VAL_RUN_DELEGATE_AT,
+        run_delegate_tabcd=_C.VAL_RUN_DELEGATE_TABCD,
+        run_delegate_ta=_C.VAL_RUN_DELEGATE_TA,
+        delegate_teammate_accuracy=_C.VAL_DELEGATE_TEAMMATE_ACCURACY,
         confidence_letter_scheme=_C.CONFIDENCE_LETTER_SCHEME,
         confidence_letter_random_seed=_C.CONFIDENCE_LETTER_RANDOM_SEED,
         mcq_letter_scheme=_C.MCQ_LETTER_SCHEME,

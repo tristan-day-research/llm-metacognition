@@ -1,27 +1,36 @@
-r"""
-Create a balanced finetune dataset from PopMC alone (max-size variant).
+"""
+Create a mixed finetune dataset from TriviaMC, PopMC, and SimpleMC where each
+source contributes the same number of samples to every entropy bin (but the
+sources may contribute different totals).
 
 Sampling hierarchy:
-  1. entropy_bin (low / med / high) — auto-sized to the smallest bin so each
-     bin holds the same number of samples and the dataset is as large as
-     possible while staying perfectly balanced. Override with --per-bin.
-  2. PopMC prop — proportional to availability per bin, capped so no single
-     prop exceeds MAX_PROP_FRACTION of the per-bin quota. Sub-binning by
-     entropy still applies inside each prop group.
-  3. entropy sub-bins — within each (prop, bin) cell, divide the bin's
+  1. entropy_bin (low / med / high) — fixed quota per source per bin
+  2. source — per-source per-bin quota set on the command line
+  3. entropy sub-bins — within each (source, bin) cell, divide the bin's
      entropy range into N_SUB_BINS equal-width sub-bands and allocate the
-     quota evenly across sub-bands (with overflow to denser sub-bands when
-     a sparse one is exhausted). This prevents the "low" bin from
-     collapsing to entropy ≈ 0.
+     quota evenly across sub-bands (overflow to denser sub-bands when
+     a sparse one is exhausted). Forces coverage of the upper-low region
+     instead of letting the entropy ≈ 0 spike monopolize the low bin.
+  4. PopMC prop — proportional to availability per bin, capped so no single
+     prop exceeds MAX_PROP_FRACTION of the PopMC per-bin quota. Sub-binning
+     by entropy still applies inside each prop group.
 
-Output format: every field from the source eval JSONL row (type, is_correct,
-top_prob, probs_ABCD, model_answer, model_answer_position,
-correct_answer_position, prob_gap, expected_confidence,
-predicted_confidence_bin_index, predicted_other_confidence_bin_index,
-expected_other_confidence, loss, entropy, etc.) plus distractors and
-prop/s_pop/o_pop from the underlying dataset, and source="PopMC". Mirrors
-finetune/create_balanced_dataset.py so analyze_performance.ipynb can plot
-this split with the same tooling.
+This is a parametrized variant of finetune/create_balanced_dataset.py. The
+sampling code is identical — only SOURCE_QUOTAS becomes a flat per-source
+quota that applies uniformly across low/med/high (so each source is itself
+balanced across entropy bins, but sources need not be balanced against each
+other).
+
+Example invocations:
+  # Mixed-2550-clean (TriviaMC=400, PopMC=400, SimpleMC=50 per bin)
+  python finetune/create_mixed_dataset.py \
+      --prefix mixed_2550_clean \
+      --trivia-per-bin 400 --popmc-per-bin 400 --simple-per-bin 50
+
+  # Mixed-3150-pop-heavy (TriviaMC=400, PopMC=600, SimpleMC=50 per bin)
+  python finetune/create_mixed_dataset.py \
+      --prefix mixed_3150_pop_heavy \
+      --trivia-per-bin 400 --popmc-per-bin 600 --simple-per-bin 50
 """
 import sys
 from pathlib import Path
@@ -42,18 +51,23 @@ BIN_RANGES = {
     "high": (HIGH_THRESHOLD, LN4 + 1e-9),
 }
 
-# No single PopMC prop may exceed this fraction of the per-bin quota.
+# No single PopMC prop may exceed this fraction of the PopMC per-bin quota
 MAX_PROP_FRACTION = 0.25
 
-# Within each (prop, bin) cell, divide the bin's entropy range into this
-# many equal-width sub-bands and try to sample evenly across them. Forces
-# coverage of the upper-low region (entropy ~0.25-0.46) instead of letting
-# the entropy~0 spike monopolize the low bin.
+# Within each (source, bin) cell, divide the bin's entropy range into this
+# many equal-width sub-bands and try to sample evenly across them.
 N_SUB_BINS = 3
 
-EVAL_FILE = "outputs/evaluations/8b_instruct/2026-05-03-19-54-00_meta-llama-Llama-3.1-8B-Instruct_instruct_PopMC_n14267.jsonl"
-DATA_FILE = "data/PopMC.jsonl"
-SOURCE = "PopMC"
+EVAL_FILES = {
+    "TriviaMC": "outputs/evaluations/8b_instruct/2026-05-03-20-04-26_meta-llama-Llama-3.1-8B-Instruct_instruct_TriviaMC_n2416.jsonl",
+    "PopMC":    "outputs/evaluations/8b_instruct/2026-05-03-19-54-00_meta-llama-Llama-3.1-8B-Instruct_instruct_PopMC_n14267.jsonl",
+    "SimpleMC": "outputs/evaluations/8b_instruct/2026-05-03-20-03-45_meta-llama-Llama-3.1-8B-Instruct_instruct_SimpleMC_n500.jsonl",
+}
+DATA_FILES = {
+    "TriviaMC": "data/TriviaMC.jsonl",
+    "PopMC":    "data/PopMC.jsonl",
+    "SimpleMC": "data/SimpleMC.jsonl",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -80,11 +94,9 @@ def load_eval_rows(path: str) -> dict[str, dict]:
             d = json.loads(line)
             if "entropy" not in d or "qid" not in d:
                 continue
-            # Eval files mix sample and summary rows; only sample rows have qid.
             if not str(d.get("type", "")).endswith("eval_sample"):
                 continue
             e = d["entropy"]
-            # Skip NaN / non-finite — a few rows in the eval files have these.
             if not isinstance(e, (int, float)) or e != e or e in (float("inf"), float("-inf")):
                 skipped += 1
                 continue
@@ -109,10 +121,6 @@ def load_data_file(path: str) -> dict[str, dict]:
     return out
 
 
-# Eval-row fields the source-of-truth that must NOT be overwritten by
-# raw-data merge. These are measured against the exact option order the
-# model saw at eval time; clobbering any one of them would re-introduce
-# the off-by-permutation bug.
 _EVAL_PROTECTED_FIELDS = frozenset({
     "options", "correct_letter", "correct_answer", "correct_answer_text",
     "model_answer", "model_answer_text", "model_answer_position",
@@ -124,72 +132,65 @@ _EVAL_PROTECTED_FIELDS = frozenset({
 })
 
 
-def build_cells(root: Path) -> dict[str, list[dict]]:
-    """cells[bin] = list of enriched PopMC records.
+def build_cells(root: Path) -> dict[str, dict[str, list[dict]]]:
+    """cells[source][bin] = list of enriched records.
 
-    Strategy: the eval JSONL row is the source of truth for everything
-    measured against the option order the model saw at eval time
-    (options, correct_letter, model_answer, probs_ABCD, entropy, …). We
-    take that record verbatim, then merge in raw-dataset metadata
-    (distractors, prop/s_pop/o_pop, …) for fields the eval JSONL doesn't
-    carry. Raw-data fields NEVER overwrite eval-row fields.
+    The eval JSONL row is the source of truth for everything measured against
+    the option order the model saw at eval time. Raw-data fields fill in
+    distractors / prop / s_pop / o_pop but never overwrite eval-row fields.
     """
-    cells: dict[str, list[dict]] = {"low": [], "med": [], "high": []}
-    eval_map = load_eval_rows(str(root / EVAL_FILE))
-    data_map = load_data_file(str(root / DATA_FILE))
-    skipped_legacy = 0
-    for qid, eval_row in eval_map.items():
-        row = data_map.get(qid)
-        if row is None:
-            continue
-        if len(row.get("distractors", [])) < 3:
-            continue
-        # Hard requirement: eval row must record the exact options it
-        # showed the model. Older eval files (pre-options-recording)
-        # are unsafe for frozen training and are skipped with a warning.
-        options = eval_row.get("options")
-        correct_letter = eval_row.get("correct_letter")
-        if not (
-            isinstance(options, dict)
-            and set(options.keys()) == set("ABCD")
-            and correct_letter in {"A", "B", "C", "D"}
-        ):
-            skipped_legacy += 1
-            continue
-        # Merge raw-dataset fields the eval JSONL doesn't carry, but
-        # never let them overwrite the eval-side source of truth.
-        record = dict(eval_row)
-        for key, value in row.items():
-            if key in _EVAL_PROTECTED_FIELDS:
+    cells: dict[str, dict[str, list]] = {
+        ds: {"low": [], "med": [], "high": []} for ds in EVAL_FILES
+    }
+    for ds in EVAL_FILES:
+        eval_map = load_eval_rows(str(root / EVAL_FILES[ds]))
+        data_map = load_data_file(str(root / DATA_FILES[ds]))
+        skipped_legacy = 0
+        for qid, eval_row in eval_map.items():
+            row = data_map.get(qid)
+            if row is None:
                 continue
-            if key == "correct_answer":
-                # raw correct_answer is the TEXT; surface as
-                # correct_answer_text only if eval didn't already.
-                record.setdefault("correct_answer_text", value)
-            elif key == "distractors":
-                record.setdefault("distractors", list(value)[:3])
-            elif key not in record:
-                record[key] = value
-        record["source"] = SOURCE
-        record["entropy"] = round(eval_row["entropy"], 6)
-        cells[entropy_bin(eval_row["entropy"])].append(record)
-    if skipped_legacy:
-        total = len(eval_map)
-        pct = 100.0 * skipped_legacy / max(total, 1)
-        print(
-            f"  ⚠️  {SOURCE}: dropped {skipped_legacy}/{total} eval rows "
-            f"({pct:.1f}%) that don't record their displayed options "
-            f"(legacy eval file). Rerun run_evaluations.py and update EVAL_FILE."
-        )
+            if len(row.get("distractors", [])) < 3:
+                continue
+            options = eval_row.get("options")
+            correct_letter = eval_row.get("correct_letter")
+            if not (
+                isinstance(options, dict)
+                and set(options.keys()) == set("ABCD")
+                and correct_letter in {"A", "B", "C", "D"}
+            ):
+                skipped_legacy += 1
+                continue
+            record = dict(eval_row)
+            for key, value in row.items():
+                if key in _EVAL_PROTECTED_FIELDS:
+                    continue
+                if key == "correct_answer":
+                    record.setdefault("correct_answer_text", value)
+                elif key == "distractors":
+                    record.setdefault("distractors", list(value)[:3])
+                elif key not in record:
+                    record[key] = value
+            record["source"] = ds
+            record["entropy"] = round(eval_row["entropy"], 6)
+            cells[ds][entropy_bin(eval_row["entropy"])].append(record)
+        if skipped_legacy:
+            total = len(eval_map)
+            pct = 100.0 * skipped_legacy / max(total, 1)
+            print(
+                f"  ⚠️  {ds}: dropped {skipped_legacy}/{total} eval rows "
+                f"({pct:.1f}%) that don't record their displayed options "
+                f"(legacy eval file). Rerun run_evaluations.py on this "
+                f"dataset and update EVAL_FILES."
+            )
     return cells
 
 
 # ---------------------------------------------------------------------------
-# sampling
+# sampling  (identical to create_balanced_dataset.py)
 # ---------------------------------------------------------------------------
 
 def _split_into_subbins(records: list[dict], bin_low: float, bin_high: float, n_subbins: int) -> list[list[dict]]:
-    """Group records by equal-width entropy sub-band within [bin_low, bin_high)."""
     width = (bin_high - bin_low) / n_subbins
     buckets: list[list[dict]] = [[] for _ in range(n_subbins)]
     for r in records:
@@ -204,10 +205,6 @@ def _split_into_subbins(records: list[dict], bin_low: float, bin_high: float, n_
 
 
 def _allocate_evenly(sizes: list[int], total: int) -> list[int]:
-    """
-    Split `total` evenly across len(sizes) buckets, capped by each bucket's
-    availability. Deficit from small buckets rolls over to the larger ones.
-    """
     n = len(sizes)
     quotas = [0] * n
     remaining = total
@@ -215,7 +212,6 @@ def _allocate_evenly(sizes: list[int], total: int) -> list[int]:
     while free and remaining > 0:
         share = remaining // len(free)
         if share == 0:
-            # Distribute the last few one-by-one to buckets with capacity
             for i in sorted(free, key=lambda i: -sizes[i]):
                 if remaining == 0:
                     break
@@ -231,7 +227,6 @@ def _allocate_evenly(sizes: list[int], total: int) -> list[int]:
             if quotas[i] < sizes[i]:
                 new_free.append(i)
         if len(new_free) == len(free):
-            # No bucket capped this round — done
             break
         free = new_free
     return quotas
@@ -244,13 +239,6 @@ def systematic_sample_within_bin(
     bin_high: float,
     rng: random.Random,
 ) -> list[dict]:
-    """
-    Sample `n` records evenly across the entropy range [bin_low, bin_high).
-    Splits the range into N_SUB_BINS equal-width bands; allocates n across
-    the bands (capped by availability, deficit redistributed); within each
-    band, samples randomly. This forces coverage of the upper-low region
-    even when most data is concentrated near zero.
-    """
     if n <= 0:
         return []
     if n >= len(records):
@@ -269,18 +257,11 @@ def systematic_sample_within_bin(
 
 
 def allocate_quotas(counts: dict[str, int], total: int, max_frac: float) -> dict[str, int]:
-    """
-    Proportionally allocate `total` across groups given their counts,
-    capping each group at min(max_frac*total, avail). Iterates until no
-    group exceeds its limit, then uses largest-remainder for final rounding.
-    """
     cap = max(1, int(total * max_frac))
     quotas: dict[str, int] = {}
     remaining = total
     free = set(counts.keys())
 
-    # Each iteration: find groups that would exceed their limit at current proportions
-    # and fix them at their limit; redistribute remaining budget to the others.
     for _ in range(len(counts) + 1):
         if not free or remaining <= 0:
             break
@@ -288,13 +269,11 @@ def allocate_quotas(counts: dict[str, int], total: int, max_frac: float) -> dict
         if total_free == 0:
             break
 
-        # Which groups are constrained at this iteration?
         constrained = {
             g for g in free
             if remaining * counts[g] / total_free >= min(cap, counts[g])
         }
         if not constrained:
-            # No group exceeds its limit — distribute proportionally with largest-remainder
             fair  = {g: remaining * counts[g] / total_free for g in free}
             floor = {g: int(f) for g, f in fair.items()}
             leftover = remaining - sum(floor.values())
@@ -320,11 +299,6 @@ def sample_popmc_bin(
     bin_high: float,
     rng: random.Random,
 ) -> list[dict]:
-    """
-    Sample `target` records from a PopMC entropy bin.
-    Stratifies by prop (proportional + capped); within each prop, samples
-    evenly across the entropy range using sub-binning.
-    """
     by_prop: dict[str, list] = defaultdict(list)
     for r in records:
         by_prop[r.get("prop", "unknown")].append(r)
@@ -339,8 +313,6 @@ def sample_popmc_bin(
         chosen = systematic_sample_within_bin(by_prop[prop], q, bin_low, bin_high, rng)
         result.extend(chosen)
 
-    # If we're short (rounding), fill from remaining records using sub-bin
-    # sampling on the leftover pool so coverage stays uniform.
     if len(result) < target:
         taken_qids = {r["qid"] for r in result}
         pool = [r for r in records if r["qid"] not in taken_qids]
@@ -351,36 +323,43 @@ def sample_popmc_bin(
 
 
 def sample_bin(
-    cells: dict[str, list[dict]],
+    cells: dict[str, dict[str, list[dict]]],
     bin_name: str,
-    quota: int,
+    source_quotas: dict[str, int],
     rng: random.Random,
 ) -> tuple[list[dict], dict]:
-    """Sample one entropy bin using prop stratification + sub-bin coverage."""
-    log: dict = {}
+    result = []
+    log: dict[str, dict] = {}
     bin_low, bin_high = BIN_RANGES[bin_name]
-    pool = cells[bin_name]
-    effective = min(quota, len(pool))
-    if effective < quota:
-        print(f"  WARNING: {bin_name}: requested {quota}, only {len(pool)} available")
 
-    chosen = sample_popmc_bin(pool, effective, bin_low, bin_high, rng)
-    log["requested"] = quota
-    log["sampled"]   = len(chosen)
+    for source, quota in source_quotas.items():
+        pool = cells[source][bin_name]
+        effective = min(quota, len(pool))
+        if effective < quota:
+            print(f"  WARNING: {source} {bin_name}: requested {quota}, only {len(pool)} available")
 
-    sub_buckets = _split_into_subbins(chosen, bin_low, bin_high, N_SUB_BINS)
-    log["subbins"] = [len(b) for b in sub_buckets]
+        if source == "PopMC":
+            chosen = sample_popmc_bin(pool, effective, bin_low, bin_high, rng)
+        else:
+            chosen = systematic_sample_within_bin(pool, effective, bin_low, bin_high, rng)
 
-    prop_counts: dict[str, int] = defaultdict(int)
-    for r in chosen:
-        prop_counts[r.get("prop", "unknown")] += 1
-    log["props"] = dict(sorted(prop_counts.items(), key=lambda x: -x[1]))
+        result.extend(chosen)
+        log[source] = {"requested": quota, "sampled": len(chosen)}
 
-    return chosen, log
+        sub_buckets = _split_into_subbins(chosen, bin_low, bin_high, N_SUB_BINS)
+        log[source]["subbins"] = [len(b) for b in sub_buckets]
+
+        if source == "PopMC":
+            prop_counts: dict[str, int] = defaultdict(int)
+            for r in chosen:
+                prop_counts[r.get("prop", "unknown")] += 1
+            log[source]["props"] = dict(sorted(prop_counts.items(), key=lambda x: -x[1]))
+
+    return result, log
 
 
 # ---------------------------------------------------------------------------
-# output
+# output  (identical to create_balanced_dataset.py)
 # ---------------------------------------------------------------------------
 
 def _stratified_split(
@@ -389,21 +368,13 @@ def _stratified_split(
     val_ratio: float,
     seed: int,
 ) -> dict[str, list[dict]]:
-    """80/10/10 split that preserves entropy_bin composition.
-
-    Within each entropy_bin: shuffle, then deal samples in a 8:1:1
-    round-robin so even small cells split predictably. Without this,
-    the random global shuffle can hand val a noticeably easier or
-    harder mix than train.
-    """
     rng = random.Random(seed + 1)
-    by_cell: dict[str, list[dict]] = defaultdict(list)
+    by_cell: dict[tuple[str, str], list[dict]] = defaultdict(list)
     for r in records:
-        by_cell[entropy_bin(r["entropy"])].append(r)
+        by_cell[(r["source"], entropy_bin(r["entropy"]))].append(r)
 
     splits: dict[str, list[dict]] = {"train": [], "val": [], "test": []}
     test_ratio = 1.0 - train_ratio - val_ratio
-    # Round-robin proportional dealing: build a length-10 pattern and walk it.
     pattern = (
         ["train"] * round(train_ratio * 10)
         + ["val"]   * round(val_ratio   * 10)
@@ -418,7 +389,6 @@ def _stratified_split(
         for i, r in enumerate(rows):
             splits[pattern[i % 10]].append(r)
 
-    # Final shuffle within each split so rows aren't grouped by cell on disk.
     for split in splits.values():
         rng.shuffle(split)
     return splits
@@ -449,24 +419,20 @@ def split_and_write(
             f.write(json.dumps(r) + "\n")
     print(f"  {'all':5s}: {len(all_rows):>5d} → {combined}")
 
-    # Per-split entropy_bin breakdown so drift between splits is obvious.
-    print("\nSplit composition (entropy_bin):")
+    print("\nSplit composition (source × entropy_bin):")
     cells = ("low", "med", "high")
     for split_name, rows in splits.items():
         from collections import Counter
-        counts = Counter(entropy_bin(r["entropy"]) for r in rows)
-        line = f"  {split_name:5s}  "
-        for c in cells:
-            line += f"  {c}={counts.get(c, 0):>5d}"
-        print(line)
+        counts = Counter((r["source"], entropy_bin(r["entropy"])) for r in rows)
+        print(f"  {split_name}:")
+        for src in ("TriviaMC", "PopMC", "SimpleMC"):
+            line = "    " + src.ljust(10)
+            for c in cells:
+                line += f"  {c}={counts.get((src, c), 0):>4d}"
+            print(line)
 
 
 def audit_dataset(records: list[dict], splits: dict[str, list[dict]] | None = None) -> None:
-    """Hard-checks every emitted row carries the contract its consumers rely on.
-
-    Prints any violations and raises if a critical contract is broken so
-    bad data never silently makes it into a training run.
-    """
     problems: list[str] = []
     qid_to_split: dict[str, str] = {}
 
@@ -517,14 +483,21 @@ def audit_dataset(records: list[dict], splits: dict[str, list[dict]] | None = No
 
 def print_summary(records: list[dict]) -> None:
     from collections import Counter
-    bin_counts: Counter = Counter(entropy_bin(r["entropy"]) for r in records)
-    prop_counts: Counter = Counter(r.get("prop", "unknown") for r in records)
+    bin_counts:  Counter = Counter(entropy_bin(r["entropy"]) for r in records)
+    src_counts:  Counter = Counter(r["source"] for r in records)
+    cell_counts: Counter = Counter((r["source"], entropy_bin(r["entropy"])) for r in records)
 
     print(f"\nFinal dataset: {len(records)} samples")
     print(f"\nBy entropy bin:  low={bin_counts['low']}, med={bin_counts['med']}, high={bin_counts['high']}")
-    print(f"\nBy prop (top 15):")
-    for p, c in prop_counts.most_common(15):
-        print(f"  {p:20s}  {c:>5d}")
+    print(f"By source:       " + ", ".join(f"{k}={v}" for k, v in sorted(src_counts.items())))
+
+    print(f"\n{'':12s}  {'low':>5s}  {'med':>5s}  {'high':>5s}  {'total':>5s}")
+    for ds in ("TriviaMC", "PopMC", "SimpleMC"):
+        lo = cell_counts.get((ds, "low"), 0)
+        me = cell_counts.get((ds, "med"), 0)
+        hi = cell_counts.get((ds, "high"), 0)
+        print(f"  {ds:10s}  {lo:>5d}  {me:>5d}  {hi:>5d}  {lo+me+hi:>5d}")
+    print(f"  {'total':10s}  {bin_counts['low']:>5d}  {bin_counts['med']:>5d}  {bin_counts['high']:>5d}  {len(records):>5d}")
 
 
 # ---------------------------------------------------------------------------
@@ -533,15 +506,22 @@ def print_summary(records: list[dict]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--root",        default=".",    help="Project root (default: cwd)")
-    parser.add_argument("--output-dir",  default="data", help="Output directory")
-    parser.add_argument("--prefix",      default="balanced_popMC")
-    parser.add_argument("--per-bin",     type=int, default=None,
-                        help="Samples per entropy bin (default: min available across bins)")
-    parser.add_argument("--train-ratio", type=float, default=0.80)
-    parser.add_argument("--val-ratio",   type=float, default=0.10)
-    parser.add_argument("--seed",        type=int,   default=42)
+    parser.add_argument("--root",            default=".",    help="Project root (default: cwd)")
+    parser.add_argument("--output-dir",      default="data", help="Output directory")
+    parser.add_argument("--prefix",          required=True,  help="Output filename prefix (e.g. mixed_2550_clean)")
+    parser.add_argument("--trivia-per-bin",  type=int, required=True, help="TriviaMC samples per entropy bin")
+    parser.add_argument("--popmc-per-bin",   type=int, required=True, help="PopMC samples per entropy bin")
+    parser.add_argument("--simple-per-bin",  type=int, required=True, help="SimpleMC samples per entropy bin")
+    parser.add_argument("--train-ratio",     type=float, default=0.80)
+    parser.add_argument("--val-ratio",       type=float, default=0.10)
+    parser.add_argument("--seed",            type=int,   default=42)
     args = parser.parse_args()
+
+    source_quotas = {
+        "TriviaMC": args.trivia_per_bin,
+        "PopMC":    args.popmc_per_bin,
+        "SimpleMC": args.simple_per_bin,
+    }
 
     root = Path(args.root).resolve()
     rng  = random.Random(args.seed)
@@ -550,33 +530,37 @@ def main() -> None:
     cells = build_cells(root)
 
     print(f"\nAvailable per cell:")
-    print(f"  {'low':>6s}  {'med':>6s}  {'high':>6s}  {'total':>6s}")
-    lo, me, hi = len(cells["low"]), len(cells["med"]), len(cells["high"])
-    print(f"  {lo:>6d}  {me:>6d}  {hi:>6d}  {lo+me+hi:>6d}")
+    print(f"\n{'':12s}  {'low':>6s}  {'med':>6s}  {'high':>6s}  {'total':>6s}")
+    for ds in ("TriviaMC", "PopMC", "SimpleMC"):
+        lo, me, hi = len(cells[ds]["low"]), len(cells[ds]["med"]), len(cells[ds]["high"])
+        print(f"  {ds:10s}  {lo:>6d}  {me:>6d}  {hi:>6d}  {lo+me+hi:>6d}")
 
-    per_bin = args.per_bin if args.per_bin is not None else min(lo, me, hi)
-    print(f"\nPer-bin quota: {per_bin}  (max balanced size = {per_bin * 3})")
+    per_bin_total = sum(source_quotas.values())
+    print(f"\nTarget per-source per-bin quotas: {source_quotas}")
+    print(f"Per-bin total: {per_bin_total}    Dataset total: {per_bin_total * 3}")
     print(f"PopMC max prop fraction: {MAX_PROP_FRACTION:.0%}")
-    print(f"Sub-bins per (prop, bin) cell: {N_SUB_BINS}\n")
+    print(f"Sub-bins per (source, bin) cell: {N_SUB_BINS}\n")
 
     all_records = []
     for bin_name in ("low", "med", "high"):
         bin_low, bin_high = BIN_RANGES[bin_name]
         print(f"--- {bin_name} bin  (entropy [{bin_low:.3f}, {bin_high:.3f})) ---")
-        chosen, log = sample_bin(cells, bin_name, per_bin, rng)
+        chosen, log = sample_bin(cells, bin_name, source_quotas, rng)
         all_records.extend(chosen)
-        sub = log.get("subbins", [])
-        sub_str = "/".join(str(x) for x in sub)
-        print(f"  {log['sampled']:>5d} sampled   sub-bins: {sub_str}")
-        top = list(log["props"].items())[:5]
-        print(f"  top props: {top}")
+        for source, info in log.items():
+            sub = info.get("subbins", [])
+            sub_str = "/".join(str(x) for x in sub)
+            print(f"  {source:10s}: {info['sampled']:>4d} sampled   sub-bins: {sub_str}", end="")
+            if "props" in info:
+                top = list(info["props"].items())[:5]
+                print(f"   top props: {top}", end="")
+            print()
 
     print_summary(all_records)
 
     print(f"\nWriting splits (train={args.train_ratio:.0%} / val={args.val_ratio:.0%} / test={1-args.train_ratio-args.val_ratio:.0%}):")
     split_and_write(all_records, root / args.output_dir, args.prefix, args.train_ratio, args.val_ratio, args.seed)
 
-    # Re-read what we just wrote and audit it as a final tripwire.
     splits = {}
     for split_name in ("train", "val", "test"):
         path = root / args.output_dir / f"{args.prefix}_{split_name}.jsonl"

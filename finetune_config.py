@@ -79,7 +79,7 @@ class ECTConfig:
     # "entropy"   — normalised MCQ entropy (existing behaviour).
     # "top_logit" — probability of the top MCQ choice, mapped [0.25,1]→[0,100].
     # "logit_gap" — log-prob gap between top and second choice, mapped via tanh.
-    FINETUNING_TARGET = "entropy"
+    FINETUNING_TARGET = "top_logit"
 
     # Confidence response format — controls which prompt builder, forward
     # pass, and loss bin spec are used. Self- and other-confidence ALWAYS
@@ -121,6 +121,29 @@ class ECTConfig:
     # whether eval/baseline/test additionally do the other pass.
     COMPUTE_OTHER_CONFIDENCE = False
 
+    # ----- Delegate game during training-time validation ----------------------
+    # Independent of the EVAL_RUN_DELEGATE_* flags below (which gate
+    # run_evaluations.py). When either is True, the validation step runs the
+    # delegate prompt(s) on the val set and reports per-variant:
+    #     <variant>/delegate_rate         — fraction of samples where the
+    #                                        model picked T
+    #     <variant>/expected_team_score   — P(answer) * accuracy_when_answered
+    #                                        + P(delegate) * teammate_accuracy
+    # Logged to W&B under val/* (and val_live/* when the dual mode is on).
+    # ABCDT — single-shot. Model picks A/B/C/D to answer, or T to delegate.
+    # AT    — binary meta-decision. The team_score for AT requires the bare
+    #         MCQ pass, since the model doesn't pick an answer in this prompt:
+    #         when AT says "answer myself" we look up the MCQ-pass correctness
+    #         on the same sample.
+    VAL_RUN_DELEGATE_ABCDT = True
+    VAL_RUN_DELEGATE_AT = True
+    # TABCD / TA mirror ABCDT / AT but show T (delegate) FIRST in the option
+    # block instead of last. Comparing ABCDT-vs-TABCD and AT-vs-TA delegation
+    # rates isolates first-position bias as a confound on the delegate decision.
+    VAL_RUN_DELEGATE_TABCD = False
+    VAL_RUN_DELEGATE_TA = False
+    VAL_DELEGATE_TEAMMATE_ACCURACY = 0.7
+
     # =========================================================================
     # TRAINING — used solely by run_finetuning.py.
     # =========================================================================
@@ -129,9 +152,21 @@ class ECTConfig:
     # TRAIN_DATA_PATH = "data/balanced_metacognition_train.jsonl"
     # VAL_DATA_PATH = "data/balanced_metacognition_val.jsonl"
     # TEST_DATA_PATH = "data/balanced_metacognition_test.jsonl"
-    TRAIN_DATA_PATH = "data/balanced_popMC_train.jsonl"
-    VAL_DATA_PATH = "data/balanced_popMC_val.jsonl"
-    TEST_DATA_PATH = "data/balanced_popMC_test.jsonl"
+    # TRAIN_DATA_PATH = "data/balanced_popMC_train.jsonl"
+    # VAL_DATA_PATH = "data/balanced_popMC_val.jsonl"
+    # TEST_DATA_PATH = "data/balanced_popMC_test.jsonl"
+    # TRAIN_DATA_PATH = "data/mixed_2550_clean_train.jsonl"
+    # VAL_DATA_PATH = "data/mixed_2550_clean_val.jsonl"
+    # TEST_DATA_PATH = "data/mixed_2550_clean_test.jsonl"
+    # TRAIN_DATA_PATH = "data/mixed_3150_pop_heavy_train.jsonl"
+    # VAL_DATA_PATH = "data/mixed_3150_pop_heavy_val.jsonl"
+    # TEST_DATA_PATH = "data/mixed_3150_pop_heavy_test.jsonl"
+    # TRAIN_DATA_PATH = "data/mixed_11931_max_balanced_train.jsonl"
+    # VAL_DATA_PATH = "data/mixed_11931_max_balanced_val.jsonl"
+    # TEST_DATA_PATH = "data/mixed_11931_max_balanced_test.jsonl"
+    TRAIN_DATA_PATH = "data/mixed_17173_all_train.jsonl"
+    VAL_DATA_PATH = "data/mixed_17173_all_val.jsonl"
+    TEST_DATA_PATH = "data/mixed_17173_all_test.jsonl"
     BATCH_SIZE = 4
     MCQ_RESULTS_DATA = None  # path to JSON/JSONL with pre-recorded MCQ entropies
 
@@ -188,7 +223,7 @@ class ECTConfig:
     OUTPUT_DIR = FINETUNE_OUTPUTS_DIR / "ect_lora"
     LOGS_DIR = FINETUNE_LOGS_DIR
     CHECKPOINTS_DIR = FINETUNE_CHECKPOINTS_DIR
-    CHECKPOINT_STEPS = 250
+    CHECKPOINT_STEPS = 200
     # When True, local checkpoint dirs are preserved on disk after the run.
     # When False, they are deleted after being uploaded to W&B / HF.
     # Default workflow: keep everything local during training, then use
@@ -205,7 +240,25 @@ class ECTConfig:
 
     # Weights & Biases (training)
     WANDB_PROJECT = "llm-metacognition-ect"
-    WANDB_RUN_NAME = f"popMC_balanced_{FINETUNING_TARGET}_{LEARNING_RATE}_CONFIDENCE_FORMAT_{LORA_TARGET_MODULES}_sigma{SIGMA}_Lora_{LORA_R}_{LORA_ALPHA}"
+    # Run-name dataset tag, derived from TRAIN_DATA_PATH so swapping datasets
+    # above automatically updates the W&B run name.
+    # Naming convention:
+    #   <prefix>_clean        / <prefix>_pop_heavy   →  <prefix>       (curated mix)
+    #   <prefix>_max_balanced                        →  <prefix>_max   (per-source min-bin)
+    #   <prefix>_all                                 →  <prefix>_all   (everything, no balancing)
+    _DATASET_TAGS = {
+        "balanced_metacognition":     "mixed_1494",
+        "balanced_popMC":             "PopMC_balanced",
+        "mixed_2550_clean":           "mixed_2550",
+        "mixed_3150_pop_heavy":       "mixed_3150",
+        "mixed_11931_max_balanced":   "mixed_11931_max",
+        "mixed_17173_all":            "mixed_17173_all",
+    }
+    _DATASET_TAG = _DATASET_TAGS.get(
+        Path(TRAIN_DATA_PATH).stem.removesuffix("_train"),
+        "unknown_dataset",
+    )
+    WANDB_RUN_NAME = f"{_DATASET_TAG}_{FINETUNING_TARGET}_{LEARNING_RATE}_{LORA_TARGET_MODULES}_sigma{SIGMA}_Lora_{LORA_R}_{LORA_ALPHA}"
     WANDB_TAGS = None
     WANDB_NOTES = None
     SAVE_WANDB_ARTIFACT = True
@@ -254,17 +307,22 @@ class ECTConfig:
     # Self- and other-confidence prompts. Names kept for back-compat — the
     # rest of the pipeline (evaluation_metrics.run_evaluation) reads these.
     EVAL_COMPUTE_CONFIDENCE = True
-    EVAL_COMPUTE_OTHER_CONFIDENCE = False
-    # Delegate game — two variants. Either, both, or neither can be enabled.
+    EVAL_COMPUTE_OTHER_CONFIDENCE = True
+    # Delegate game — four variants. Any combination can be enabled.
     #   EVAL_RUN_DELEGATE_ABCDT — single-shot. Model picks one of A/B/C/D
     #     (display letters follow MCQ_LETTER_SCHEME) to answer, or T to
-    #     delegate. Same option order as the MCQ pass, so shuffling +
-    #     letter-scheme remapping stay wired correctly.
-    #   EVAL_RUN_DELEGATE_AT — binary. A = "answer myself", T = "delegate".
+    #     delegate. T is the LAST option in the visual block.
+    #   EVAL_RUN_DELEGATE_AT    — binary. A = "answer myself", T = "delegate".
     #     The MC options are still shown so the model can judge difficulty,
-    #     but it does NOT pick among them.
-    EVAL_RUN_DELEGATE_ABCDT = False
-    EVAL_RUN_DELEGATE_AT = False
+    #     but it does NOT pick among them. T is the LAST option visually.
+    #   EVAL_RUN_DELEGATE_TABCD — mirror of ABCDT with T listed FIRST in the
+    #     option block. Used to test for first-position bias inflating the
+    #     delegation rate when T is at the end.
+    #   EVAL_RUN_DELEGATE_TA    — mirror of AT with T listed FIRST.
+    EVAL_RUN_DELEGATE_ABCDT = True
+    EVAL_RUN_DELEGATE_AT = True
+    EVAL_RUN_DELEGATE_TABCD = False
+    EVAL_RUN_DELEGATE_TA = False
     # Teammate accuracy shown to the model in the delegate-game setup blurb.
     # 0.7 puts the decision boundary near the strong-model accuracy regime.
     EVAL_DELEGATE_TEAMMATE_ACCURACY = 0.7

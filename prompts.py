@@ -2113,6 +2113,120 @@ def build_delegate_abcdt_prompts(
     return prompts
 
 
+def _delegate_setup_tabcd(mcq_display: List[str], teammate_accuracy: float) -> str:
+    """ABCDT setup mirrored so the delegate option is mentioned first.
+
+    Used by build_delegate_tabcd_prompts; the option block + 'Your choice'
+    hint also lead with T. The point is to test whether the model's
+    first-position bias inflates delegation when T is at the end.
+    """
+    answer_letters = ", ".join(mcq_display[:-1]) + f", or {mcq_display[-1]}"
+    return (
+        "Let's play a game with a teammate. I'm going to show you a multiple-choice "
+        "question. You may either delegate the question to your teammate by responding "
+        f"with '{DELEGATE_TEAMMATE_LETTER}', OR answer it yourself by responding with one of "
+        f"{answer_letters}. Your teammate gets approximately "
+        f"{100.0 * teammate_accuracy:.0f}% of questions correct. Pick whichever has "
+        "the better chance of being right. Respond only with one letter; do NOT "
+        "output any other text."
+    )
+
+
+def _delegate_setup_ta(teammate_accuracy: float) -> str:
+    """AT setup mirrored so the delegate option is mentioned first."""
+    return (
+        "Let's play a game with a teammate. I'm going to show you a multiple-choice "
+        "question. You will not be answering it yet — first, decide whether to "
+        "delegate it to your teammate or answer it yourself. Respond with "
+        f"'{DELEGATE_TEAMMATE_LETTER}' if you want to delegate to your teammate, or with "
+        "'A' if you want to answer the question yourself. Your teammate gets approximately "
+        f"{100.0 * teammate_accuracy:.0f}% of questions correct. Pick whichever has "
+        "the better chance of being right. Respond only with the letter "
+        f"{DELEGATE_TEAMMATE_LETTER} or A; do NOT output any other text."
+    )
+
+
+def build_delegate_tabcd_prompts(
+    batch: List[Dict],
+    tokenizer,
+    mcq_letter_mapping: Optional[Dict[str, str]] = None,
+    model_type: str = "instruct",
+    teammate_accuracy: float = DEFAULT_TEAMMATE_ACCURACY,
+) -> List[str]:
+    """TABCD delegate prompts — same as ABCDT but the delegate option T is
+    listed FIRST in the option block (and in the 'Your choice' hint). Used
+    to test whether the model's first-position bias inflates delegation
+    when T is at the end of the options. The forward pass is unchanged
+    (same option set {A,B,C,D,T}); only visual order differs.
+    """
+    if mcq_letter_mapping is None:
+        mcq_letter_mapping = get_mcq_letter_mapping("A-D")
+    mcq_display = [mcq_letter_mapping[chr(ord('A') + i)] for i in range(4)]
+    teammate_letter = DELEGATE_TEAMMATE_LETTER
+    all_letters = [teammate_letter] + mcq_display
+    options_str = _options_str_oxford(all_letters)
+    setup = _delegate_setup_tabcd(mcq_display, teammate_accuracy)
+
+    prompts: List[str] = []
+    for row in batch:
+        lines = [
+            "-" * 30,
+            "Question:",
+            row["question"].strip(),
+            "-" * 10,
+            f"  {teammate_letter}: Delegate to your teammate",
+        ]
+        for letter, text in zip(mcq_display, _row_option_texts(row)):
+            lines.append(f"  {letter}: {text}")
+        lines.append("-" * 30)
+        q_block = "\n".join(lines)
+
+        user_content = (
+            setup + "\n\n" + q_block + f"\nYour choice ({options_str}): "
+        )
+        prompts.append(_wrap_user_message(user_content, tokenizer, model_type))
+    return prompts
+
+
+def build_delegate_ta_prompts(
+    batch: List[Dict],
+    tokenizer,
+    mcq_letter_mapping: Optional[Dict[str, str]] = None,
+    model_type: str = "instruct",
+    teammate_accuracy: float = DEFAULT_TEAMMATE_ACCURACY,
+) -> List[str]:
+    """TA delegate prompts — same as AT but T (delegate) is listed FIRST in
+    the meta-option block, the inner question, and the 'Your choice' hint.
+    Forward pass over {A,T} is identical to AT.
+    """
+    if mcq_letter_mapping is None:
+        mcq_letter_mapping = get_mcq_letter_mapping("A-D")
+    mcq_display = [mcq_letter_mapping[chr(ord('A') + i)] for i in range(4)]
+    setup = _delegate_setup_ta(teammate_accuracy)
+    inner_question = (
+        "Do you want to delegate this question to your teammate or answer it yourself?"
+    )
+    option_block = [
+        f"  {DELEGATE_TEAMMATE_LETTER}: Delegate to my teammate",
+        "  A: Answer the question myself",
+    ]
+
+    prompts: List[str] = []
+    for row in batch:
+        q_block = _fenced_meta_question(
+            inner_question,
+            row["question"].strip(),
+            mcq_display,
+            _row_option_texts(row),
+            option_block,
+        )
+        user_content = (
+            setup + "\n\n" + q_block + f"\nYour choice ({DELEGATE_TEAMMATE_LETTER} or A): "
+        )
+        prompts.append(_wrap_user_message(user_content, tokenizer, model_type))
+    return prompts
+
+
 def build_delegate_at_prompts(
     batch: List[Dict],
     tokenizer,

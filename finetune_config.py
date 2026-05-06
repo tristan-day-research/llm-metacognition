@@ -190,7 +190,7 @@ class ECTConfig:
     #     Weight on the answer-selection CE against the recorded model
     #     answer. The CE is multiplied by (1 - target_delegate) so it
     #     vanishes on samples we want to delegate.
-    DELEGATE_TARGET_SOURCE = "top_prob"
+    DELEGATE_TARGET_SOURCE = "entropy"
     DELEGATE_TRAIN_TEAMMATE_ACCURACY = 0.7
     DELEGATE_TAU = 0.05
     DELEGATE_ANSWER_LOSS_WEIGHT = 0.2

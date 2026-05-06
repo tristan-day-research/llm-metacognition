@@ -82,15 +82,23 @@ from utils import (
 from loss import (
     build_soft_targets_from_entropy,
     build_soft_targets,
-    compute_loss
+    compute_loss,
+    confidence_signal_to_unit,
+    compute_delegate_target,
+    compute_delegate_at_loss,
+    compute_delegate_abcdt_loss,
 )
 from prompts import (
     build_self_confidence_prompts,
     build_self_confidence_prompts_numeric,
     build_multiple_choice_question_prompts,
+    build_delegate_at_prompts,
+    build_delegate_abcdt_prompts,
     run_mcq_forward_pass,
     run_confidence_forward_pass,
     run_confidence_forward_pass_numeric,
+    run_delegate_at_forward_pass,
+    run_delegate_abcdt_forward_pass,
     get_confidence_letter_mapping,
     get_mcq_letter_mapping,
 )
@@ -110,10 +118,133 @@ from data_handling import (
 
 
 # ------------------------------------------------------------------
+# Delegate Game training step (TASK_TYPE in {"delegate_at", "delegate_abcdt"}).
+# ------------------------------------------------------------------
+# Metacognition-targeted: the delegation TARGET comes from the model's OWN
+# recorded MCQ uncertainty (entropy / top_prob / prob_gap), NOT from whether
+# the recorded answer was correct. We're training the model to translate
+# its internal uncertainty into a delegation decision, not to be a
+# correctness classifier.
+#
+# Frozen mode (use_recorded_responses=True) is the canonical setup:
+# the row's `options` field is the recorded option set, so the delegate
+# prompt that's about to be built shows the model the SAME options the
+# teacher MCQ pass scored. AT is cleaner than ABCDT because it separates
+# the delegation decision from the answer choice; ABCDT couples them.
+def _delegate_train_step(
+    *,
+    task_type: str,
+    model,
+    tokenizer,
+    batch,
+    device,
+    args,
+    entropy: torch.Tensor,
+    top_prob: torch.Tensor,
+    second_prob: torch.Tensor,
+    subject_answer_idx: torch.Tensor | None,
+    mcq_letter_mapping,
+):
+    target_source = getattr(args, "delegate_target_source", "top_prob")
+    teammate_acc = float(getattr(args, "delegate_train_teammate_accuracy", 0.7))
+    tau = float(getattr(args, "delegate_tau", 0.05))
+
+    # 1. Map the recorded uncertainty signal → self_conf in [0, 1].
+    self_conf = confidence_signal_to_unit(
+        source=target_source,
+        entropy=entropy,
+        top_prob=top_prob,
+        second_prob=second_prob,
+    )
+
+    # 2. Soft delegation target. Detach so no grads flow back through the
+    #    target — the loss is a regression-style signal toward this fixed
+    #    label, not a self-distillation through the same forward pass.
+    target_delegate = compute_delegate_target(
+        self_conf, teammate_accuracy=teammate_acc, tau=tau
+    ).detach()
+
+    # 3. Forward pass on the delegate prompt.
+    if task_type == "delegate_at":
+        prompts = build_delegate_at_prompts(
+            batch, tokenizer, mcq_letter_mapping, model_type="instruct",
+            teammate_accuracy=teammate_acc,
+        )
+        out = run_delegate_at_forward_pass(
+            model=model, tokenizer=tokenizer, prompts=prompts,
+            device=device, requires_grad=True,
+        )
+        logits2 = out["logits2"]            # [B, 2] in [A, T] order
+        p_delegate = out["p_delegate"]      # [B]
+        loss = compute_delegate_at_loss(
+            logits2, target_delegate, reduction="mean"
+        )
+    else:  # task_type == "delegate_abcdt"
+        prompts = build_delegate_abcdt_prompts(
+            batch, tokenizer, mcq_letter_mapping, model_type="instruct",
+            teammate_accuracy=teammate_acc,
+        )
+        out = run_delegate_abcdt_forward_pass(
+            model=model, tokenizer=tokenizer, prompts=prompts,
+            device=device, requires_grad=True,
+            mcq_letter_mapping=mcq_letter_mapping,
+        )
+        logits5 = out["logits5"]            # [B, 5] in canonical [A,B,C,D,T]
+        p_delegate = out["p_delegate"]      # [B]
+        if subject_answer_idx is None:
+            raise ValueError(
+                "delegate_abcdt requires the recorded subject_answer for the "
+                "answer head; got None. Either enable use_recorded_responses "
+                "with a frozen lookup that has subject_answer, or use "
+                "task_type='delegate_at' which doesn't need it."
+            )
+        loss = compute_delegate_abcdt_loss(
+            logits5, target_delegate,
+            recorded_answer_idx=subject_answer_idx,
+            answer_loss_weight=float(getattr(args, "delegate_answer_loss_weight", 0.2)),
+            reduction="mean",
+        )
+
+    loss.backward()
+
+    # 4. Per-batch diagnostics. Mirrors the ECT path's step_metrics shape so
+    #    the training loop's W&B logging code doesn't need to special-case.
+    step_metrics = {
+        "n": int(entropy.shape[0]),
+        "self_live_corr_spearman": 0.0,
+        "self_live_corr_pearson": 0.0,
+    }
+    try:
+        p_del_np = p_delegate.detach().to("cpu").float().numpy()
+        target_np = target_delegate.detach().to("cpu").float().numpy()
+        self_conf_np = self_conf.detach().to("cpu").float().numpy()
+        step_metrics["delegate_p_mean"] = float(np.mean(p_del_np))
+        step_metrics["delegate_target_mean"] = float(np.mean(target_np))
+        step_metrics["delegate_self_conf_mean"] = float(np.mean(self_conf_np))
+        # Hard delegate rate at p>0.5, useful as a sanity readout.
+        step_metrics["delegate_rate_at_0_5"] = float(np.mean(p_del_np > 0.5))
+        # Correlation between the model's predicted p_delegate and the soft
+        # target — this is the directional signal that's actually being
+        # trained on. Useful early-warning if it stops climbing.
+        if p_del_np.size > 1 and float(np.std(p_del_np)) > 1e-6 and float(np.std(target_np)) > 1e-6:
+            from scipy.stats import spearmanr as _sp, pearsonr as _pe
+            s, _ = _sp(p_del_np, target_np)
+            p, _ = _pe(p_del_np, target_np)
+            if not np.isnan(s):
+                step_metrics["self_live_corr_spearman"] = float(s)
+            if not np.isnan(p):
+                step_metrics["self_live_corr_pearson"] = float(p)
+    except Exception:
+        pass
+
+    return loss.detach(), step_metrics
+
+
+# ------------------------------------------------------------------
 # Training Step
 # ------------------------------------------------------------------
 
-def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=None, 
+def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=None,
                train_dataset_qids=None, train_dataset_questions=None):
     """
     Train step with support for frozen teacher (pre-recorded) or dynamic teacher.
@@ -159,16 +290,26 @@ def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=
 
     finetuning_target = getattr(args, "finetuning_target", "entropy")
 
+    # task_type controls which fine-tuning objective the rest of this function
+    # builds. Defaulted to "explicit_confidence" so older configs (and any
+    # checkpoint that doesn't set it) keep behaving exactly as before.
+    task_type = getattr(args, "task_type", "explicit_confidence")
+    needs_subject_answer = task_type == "delegate_abcdt"
+
     if args.use_recorded_responses:
         if mcq_results_lookup is None:
             raise ValueError(
                 "--use_recorded_responses is True but no mcq_results_data provided!"
             )
 
-        # Look up pre-recorded signals for each question in batch
+        # Look up pre-recorded signals for each question in batch.
+        # subject_answer_idx is only collected for delegate_abcdt — it's the
+        # recorded MCQ answer letter (A-D) the teacher pass picked, used as
+        # the answer-head training target so we don't train on correctness.
         entropies = []
         top_probs = []
         second_probs = []
+        subject_answer_indices = []
         valid_indices = []  # Track which samples in batch are valid
 
         for i, row in enumerate(batch):
@@ -180,6 +321,16 @@ def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=
                 probs_list = sorted(record["probs"].values(), reverse=True)
                 top_probs.append(probs_list[0])
                 second_probs.append(probs_list[1] if len(probs_list) > 1 else 1e-12)
+                if needs_subject_answer:
+                    subj = record.get("subject_answer")
+                    if subj not in ("A", "B", "C", "D"):
+                        # Treat as a missing record so the sample is filtered
+                        # rather than silently mislabeled.
+                        print(f"⏭️  Skipping qid={qid}: bad subject_answer={subj!r} for delegate_abcdt")
+                        # roll back the appends so lengths stay aligned
+                        entropies.pop(); top_probs.pop(); second_probs.pop()
+                        continue
+                    subject_answer_indices.append("ABCD".index(subj))
                 valid_indices.append(i)
             else:
                 # Skip this question
@@ -198,6 +349,12 @@ def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=
         entropy = torch.tensor(entropies, dtype=torch.float32, device=device)
         top_prob = torch.tensor(top_probs, dtype=torch.float32, device=device)
         second_prob = torch.tensor(second_probs, dtype=torch.float32, device=device)
+        if needs_subject_answer:
+            subject_answer_idx = torch.tensor(
+                subject_answer_indices, dtype=torch.long, device=device
+            )
+        else:
+            subject_answer_idx = None
 
     # ----------------------------------------------
     # If using dynamic teacher: compute signals live from current model
@@ -228,6 +385,39 @@ def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=
         sorted_probs = probs4.sort(dim=-1, descending=True).values
         top_prob = sorted_probs[:, 0]
         second_prob = sorted_probs[:, 1]
+        if needs_subject_answer:
+            # Live teacher's argmax over A-D, in canonical position order.
+            subject_answer_idx = probs4.argmax(dim=-1).detach()
+        else:
+            subject_answer_idx = None
+
+    # ============================================================
+    # Task dispatch — explicit confidence (ECT) vs delegate game
+    # ============================================================
+    if task_type in ("delegate_at", "delegate_abcdt"):
+        return _delegate_train_step(
+            task_type=task_type,
+            model=model,
+            tokenizer=tokenizer,
+            batch=batch,
+            device=device,
+            args=args,
+            entropy=entropy,
+            top_prob=top_prob,
+            second_prob=second_prob,
+            subject_answer_idx=subject_answer_idx,
+            mcq_letter_mapping=mcq_letter_mapping,
+        )
+
+    if task_type != "explicit_confidence":
+        raise ValueError(
+            f"Unknown task_type {task_type!r}. "
+            "Must be one of 'explicit_confidence', 'delegate_at', 'delegate_abcdt'."
+        )
+
+    # ============================================================
+    # Explicit Confidence Task (ECT) — original code path, untouched.
+    # ============================================================
 
     # Convert to soft labels (size depends on confidence_format)
     confidence_format = getattr(args, "confidence_format", "letter_8bin")
@@ -430,8 +620,10 @@ def train(args):
     # ----- Confirm key training knobs picked up from config -----
     # Useful sanity check that edits to finetune_config.py actually reach the
     # running process (catches stale __pycache__ / unreloaded notebook kernels).
+    task_type = getattr(args, "task_type", "explicit_confidence")
     print(
         "\n[config] "
+        f"task_type={task_type}  "
         f"sigma={args.sigma}  "
         f"loss_type={args.loss_type}  "
         f"finetuning_target={getattr(args, 'finetuning_target', 'entropy')}  "
@@ -445,6 +637,15 @@ def train(args):
         f"lora_target_modules={tuple(args.lora_target_modules)}",
         flush=True,
     )
+    if task_type in ("delegate_at", "delegate_abcdt"):
+        print(
+            "[config] delegate-game knobs: "
+            f"target_source={args.delegate_target_source}  "
+            f"teammate_acc={args.delegate_train_teammate_accuracy}  "
+            f"tau={args.delegate_tau}  "
+            f"answer_loss_weight={args.delegate_answer_loss_weight}",
+            flush=True,
+        )
 
 
     # ============================================================
@@ -1052,6 +1253,12 @@ def build_args_from_config():
     also assigns onto it (e.g. confidence_letter_mapping).
     """
     return SimpleNamespace(
+        # Task
+        task_type=_C.TASK_TYPE,
+        delegate_target_source=_C.DELEGATE_TARGET_SOURCE,
+        delegate_train_teammate_accuracy=_C.DELEGATE_TRAIN_TEAMMATE_ACCURACY,
+        delegate_tau=_C.DELEGATE_TAU,
+        delegate_answer_loss_weight=_C.DELEGATE_ANSWER_LOSS_WEIGHT,
         # Model
         model_name=_C.MODEL_NAME,
         device=_C.DEVICE,

@@ -323,3 +323,154 @@ def compute_loss(
 
     else:
         raise ValueError(f"Unknown loss_type {loss_type}")
+
+
+# ============================================================
+# DELEGATE GAME losses
+# ------------------------------------------------------------
+# These power TASK_TYPE in ("delegate_at", "delegate_abcdt") and are
+# completely separate from the explicit-confidence (ECT) path above.
+#
+# Metacognition-targeted: the soft delegation TARGET is built from the
+# model's OWN recorded internal uncertainty (entropy / top_prob / prob_gap),
+# NOT from whether the recorded answer was correct. We're trying to teach
+# the model to report its own uncertainty as a delegation decision, not to
+# train a correctness classifier.
+# ============================================================
+
+def confidence_signal_to_unit(
+    *,
+    source: str,
+    entropy: torch.Tensor = None,
+    top_prob: torch.Tensor = None,
+    second_prob: torch.Tensor = None,
+) -> torch.Tensor:
+    """Map one of the three recorded MCQ uncertainty signals → self_conf in [0, 1].
+
+    source:
+        "entropy_conf" → 1 - entropy / ln(4).  Uniform-over-4 → 0, peaked → 1.
+        "top_prob"     → top_prob, the recorded probability of the model's top
+                         MCQ choice. Already in [0.25, 1]; we don't rescale,
+                         since 0.25 is "actual chance level" and 0.7 is a
+                         meaningful threshold against teammate_accuracy=0.7.
+        "prob_gap"     → top_prob - second_prob, in [0, 1].
+    """
+    if source == "entropy_conf":
+        if entropy is None:
+            raise ValueError("entropy required for source='entropy_conf'")
+        return (1.0 - entropy / math.log(4)).clamp(0.0, 1.0)
+    if source == "top_prob":
+        if top_prob is None:
+            raise ValueError("top_prob required for source='top_prob'")
+        return top_prob.clamp(0.0, 1.0)
+    if source == "prob_gap":
+        if top_prob is None or second_prob is None:
+            raise ValueError("top_prob and second_prob required for source='prob_gap'")
+        return (top_prob - second_prob).clamp(0.0, 1.0)
+    raise ValueError(
+        f"Unknown delegate target source {source!r}. "
+        "Must be one of 'entropy_conf', 'top_prob', 'prob_gap'."
+    )
+
+
+def compute_delegate_target(
+    self_conf: torch.Tensor,
+    *,
+    teammate_accuracy: float,
+    tau: float,
+) -> torch.Tensor:
+    """Soft delegation target = sigmoid((teammate_accuracy - self_conf) / tau).
+
+    self_conf << teammate_accuracy → target ≈ 1 (delegate)
+    self_conf ≈  teammate_accuracy → target ≈ 0.5 (genuinely ambiguous)
+    self_conf >> teammate_accuracy → target ≈ 0 (answer myself)
+
+    Soft labels avoid forcing a hard threshold on questions that fall right
+    near the boundary, where any binary label is essentially noise.
+    """
+    if tau <= 0:
+        raise ValueError(f"tau must be > 0, got {tau}")
+    return torch.sigmoid((teammate_accuracy - self_conf) / tau)
+
+
+def compute_delegate_at_loss(
+    logits2: torch.Tensor,
+    target_delegate: torch.Tensor,
+    reduction: str = "mean",
+) -> torch.Tensor:
+    """Binary delegation loss for the AT (binary Answer / Teammate) task.
+
+    logits2: [B, 2] in [A, T] order (output of run_delegate_at_forward_pass).
+    target_delegate: [B] soft probability in [0, 1] (output of
+        compute_delegate_target).
+
+    Loss = BCEWithLogits on (T_logit - A_logit) vs target_delegate. Operating
+    on the logit DIFFERENCE is equivalent to softmax cross-entropy over the
+    two-way distribution while staying numerically stable for soft targets.
+    """
+    logit_diff = logits2[:, 1] - logits2[:, 0]  # T - A
+    loss = torch.nn.functional.binary_cross_entropy_with_logits(
+        logit_diff, target_delegate, reduction="none"
+    )
+    if reduction == "mean":
+        return loss.mean()
+    if reduction == "sum":
+        return loss.sum()
+    if reduction == "none":
+        return loss
+    raise ValueError(f"Unknown reduction: {reduction}")
+
+
+def compute_delegate_abcdt_loss(
+    logits5: torch.Tensor,
+    target_delegate: torch.Tensor,
+    recorded_answer_idx: torch.Tensor = None,
+    *,
+    answer_loss_weight: float = 0.2,
+    reduction: str = "mean",
+) -> torch.Tensor:
+    """Combined delegation + answer-selection loss for the ABCDT task.
+
+    logits5: [B, 5] in canonical [A, B, C, D, T] order
+        (output of run_delegate_abcdt_forward_pass).
+    target_delegate: [B] soft probability in [0, 1].
+    recorded_answer_idx: [B] long tensor of recorded MCQ answer indices in
+        {0, 1, 2, 3} — i.e. the answer letter the *frozen* MCQ pass picked.
+        We use the model's own recorded answer here, NOT the ground-truth
+        correct answer — the goal is metacognitive consistency, not
+        correctness training.
+    answer_loss_weight: scalar multiplier on the answer-selection CE term.
+
+    total_loss = delegate_BCE + answer_loss_weight * (1 - target_delegate) * answer_CE
+
+    The (1 - target_delegate) factor downweights answer-selection learning
+    on questions where the soft target says "delegate" — there, the answer
+    head's prediction is irrelevant.
+    """
+    # Delegation: BCE on (T_logit - logsumexp(answer_logits))
+    answer_logits = logits5[:, :4]
+    delegate_logit = logits5[:, 4]
+    not_delegate_logit = torch.logsumexp(answer_logits, dim=-1)
+    delegate_logit_diff = delegate_logit - not_delegate_logit
+    delegate_loss = torch.nn.functional.binary_cross_entropy_with_logits(
+        delegate_logit_diff, target_delegate, reduction="none"
+    )  # [B]
+
+    if recorded_answer_idx is not None and answer_loss_weight > 0:
+        answer_log_probs = torch.log_softmax(answer_logits, dim=-1)  # [B, 4]
+        answer_ce = -answer_log_probs.gather(
+            -1, recorded_answer_idx.long().unsqueeze(-1)
+        ).squeeze(-1)  # [B]
+        # Downweight answer learning on samples we WANT to delegate.
+        answer_term = answer_loss_weight * (1.0 - target_delegate) * answer_ce
+        per_sample = delegate_loss + answer_term
+    else:
+        per_sample = delegate_loss
+
+    if reduction == "mean":
+        return per_sample.mean()
+    if reduction == "sum":
+        return per_sample.sum()
+    if reduction == "none":
+        return per_sample
+    raise ValueError(f"Unknown reduction: {reduction}")

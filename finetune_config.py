@@ -59,6 +59,23 @@ class ECTConfig:
     # SHARED — read by BOTH training and eval. Must not drift.
     # =========================================================================
 
+    # Which task to fine-tune on. Eval (run_evaluations.py) is unaffected and
+    # always evaluates ALL configured tasks (MCQ + confidence + delegate
+    # variants); only the training objective changes here.
+    #   "explicit_confidence" — original ECT path. Trains the confidence head
+    #                           against soft N-bin labels derived from the
+    #                           teacher MCQ pass. Uses CONFIDENCE_FORMAT,
+    #                           SIGMA, LOSS_TYPE, FINETUNING_TARGET below.
+    #   "delegate_at"         — Delegate Game, binary "A=answer / T=delegate".
+    #                           Trains BCE on (T-A) logit difference against a
+    #                           sigmoid-soft delegation target derived from
+    #                           the model's OWN recorded uncertainty (NOT
+    #                           correctness — see DELEGATE_* knobs below).
+    #   "delegate_abcdt"      — Delegate Game, single-shot A/B/C/D/T. Same
+    #                           soft delegation BCE plus a downweighted CE on
+    #                           the recorded model answer for the answer head.
+    TASK_TYPE = "delegate_at"
+
     # Base model. Single source of truth for which Llama version is being
     # finetuned AND evaluated. Imported from experiment_config so eval and
     # training cannot disagree on Llama-3 vs Llama-3.1, etc.
@@ -79,7 +96,7 @@ class ECTConfig:
     # "entropy"   — normalised MCQ entropy (existing behaviour).
     # "top_logit" — probability of the top MCQ choice, mapped [0.25,1]→[0,100].
     # "logit_gap" — log-prob gap between top and second choice, mapped via tanh.
-    FINETUNING_TARGET = "top_logit"
+    FINETUNING_TARGET = "entropy"
 
     # Confidence response format — controls which prompt builder, forward
     # pass, and loss bin spec are used. Self- and other-confidence ALWAYS
@@ -140,9 +157,43 @@ class ECTConfig:
     # TABCD / TA mirror ABCDT / AT but show T (delegate) FIRST in the option
     # block instead of last. Comparing ABCDT-vs-TABCD and AT-vs-TA delegation
     # rates isolates first-position bias as a confound on the delegate decision.
-    VAL_RUN_DELEGATE_TABCD = False
-    VAL_RUN_DELEGATE_TA = False
+    VAL_RUN_DELEGATE_TABCD = True
+    VAL_RUN_DELEGATE_TA = True
     VAL_DELEGATE_TEAMMATE_ACCURACY = 0.7
+
+    # ----- Delegate-game FINE-TUNING knobs ------------------------------------
+    # Only consulted when TASK_TYPE in ("delegate_at", "delegate_abcdt").
+    # Independent of the VAL_RUN_DELEGATE_* knobs above, which control the
+    # validation-side delegate diagnostics for ANY task type.
+    #
+    # Metacognition-targeted: target is built from the model's OWN recorded
+    # MCQ uncertainty. Training the model to delegate based directly on
+    # recorded correctness would teach correctness calibration, not
+    # metacognition.
+    #
+    # DELEGATE_TARGET_SOURCE — which recorded uncertainty signal drives the
+    #     soft delegation target. See loss.confidence_signal_to_unit().
+    #       "top_prob"      → recorded probability of the top MCQ choice.
+    #                         Cleanest for the 0.7 threshold below.
+    #       "entropy_conf"  → 1 - entropy/ln(4), so 0 = uniform, 1 = peaked.
+    #       "prob_gap"      → top_prob - second_prob.
+    # DELEGATE_TRAIN_TEAMMATE_ACCURACY — accuracy SHOWN to the model in the
+    #     prompt setup AND used as the threshold in the soft target. Keeping
+    #     these tied means "the model is asked to delegate iff its self_conf
+    #     falls below the teammate's stated accuracy", which is the right
+    #     decision rule. Defaults to VAL_DELEGATE_TEAMMATE_ACCURACY so the
+    #     train and val delegate setups match by default.
+    # DELEGATE_TAU — softness of the sigmoid threshold. Smaller τ → harder
+    #     boundary at teammate_accuracy. 0.05 makes the transition span
+    #     roughly ±0.1 around the threshold.
+    # DELEGATE_ANSWER_LOSS_WEIGHT — only used for TASK_TYPE='delegate_abcdt'.
+    #     Weight on the answer-selection CE against the recorded model
+    #     answer. The CE is multiplied by (1 - target_delegate) so it
+    #     vanishes on samples we want to delegate.
+    DELEGATE_TARGET_SOURCE = "top_prob"
+    DELEGATE_TRAIN_TEAMMATE_ACCURACY = 0.7
+    DELEGATE_TAU = 0.05
+    DELEGATE_ANSWER_LOSS_WEIGHT = 0.2
 
     # =========================================================================
     # TRAINING — used solely by run_finetuning.py.
@@ -188,6 +239,10 @@ class ECTConfig:
     VAL_RUN_BOTH_FROZEN_AND_LIVE = True
 
     # LoRA
+    # NOTE: starting smaller for the delegate task (r=8 / α=16) per the
+    # delegate-game spec — the model only has to learn a single binary
+    # decision, so a fatter adapter risks overfitting noise. For ECT runs
+    # bump back to r=16 / α=32.
     LORA_R = 16
     LORA_ALPHA = 32
     LORA_DROPOUT = 0.05
@@ -195,12 +250,15 @@ class ECTConfig:
     # LORA_TARGET_MODULES = ("q_proj", "v_proj")
 
     # Training loop
+    # Delegate-task defaults from the spec. ECT defaults were lr=2e-5,
+    # max_steps=2500, val_interval=150, checkpoint_steps=200; restore those
+    # when flipping TASK_TYPE back to "explicit_confidence".
     LEARNING_RATE = 2e-5
     MAX_STEPS = 2500
     LOG_INTERVAL = 20
     VAL_INTERVAL = 100
     LIMIT_VAL_BATCHES = None
-    VAL_NUM_SAMPLES = 300
+    VAL_NUM_SAMPLES = 250
     ENABLE_DATA_LEAKAGE_CHECKS = True
 
     # Gradient clipping (max global L2 norm). Set to None to disable.
@@ -217,13 +275,13 @@ class ECTConfig:
     # weighted by 1.0 or HIGH_ENTROPY_LOSS_WEIGHT depending on entropy bin,
     # then averaged. Validation loss reporting is NOT reweighted (so val/loss
     # stays comparable across runs).
-    HIGH_ENTROPY_LOSS_WEIGHT = 1.3
+    HIGH_ENTROPY_LOSS_WEIGHT = 1.0
 
     # Output / checkpointing
     OUTPUT_DIR = FINETUNE_OUTPUTS_DIR / "ect_lora"
     LOGS_DIR = FINETUNE_LOGS_DIR
     CHECKPOINTS_DIR = FINETUNE_CHECKPOINTS_DIR
-    CHECKPOINT_STEPS = 200
+    CHECKPOINT_STEPS = 100
     # When True, local checkpoint dirs are preserved on disk after the run.
     # When False, they are deleted after being uploaded to W&B / HF.
     # Default workflow: keep everything local during training, then use
@@ -238,7 +296,9 @@ class ECTConfig:
     HF_CHECKPOINT_REPO = None
     HF_CHECKPOINT_PRIVATE = False
 
-    # Weights & Biases (training)
+    # Weights & Biases (training). Single project for both ECT and delegate
+    # runs so they're directly comparable in one dashboard. The TASK_TYPE
+    # prefix in WANDB_RUN_NAME makes the two cohorts trivially filterable.
     WANDB_PROJECT = "llm-metacognition-ect"
     # Run-name dataset tag, derived from TRAIN_DATA_PATH so swapping datasets
     # above automatically updates the W&B run name.
@@ -258,7 +318,21 @@ class ECTConfig:
         Path(TRAIN_DATA_PATH).stem.removesuffix("_train"),
         "unknown_dataset",
     )
-    WANDB_RUN_NAME = f"{_DATASET_TAG}_{FINETUNING_TARGET}_{LEARNING_RATE}_{LORA_TARGET_MODULES}_sigma{SIGMA}_Lora_{LORA_R}_{LORA_ALPHA}"
+    # Run-name format depends on task. ECT path stays byte-identical to before
+    # so existing dashboards / saved filters keep matching old runs. Delegate
+    # runs get a different format that surfaces the delegate-specific knobs
+    # (target source, teammate accuracy, tau) and drops the irrelevant
+    # FINETUNING_TARGET/sigma fields.
+    if TASK_TYPE == "explicit_confidence":
+        WANDB_RUN_NAME = f"{_DATASET_TAG}_{FINETUNING_TARGET}_{LEARNING_RATE}_{LORA_TARGET_MODULES}_sigma{SIGMA}_Lora_{LORA_R}_{LORA_ALPHA}"
+    else:
+        # task_type is the leading tag so W&B's name filter "delegate*" picks
+        # up every delegate run regardless of dataset.
+        WANDB_RUN_NAME = (
+            f"{TASK_TYPE}_{_DATASET_TAG}_{DELEGATE_TARGET_SOURCE}"
+            f"_tm{DELEGATE_TRAIN_TEAMMATE_ACCURACY}_tau{DELEGATE_TAU}"
+            f"_{LEARNING_RATE}_{LORA_TARGET_MODULES}_Lora_{LORA_R}_{LORA_ALPHA}"
+        )
     WANDB_TAGS = None
     WANDB_NOTES = None
     SAVE_WANDB_ARTIFACT = True
@@ -321,8 +395,8 @@ class ECTConfig:
     #   EVAL_RUN_DELEGATE_TA    — mirror of AT with T listed FIRST.
     EVAL_RUN_DELEGATE_ABCDT = True
     EVAL_RUN_DELEGATE_AT = True
-    EVAL_RUN_DELEGATE_TABCD = False
-    EVAL_RUN_DELEGATE_TA = False
+    EVAL_RUN_DELEGATE_TABCD = True
+    EVAL_RUN_DELEGATE_TA = True
     # Teammate accuracy shown to the model in the delegate-game setup blurb.
     # 0.7 puts the decision boundary near the strong-model accuracy regime.
     EVAL_DELEGATE_TEAMMATE_ACCURACY = 0.7

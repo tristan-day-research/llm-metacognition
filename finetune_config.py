@@ -360,9 +360,10 @@ class ECTConfig:
     EVAL_MERGE_LORA = False  # if True, merge LoRA into base before eval
 
     EVAL_DATASETS = (
-        "data/PopMC.jsonl",
-        "data/SimpleMC.jsonl",
-        "data/TriviaMC.jsonl",
+        "data/mixed_17173_all_test.jsonl",
+        # "data/PopMC.jsonl",
+        # "data/SimpleMC.jsonl",
+        # "data/TriviaMC.jsonl",
         # 'data/balanced_metacognition_train.jsonl',
         # 'data/balanced_metacognition.jsonl'
     )
@@ -395,11 +396,9 @@ class ECTConfig:
     #   EVAL_RUN_DELEGATE_TA    — mirror of AT with T listed FIRST.
     EVAL_RUN_DELEGATE_ABCDT = True
     EVAL_RUN_DELEGATE_AT = True
-    # TABCD / TA have NO base-mode few-shot prompts yet — the build_*_prompts
-    # path would emit instruction-style text without examples, which a base
-    # Llama can't follow. Leave these off for base runs until the few-shot
-    # wrappers are added (mirrors of _base_few_shot_abcdt / _base_few_shot_at
-    # with T listed first in the option block).
+    # TABCD / TA have working instruct/finetuned prompts but NO base-mode
+    # few-shot prompts yet — flip these off for base runs until those mirror
+    # variants of _base_few_shot_abcdt / _base_few_shot_at are added.
     EVAL_RUN_DELEGATE_TABCD = False
     EVAL_RUN_DELEGATE_TA = False
     # Teammate accuracy shown to the model in the delegate-game setup blurb.

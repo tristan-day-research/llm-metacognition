@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from torch.utils.data import DataLoader, Subset
 from scipy.stats import pearsonr, spearmanr
 import random
-from tqdm.auto import tqdm
+from tqdm import tqdm  # std variant: tqdm.auto can misdetect non-TTY contexts (e.g. piped runpod terminals) and emit one line per update
 
 # wandb is imported lazily inside the only branches that use it (so eval works
 # in environments where wandb isn't installed and EVAL_USE_WANDB is False).
@@ -612,7 +612,10 @@ def run_evaluation(
     # ==================== MAIN LOOP ==========================
     total_samples = len(idxs)
     pbar_desc = f"{step_name or 'eval'} ({log_prefix.rstrip('_') or 'model'})"
-    for idx_in_loop, i in enumerate(tqdm(idxs, desc=pbar_desc, total=total_samples, leave=True)):
+    for idx_in_loop, i in enumerate(tqdm(
+        idxs, desc=pbar_desc, total=total_samples, leave=True,
+        mininterval=0.5, dynamic_ncols=True,
+    )):
         
         batch = val_dataset[i:i+1]    # single-sample batch (list of 1 dict)
 

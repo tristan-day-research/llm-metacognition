@@ -1775,6 +1775,172 @@ def _options_str_oxford(options: List[str]) -> str:
     return ", ".join(options[:-1]) + f", or {options[-1]}"
 
 
+# ---- base-model few-shot exemplars (used by build_*_prompts on model_type="base")
+#
+# Base Llama doesn't follow instruction-style prompts reliably — it needs the
+# pattern demonstrated. The constants below are hand-curated, balanced sets used
+# by the base path of the build_*_prompts builders. They mirror the design of
+# MC_DELEGATE_EXEMPLARS / NUMERIC_CONFIDENCE_EXEMPLARS: graded difficulty plus a
+# spread of correct answers across A/B/C/D to avoid teaching a position bias.
+
+# Plain MCQ exemplars — graded easy → mid-hard. Answers spread across A/B/C/D.
+# `answer` is the canonical (A-D) letter; the few-shot renderer remaps to the
+# active mcq_display letters before printing.
+MC_BALANCED_EXEMPLARS = [
+    {
+        "question": "Which element has the chemical symbol 'Au'?",
+        "options": {"A": "Gold", "B": "Aluminum", "C": "Silver", "D": "Argon"},
+        "answer": "A",
+    },
+    {
+        "question": "What planet is known as the Red Planet?",
+        "options": {"A": "Venus", "B": "Mars", "C": "Jupiter", "D": "Saturn"},
+        "answer": "B",
+    },
+    {
+        "question": "What is the capital of Australia?",
+        "options": {"A": "Sydney", "B": "Melbourne", "C": "Canberra", "D": "Perth"},
+        "answer": "C",
+    },
+    {
+        "question": "Who wrote the play 'Romeo and Juliet'?",
+        "options": {"A": "Charles Dickens", "B": "Jane Austen",
+                    "C": "Mark Twain", "D": "William Shakespeare"},
+        "answer": "D",
+    },
+    {
+        "question": "In what year was the Magna Carta signed?",
+        "options": {"A": "1066", "B": "1215", "C": "1348", "D": "1492"},
+        "answer": "B",
+    },
+]
+
+
+# Other-confidence numeric exemplars — same questions as NUMERIC_CONFIDENCE_EXEMPLARS
+# but the digit reflects "% of college-educated humans who would get this right",
+# not the model's self-confidence. Trivially-known facts → 9-10; specific dates /
+# specialised knowledge → 3-4; intractable recall (digits of pi) → 2 (slightly
+# above the 1-in-4 floor).
+OTHER_CONFIDENCE_NUMERIC_EXEMPLARS = [
+    {
+        "question": "What planet is known as the Red Planet?",
+        "options": {"A": "Venus", "B": "Mars", "C": "Jupiter", "D": "Saturn"},
+        "confidence": "10",
+    },
+    {
+        "question": "Who wrote the play 'Romeo and Juliet'?",
+        "options": {"A": "Charles Dickens", "B": "William Shakespeare",
+                    "C": "Jane Austen", "D": "Mark Twain"},
+        "confidence": "9",
+    },
+    {
+        "question": "What is the capital of Australia?",
+        "options": {"A": "Sydney", "B": "Melbourne", "C": "Canberra", "D": "Perth"},
+        "confidence": "5",
+    },
+    {
+        "question": "In what year was the Magna Carta signed?",
+        "options": {"A": "1066", "B": "1215", "C": "1348", "D": "1492"},
+        "confidence": "3",
+    },
+    {
+        "question": "What is the 21 trillionth digit of pi?",
+        "options": {"A": "3", "B": "7", "C": "1", "D": "9"},
+        "confidence": "2",
+    },
+]
+
+
+def _base_few_shot_mcq(mcq_display: List[str], options_str: str) -> str:
+    """Render shuffled MC_BALANCED_EXEMPLARS in the bare-MCQ fenced layout.
+
+    Each example block ends with the target answer letter (remapped from
+    canonical A-D to mcq_display) so the model sees the full input→output
+    pattern.
+    """
+    examples = list(MC_BALANCED_EXEMPLARS)
+    random.shuffle(examples)
+
+    blocks: List[str] = []
+    for ex in examples:
+        target_display = mcq_display[ord(ex["answer"]) - ord('A')]
+        option_texts = [ex["options"][chr(ord('A') + i)] for i in range(4)]
+        q_block = _fenced_mc_question(ex["question"].strip(), mcq_display, option_texts)
+        blocks.append(q_block + f"\nYour choice ({options_str}): {target_display}")
+
+    return "\n\n".join(blocks) + "\n\n"
+
+
+def _base_few_shot_self_conf_numeric(mcq_display: List[str], n_max: int) -> str:
+    """Render shuffled NUMERIC_CONFIDENCE_EXEMPLARS in the meta-question layout
+    used by build_self_confidence_prompts_numeric. Only n_max=10 is wired (the
+    exemplars use the 1-10 scale); other values raise NotImplementedError.
+    """
+    if n_max != 10:
+        raise NotImplementedError(
+            f"Base-mode self-confidence few-shot is only implemented for "
+            f"n_max=10; got {n_max}. Add exemplars on the matching scale "
+            "or set CONFIDENCE_FORMAT='1-10'."
+        )
+
+    inner_question = (
+        f"How confident are you that you would get this question right? "
+        f"Rate from 1 (not confident at all) to {n_max} (completely sure)."
+    )
+
+    examples = list(NUMERIC_CONFIDENCE_EXEMPLARS)
+    random.shuffle(examples)
+
+    blocks: List[str] = []
+    for ex in examples:
+        option_texts = [ex["options"][chr(ord('A') + i)] for i in range(4)]
+        q_block = _fenced_meta_question(
+            inner_question,
+            ex["question"].strip(),
+            mcq_display,
+            option_texts,
+            option_block=[],
+        )
+        blocks.append(q_block + f"\nYour choice (1-{n_max}): {ex['confidence']}")
+
+    return "\n\n".join(blocks) + "\n\n"
+
+
+def _base_few_shot_other_conf_numeric(mcq_display: List[str], n_max: int) -> str:
+    """Render shuffled OTHER_CONFIDENCE_NUMERIC_EXEMPLARS in the meta-question
+    layout used by build_other_confidence_prompts_numeric. Only n_max=10 is
+    wired (exemplars are on the 1-10 scale).
+    """
+    if n_max != 10:
+        raise NotImplementedError(
+            f"Base-mode other-confidence few-shot is only implemented for "
+            f"n_max=10; got {n_max}. Add exemplars on the matching scale "
+            "or set CONFIDENCE_FORMAT='1-10'."
+        )
+
+    inner_question = (
+        f"What fraction of college-educated people would get this question right? "
+        f"Rate from 1 (almost none) to {n_max} (almost everyone)."
+    )
+
+    examples = list(OTHER_CONFIDENCE_NUMERIC_EXEMPLARS)
+    random.shuffle(examples)
+
+    blocks: List[str] = []
+    for ex in examples:
+        option_texts = [ex["options"][chr(ord('A') + i)] for i in range(4)]
+        q_block = _fenced_meta_question(
+            inner_question,
+            ex["question"].strip(),
+            mcq_display,
+            option_texts,
+            option_block=[],
+        )
+        blocks.append(q_block + f"\nYour choice (1-{n_max}): {ex['confidence']}")
+
+    return "\n\n".join(blocks) + "\n\n"
+
+
 def _fenced_mc_question(question_text: str, mcq_display: List[str],
                         option_texts: List[str]) -> str:
     """Produce the fenced bare-MC body used by format_direct_prompt:
@@ -1873,6 +2039,16 @@ def build_multiple_choice_question_prompts(
     mcq_display = [mcq_letter_mapping[chr(ord('A') + i)] for i in range(4)]
     options_str = _options_str_oxford(mcq_display)
 
+    if model_type == "base":
+        # Base path: short pattern-completion intro + balanced few-shot block,
+        # in the same fenced layout as the test question.
+        base_intro = (
+            "The following are multiple-choice questions, each with a single "
+            "best answer. For each question, respond with the letter of your "
+            "choice.\n\n"
+        )
+        prefix = base_intro + _base_few_shot_mcq(mcq_display, options_str)
+
     prompts: List[str] = []
     for row in batch:
         q_block = _fenced_mc_question(
@@ -1880,9 +2056,12 @@ def build_multiple_choice_question_prompts(
             mcq_display,
             _row_option_texts(row),
         )
-        user_content = (
-            MC_SETUP_PROMPT + "\n\n" + q_block + f"\nYour choice ({options_str}): "
-        )
+        if model_type == "base":
+            user_content = prefix + q_block + f"\nYour choice ({options_str}): "
+        else:
+            user_content = (
+                MC_SETUP_PROMPT + "\n\n" + q_block + f"\nYour choice ({options_str}): "
+            )
         prompts.append(_wrap_user_message(user_content, tokenizer, model_type))
     return prompts
 
@@ -1902,6 +2081,13 @@ def build_self_confidence_prompts(
     right?", the MC question is shown, then the eight confidence bins, then
     "Your choice (A, B, C, ..., H): ".
     """
+    if model_type == "base":
+        raise NotImplementedError(
+            "build_self_confidence_prompts (letter_8bin) does not have base-mode "
+            "few-shot exemplars. Set CONFIDENCE_FORMAT='1-10' to use the numeric "
+            "builder, or add letter_8bin exemplars + a base helper alongside "
+            "_base_few_shot_self_conf_numeric."
+        )
     if confidence_letter_mapping is None:
         confidence_letter_mapping = get_confidence_letter_mapping("A-H")
     if mcq_letter_mapping is None:
@@ -1950,6 +2136,13 @@ def build_other_confidence_prompts(
     Same structure as build_self_confidence_prompts but the inner question
     asks about hypothetical college-educated humans rather than the model.
     """
+    if model_type == "base":
+        raise NotImplementedError(
+            "build_other_confidence_prompts (letter_8bin) does not have base-mode "
+            "few-shot exemplars. Set CONFIDENCE_FORMAT='1-10' to use the numeric "
+            "builder, or add letter_8bin exemplars + a base helper alongside "
+            "_base_few_shot_other_conf_numeric."
+        )
     if confidence_letter_mapping is None:
         confidence_letter_mapping = get_confidence_letter_mapping("A-H")
     if mcq_letter_mapping is None:
@@ -2007,6 +2200,14 @@ def build_self_confidence_prompts_numeric(
         f"Rate from 1 (not confident at all) to {n_max} (completely sure)."
     )
 
+    if model_type == "base":
+        base_intro = (
+            f"For each question, rate your confidence from 1 (not confident "
+            f"at all) to {n_max} (completely sure) that you would get the "
+            f"question right.\n\n"
+        )
+        prefix = base_intro + _base_few_shot_self_conf_numeric(mcq_display, n_max)
+
     prompts: List[str] = []
     for row in batch:
         q_block = _fenced_meta_question(
@@ -2016,9 +2217,12 @@ def build_self_confidence_prompts_numeric(
             _row_option_texts(row),
             option_block=[],  # numeric scale anchored in setup, no per-digit lines
         )
-        user_content = (
-            scheme["setup"] + "\n\n" + q_block + f"\nYour choice (1-{n_max}): "
-        )
+        if model_type == "base":
+            user_content = prefix + q_block + f"\nYour choice (1-{n_max}): "
+        else:
+            user_content = (
+                scheme["setup"] + "\n\n" + q_block + f"\nYour choice (1-{n_max}): "
+            )
         prompts.append(_wrap_user_message(user_content, tokenizer, model_type))
     return prompts
 
@@ -2067,6 +2271,116 @@ def _delegate_setup_at(teammate_accuracy: float) -> str:
     )
 
 
+# ---- base-model (few-shot, no chat template) variants for ABCDT / AT ------
+#
+# Base Llama doesn't follow instruction-style prompts reliably — it needs to
+# see the input/output pattern demonstrated. These helpers render the same
+# fenced layout used by the test question, append the target letter, and
+# concatenate a shuffled balanced exemplar set (4 Answer + 2 Delegate from
+# MC_DELEGATE_EXEMPLARS). The build_delegate_*_prompts functions branch on
+# model_type=="base" to use these instead of the chat-template path.
+#
+# We deliberately reuse MC_DELEGATE_EXEMPLARS (already calibrated for graded
+# difficulty) for both ABCDT and AT — for AT we collapse any A/B/C/D target
+# to "A" (answer-myself), keeping T as T.
+
+def _base_setup_abcdt(mcq_display: List[str], teammate_accuracy: float) -> str:
+    """Short framing line for the ABCDT base few-shot prefix."""
+    answer_letters = ", ".join(mcq_display[:-1]) + f", or {mcq_display[-1]}"
+    return (
+        f"You are working with a teammate who answers about {100.0 * teammate_accuracy:.0f}% "
+        "of multiple-choice questions correctly. For each question, respond with "
+        f"{answer_letters} to answer it yourself, or {DELEGATE_TEAMMATE_LETTER} "
+        "to delegate to your teammate. Pick whichever has the better chance of "
+        "being right.\n\n"
+    )
+
+
+def _base_setup_at(teammate_accuracy: float) -> str:
+    """Short framing line for the AT base few-shot prefix."""
+    return (
+        f"You are working with a teammate who answers about {100.0 * teammate_accuracy:.0f}% "
+        "of multiple-choice questions correctly. For each question, decide whether to "
+        f"answer it yourself (respond A) or delegate to your teammate (respond "
+        f"{DELEGATE_TEAMMATE_LETTER}). Pick whichever has the better chance of being right.\n\n"
+    )
+
+
+def _base_few_shot_abcdt(
+    mcq_display: List[str],
+    options_str: str,
+) -> str:
+    """Render shuffled MC_DELEGATE_EXEMPLARS in the ABCDT fenced layout.
+
+    Each example block ends with the target display letter so the model
+    sees the full input→output pattern. Targets in MC_DELEGATE_EXEMPLARS
+    are canonical A-D (or T); we remap A-D to mcq_display so few-shot
+    letters match whatever scheme the test question uses.
+    """
+    teammate_letter = DELEGATE_TEAMMATE_LETTER
+    examples = list(MC_DELEGATE_EXEMPLARS)
+    random.shuffle(examples)
+
+    blocks: List[str] = []
+    for ex in examples:
+        target_canon = ex["target"]
+        if target_canon == teammate_letter:
+            target_display = teammate_letter
+        else:
+            target_display = mcq_display[ord(target_canon) - ord('A')]
+
+        option_texts = [ex["options"][chr(ord('A') + i)] for i in range(4)]
+        lines = [
+            "-" * 30,
+            "Question:",
+            ex["question"].strip(),
+            "-" * 10,
+        ]
+        for letter, text in zip(mcq_display, option_texts):
+            lines.append(f"  {letter}: {text}")
+        lines.append(f"  {teammate_letter}: Delegate to your teammate")
+        lines.append("-" * 30)
+        lines.append(f"Your choice ({options_str}): {target_display}")
+        blocks.append("\n".join(lines))
+
+    return "\n\n".join(blocks) + "\n\n"
+
+
+def _base_few_shot_at(mcq_display: List[str]) -> str:
+    """Render shuffled MC_DELEGATE_EXEMPLARS in the AT meta-question layout.
+
+    Targets collapse to A (any A/B/C/D answer means "answer myself") or T
+    (delegate). Inner MC option letters follow mcq_display so the displayed
+    options match the test question; the meta-options A/T are literal.
+    """
+    teammate_letter = DELEGATE_TEAMMATE_LETTER
+    inner_question = (
+        "Do you want to answer this question yourself or delegate it to your teammate?"
+    )
+    option_block = [
+        "  A: Answer the question myself",
+        f"  {teammate_letter}: Delegate to my teammate",
+    ]
+
+    examples = list(MC_DELEGATE_EXEMPLARS)
+    random.shuffle(examples)
+
+    blocks: List[str] = []
+    for ex in examples:
+        target = teammate_letter if ex["target"] == teammate_letter else "A"
+        option_texts = [ex["options"][chr(ord('A') + i)] for i in range(4)]
+        q_block = _fenced_meta_question(
+            inner_question,
+            ex["question"].strip(),
+            mcq_display,
+            option_texts,
+            option_block,
+        )
+        blocks.append(q_block + f"\nYour choice (A or {teammate_letter}): {target}")
+
+    return "\n\n".join(blocks) + "\n\n"
+
+
 def build_delegate_abcdt_prompts(
     batch: List[Dict],
     tokenizer,
@@ -2088,7 +2402,12 @@ def build_delegate_abcdt_prompts(
     teammate_letter = DELEGATE_TEAMMATE_LETTER
     all_letters = mcq_display + [teammate_letter]
     options_str = _options_str_oxford(all_letters)
-    setup = _delegate_setup_abcdt(mcq_display, teammate_accuracy)
+
+    if model_type == "base":
+        prefix = _base_setup_abcdt(mcq_display, teammate_accuracy) + \
+            _base_few_shot_abcdt(mcq_display, options_str)
+    else:
+        setup = _delegate_setup_abcdt(mcq_display, teammate_accuracy)
 
     prompts: List[str] = []
     for row in batch:
@@ -2106,9 +2425,12 @@ def build_delegate_abcdt_prompts(
         lines.append("-" * 30)
         q_block = "\n".join(lines)
 
-        user_content = (
-            setup + "\n\n" + q_block + f"\nYour choice ({options_str}): "
-        )
+        if model_type == "base":
+            user_content = prefix + q_block + f"\nYour choice ({options_str}): "
+        else:
+            user_content = (
+                setup + "\n\n" + q_block + f"\nYour choice ({options_str}): "
+            )
         prompts.append(_wrap_user_message(user_content, tokenizer, model_type))
     return prompts
 
@@ -2246,7 +2568,6 @@ def build_delegate_at_prompts(
     if mcq_letter_mapping is None:
         mcq_letter_mapping = get_mcq_letter_mapping("A-D")
     mcq_display = [mcq_letter_mapping[chr(ord('A') + i)] for i in range(4)]
-    setup = _delegate_setup_at(teammate_accuracy)
     inner_question = (
         "Do you want to answer this question yourself or delegate it to your teammate?"
     )
@@ -2254,6 +2575,11 @@ def build_delegate_at_prompts(
         "  A: Answer the question myself",
         f"  {DELEGATE_TEAMMATE_LETTER}: Delegate to my teammate",
     ]
+
+    if model_type == "base":
+        prefix = _base_setup_at(teammate_accuracy) + _base_few_shot_at(mcq_display)
+    else:
+        setup = _delegate_setup_at(teammate_accuracy)
 
     prompts: List[str] = []
     for row in batch:
@@ -2264,9 +2590,12 @@ def build_delegate_at_prompts(
             _row_option_texts(row),
             option_block,
         )
-        user_content = (
-            setup + "\n\n" + q_block + "\nYour choice (A or T): "
-        )
+        if model_type == "base":
+            user_content = prefix + q_block + "\nYour choice (A or T): "
+        else:
+            user_content = (
+                setup + "\n\n" + q_block + "\nYour choice (A or T): "
+            )
         prompts.append(_wrap_user_message(user_content, tokenizer, model_type))
     return prompts
 
@@ -2296,6 +2625,14 @@ def build_other_confidence_prompts_numeric(
         f"Rate from 1 (almost none) to {n_max} (almost everyone)."
     )
 
+    if model_type == "base":
+        base_intro = (
+            f"For each question, estimate from 1 (almost no one would get it "
+            f"right) to {n_max} (almost everyone would get it right) how a "
+            f"college-educated person would do.\n\n"
+        )
+        prefix = base_intro + _base_few_shot_other_conf_numeric(mcq_display, n_max)
+
     prompts: List[str] = []
     for row in batch:
         q_block = _fenced_meta_question(
@@ -2305,9 +2642,12 @@ def build_other_confidence_prompts_numeric(
             _row_option_texts(row),
             option_block=[],
         )
-        user_content = (
-            setup + "\n\n" + q_block + f"\nYour choice (1-{n_max}): "
-        )
+        if model_type == "base":
+            user_content = prefix + q_block + f"\nYour choice (1-{n_max}): "
+        else:
+            user_content = (
+                setup + "\n\n" + q_block + f"\nYour choice (1-{n_max}): "
+            )
         prompts.append(_wrap_user_message(user_content, tokenizer, model_type))
     return prompts
 

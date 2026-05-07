@@ -352,7 +352,7 @@ class ECTConfig:
     #   "instruct"  → Llama-Instruct (off-the-shelf, no LoRA).
     #                 Uses LLAMA_8B_INSTRUCT; prompts use the chat template.
     #   "finetuned" → Llama-Instruct + the LoRA adapter at EVAL_LORA_REPO.
-    EVAL_MODEL_TYPE = "instruct"
+    EVAL_MODEL_TYPE = "base"
 
     # LoRA adapter — only loaded when EVAL_MODEL_TYPE == "finetuned".
     # Harmless to leave set when evaluating "base" or "instruct"; ignored.
@@ -395,8 +395,13 @@ class ECTConfig:
     #   EVAL_RUN_DELEGATE_TA    — mirror of AT with T listed FIRST.
     EVAL_RUN_DELEGATE_ABCDT = True
     EVAL_RUN_DELEGATE_AT = True
-    EVAL_RUN_DELEGATE_TABCD = True
-    EVAL_RUN_DELEGATE_TA = True
+    # TABCD / TA have NO base-mode few-shot prompts yet — the build_*_prompts
+    # path would emit instruction-style text without examples, which a base
+    # Llama can't follow. Leave these off for base runs until the few-shot
+    # wrappers are added (mirrors of _base_few_shot_abcdt / _base_few_shot_at
+    # with T listed first in the option block).
+    EVAL_RUN_DELEGATE_TABCD = False
+    EVAL_RUN_DELEGATE_TA = False
     # Teammate accuracy shown to the model in the delegate-game setup blurb.
     # 0.7 puts the decision boundary near the strong-model accuracy regime.
     EVAL_DELEGATE_TEAMMATE_ACCURACY = 0.7

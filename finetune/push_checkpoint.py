@@ -34,19 +34,26 @@ from utils import _sanitize_for_hf
 
 
 def _derive_repo_name(ckpt_path: Path, username: str) -> str:
-    """Repo name = <username>/<sanitized parent dir>_<sanitized ckpt dir>.
+    """Repo name = <username>/<parent slug, truncated from the tail>_<leaf>.
 
-    The parent directory is the wandb-named checkpoint base dir; the leaf
-    is e.g. ``ckpt_step_2000``. Combining them keeps the run identifier
-    while disambiguating between steps from the same run.
+    Parent dir is the W&B-named checkpoint base; leaf is e.g.
+    ``ckpt_step_2000``. The leaf is ALWAYS preserved in full so the step
+    number survives — when the combined name exceeds HF's 96-char cap we
+    chop the parent's tail (which holds redundant hyperparams) instead of
+    the leaf, since the step is the disambiguator between checkpoints from
+    the same run.
     """
     parent_slug = _sanitize_for_hf(ckpt_path.parent.name)
     leaf_slug = _sanitize_for_hf(ckpt_path.name)
-    base_slug = f"{parent_slug}_{leaf_slug}".strip("-.")
-    # HF repo names are capped at 96 chars; keep some headroom for the prefix.
+    sep = "_"
     max_base = 96 - len(username) - 1
-    if len(base_slug) > max_base:
-        base_slug = base_slug[:max_base].rstrip("-.")
+    budget_for_parent = max_base - len(leaf_slug) - len(sep)
+    if budget_for_parent < 1:
+        # Leaf alone exceeds the cap — degenerate; truncate the leaf.
+        return f"{username}/{leaf_slug[:max_base].rstrip('-.')}"
+    if len(parent_slug) > budget_for_parent:
+        parent_slug = parent_slug[:budget_for_parent].rstrip("-.")
+    base_slug = f"{parent_slug}{sep}{leaf_slug}".strip("-.")
     return f"{username}/{base_slug}"
 
 
@@ -84,17 +91,21 @@ def main():
     except ImportError:
         pass
 
-    # Heavy imports last so login failures fail fast.
-    from transformers import AutoTokenizer
-    from peft import AutoPeftModelForCausalLM
+    # Direct folder upload — no model load, no base-model download. The
+    # checkpoint dir already contains everything HF needs (adapter_config.json,
+    # adapter_model.safetensors, tokenizer files, README, chat_template).
+    from huggingface_hub import HfApi
 
-    print(f"Loading checkpoint from: {ckpt_path}")
-    model = AutoPeftModelForCausalLM.from_pretrained(str(ckpt_path))
-    tokenizer = AutoTokenizer.from_pretrained(str(ckpt_path))
+    api = HfApi()
+    print(f"Creating repo: {repo}  (private={args.private})")
+    api.create_repo(repo_id=repo, private=args.private, exist_ok=True)
 
-    print(f"Pushing to: {repo}  (private={args.private})")
-    model.push_to_hub(repo, private=args.private)
-    tokenizer.push_to_hub(repo, private=args.private)
+    print(f"Uploading folder contents from: {ckpt_path}")
+    api.upload_folder(
+        folder_path=str(ckpt_path),
+        repo_id=repo,
+        commit_message=f"Upload checkpoint {ckpt_path.name}",
+    )
     print(f"✓ Pushed to https://huggingface.co/{repo}")
 
     if args.delete_local:

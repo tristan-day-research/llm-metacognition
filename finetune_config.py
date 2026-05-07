@@ -352,7 +352,7 @@ class ECTConfig:
     #   "instruct"  → Llama-Instruct (off-the-shelf, no LoRA).
     #                 Uses LLAMA_8B_INSTRUCT; prompts use the chat template.
     #   "finetuned" → Llama-Instruct + the LoRA adapter at EVAL_LORA_REPO.
-    EVAL_MODEL_TYPE = "base"
+    EVAL_MODEL_TYPE = "finetuned"
 
     # LoRA adapter — only loaded when EVAL_MODEL_TYPE == "finetuned".
     # Harmless to leave set when evaluating "base" or "instruct"; ignored.

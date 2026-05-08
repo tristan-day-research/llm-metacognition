@@ -72,13 +72,14 @@ class IntrospectionExperimentConfig:
 
     # Backbone to load. Choose LLAMA_8B_BASE or LLAMA_8B_INSTRUCT. Base models
     # bypass the chat template and switch the runner to few-shot prompts.
-    BASE_MODEL_NAME = LLAMA_8B_INSTRUCT
+    BASE_MODEL_NAME = LLAMA_8B_BASE
 
     # If equal to BASE_MODEL_NAME → no LoRA adapter loaded.
     # Otherwise → HF repo id (or local PEFT path) of the adapter to load on
     # top of BASE_MODEL_NAME for the "finetuned" run. BASE_MODEL_NAME must
     # be the instruct backbone when an adapter is set.
-    MODEL_NAME = "Tristan-Day/20260506-034609_delegate_at_mixed_17173_all_top_prob_tm0.7_tau0.05_2e_ckpt_step_300"
+    MODEL_NAME = BASE_MODEL_NAME
+    # MODEL_NAME = "Tristan-Day/20260506-034609_delegate_at_mixed_17173_all_top_prob_tm0.7_tau0.05_2e_ckpt_step_300"
 
     # Memory knobs. Llama-3.1-8B fits on a single ~24 GB GPU in fp16, so
     # both default to False. Flip on if you're running on a smaller card.
@@ -99,6 +100,16 @@ class IntrospectionExperimentConfig:
     # as uncertainty. Test is the only honestly held-out cohort. Using the
     # same split for base/instruct keeps directions cross-comparable.
     #
+    # IMPORTANT — match the test split to the FINETUNE training set the
+    # adapter was trained on (`finetune_config.ECTConfig.TRAIN_DATA_PATH`).
+    # The adapter loaded above was trained on `mixed_17173_all_train`, whose
+    # held-out test split is `mixed_17173_all_test.jsonl` (1713 rows, 0%
+    # qid overlap with the train split — verified). The earlier
+    # `mixed_11931_max_balanced_test.jsonl` looks like a test split, but its
+    # qids overlap ~77% with `mixed_17173_all_train` because the two
+    # datasets share an underlying source pool. Using it would conflate
+    # memorisation with introspection on most rows.
+    #
     # JSONL rows must contain at minimum:
     #     question      : str
     #     options       : {"A": str, "B": str, "C": str, "D": str}
@@ -109,7 +120,7 @@ class IntrospectionExperimentConfig:
     #   "GPQA", "GPSA", "MMLU", "TruthfulQA", "SimpleQA",
     #   "SimpleMC", "PopMC", "PopMC_0_difficulty_filtered", "TriviaMC",
     #   "Garupanese", "GarupaneseMC".
-    DATASETS = ["data/mixed_11931_max_balanced_test.jsonl"]
+    DATASETS = ["data/mixed_17173_all_test.jsonl"]
     DATASET_NAME = DATASETS[0]  # default for single-run callers; runner sweeps DATASETS
 
     # ------------------------------------------------------------------
@@ -136,12 +147,12 @@ class IntrospectionExperimentConfig:
     #     the subset but a "high-tail" question in the subset may not be
     #     a high-tail question in the full file.
     #
-    # mixed_11931_max_balanced_test.jsonl is 1189 rows, so the default
-    # 1200 below loads every test row → percentiles are over the full
-    # test distribution. If you swap to a different / larger dataset and
-    # want the same property, set NUM_QUESTIONS_DEFAULT >= len(dataset)
-    # (or add a NUM_QUESTIONS_BY_DATASET entry for it).
-    NUM_QUESTIONS_DEFAULT = 1200
+    # mixed_17173_all_test.jsonl is 1713 rows, so the default 1800 below
+    # loads every test row → percentiles are over the full test distribution.
+    # If you swap to a different / larger dataset and want the same
+    # property, set NUM_QUESTIONS_DEFAULT >= len(dataset) (or add a
+    # NUM_QUESTIONS_BY_DATASET entry for it).
+    NUM_QUESTIONS_DEFAULT = 1800
 
     # Per-dataset overrides. Key is the dataset name OR the .jsonl filename
     # stem (e.g. "mixed_11931_max_balanced_test"). Useful for two cases:
@@ -275,12 +286,12 @@ class IntrospectionExperimentConfig:
     # the bottom 25% (lowest entropy → most confident) against the top 25%
     # (highest entropy → most uncertain) of the signal; the middle 50% is
     # dropped from the mean-diff pool.
-    CONTRAST_PERCENT_ENTROPY = 25.0
+    CONTRAST_PERCENT_ENTROPY = 20.0
 
     # Same idea for the stated-confidence contrast (top 25% confident vs
     # bottom 25% confident). Independent of the entropy threshold so the
     # two contrasts can use different tail widths.
-    CONTRAST_PERCENT_STATED_CONFIDENCE = 25.0
+    CONTRAST_PERCENT_STATED_CONFIDENCE = 20.0
 
     # If set, randomly subsample to this many questions per tail before
     # taking the layer-wise mean. None → use every question in the tail
@@ -297,6 +308,29 @@ class IntrospectionExperimentConfig:
     #   trajectories are saved per question, so any sample size > 0 works
     #   for the lens; 800 is plenty for both purposes.
 
+    # ------------------------------------------------------------------
+    # Logit lens (Section 5)
+    # ------------------------------------------------------------------
+    #
+    #   "vanilla" — apply the model's final RMSNorm + unembedding directly
+    #               to each layer's residual stream. Free, no training, but
+    #               unreliable at early/mid layers because W_U was trained
+    #               against the FINAL residual basis.
+    #   "tuned"   — Belrose et al. 2023. Trains a per-layer affine that
+    #               corrects each layer's residual basis to be unembed-readable.
+    #               Reliable across all layers; ~1 GB of stored affines per
+    #               (model, dataset). Trains in ~5 min on the saved acts.
+    #   "both"    — produce both NPZs. Notebook can switch via LENS_KIND knob.
+    LENS_TYPE = "both"
+
+    # Tuned-lens training hyperparameters (only consulted when LENS_TYPE
+    # is "tuned" or "both"). The defaults here work for Llama-3-8B
+    # calibration on a few-thousand-sample MC dataset.
+    TUNED_LENS_EPOCHS = 20             # passes per layer over the calibration set
+    TUNED_LENS_LR = 5e-4               # Adam learning rate
+    TUNED_LENS_BATCH_SIZE = 64
+    TUNED_LENS_WEIGHT_DECAY = 1e-3     # keeps W close to identity (small calibration sets)
+
     # Where the runner writes activations / directions / logit-lens / paired
     # JSON / per-layer probe results / quick-look PNGs.
     #
@@ -307,3 +341,92 @@ class IntrospectionExperimentConfig:
     # The runner creates the subfolder on demand. This top-level path is
     # created at import time.
     OUTPUTS_DIR = OUTPUTS_DIR / "activations_directions_logitlens"
+
+
+# =============================================================================
+# CausalInterventionConfig
+# Used by: interp_experiments/run_causal_interventions.py
+#
+# This config DELIBERATELY mirrors a subset of IntrospectionExperimentConfig
+# fields. The contrast directions consumed by the intervention runner were
+# extracted from a specific (model, dataset, confidence scale) combination,
+# so the intervention pass must use the SAME settings or the directions
+# stop being meaningful. Keeping both classes in one file makes drift
+# obvious — edit the introspection block first, then run collection, then
+# run interventions.
+# =============================================================================
+class CausalInterventionConfig:
+    """Steer / ablate contrast directions and measure the behavioural effect.
+
+    Reads precomputed unit-norm direction NPZs written by
+    `run_collect_activations.py` (entropy_contrast_directions.npz +
+    stated_confidence_contrast_directions.npz) from the same per-run
+    subfolder used during collection.
+
+    Per-condition we re-run the direct + meta forward passes with a
+    forward hook installed on `model.model.layers[L]` that either:
+        steer  : h ← h + α · d̂
+        ablate : h ← h − (h · d̂) d̂                  (zero-projection)
+
+    For each condition we record mean direct entropy, mean stated
+    confidence, and Spearman ρ between them across questions.
+    """
+
+    # ------------------------------------------------------------------
+    # Must-match fields — kept identical to the introspection run that
+    # produced the directions. Edit IntrospectionExperimentConfig above
+    # and these track automatically.
+    # ------------------------------------------------------------------
+    BASE_MODEL_NAME = IntrospectionExperimentConfig.BASE_MODEL_NAME
+    MODEL_NAME = IntrospectionExperimentConfig.MODEL_NAME
+    LOAD_IN_4BIT = IntrospectionExperimentConfig.LOAD_IN_4BIT
+    LOAD_IN_8BIT = IntrospectionExperimentConfig.LOAD_IN_8BIT
+    DATASETS = IntrospectionExperimentConfig.DATASETS
+    DATASET_NAME = DATASETS[0]
+    CONFIDENCE_SCALE = IntrospectionExperimentConfig.CONFIDENCE_SCALE
+    FEW_SHOT_MODE = IntrospectionExperimentConfig.FEW_SHOT_MODE
+    SEED = IntrospectionExperimentConfig.SEED
+
+    # Directions live in the introspection runner's outputs tree.
+    DIRECTIONS_DIR = IntrospectionExperimentConfig.OUTPUTS_DIR
+
+    # ------------------------------------------------------------------
+    # Intervention-specific knobs
+    # ------------------------------------------------------------------
+
+    # Each condition reruns two forward passes per question, so the
+    # condition × question count multiplies fast. Default is much smaller
+    # than the introspection pass (1800).
+    NUM_QUESTIONS_DEFAULT = 300
+    NUM_QUESTIONS_BY_DATASET = {"GPQA": 300}
+    NUM_QUESTIONS = NUM_QUESTIONS_BY_DATASET.get(DATASET_NAME, NUM_QUESTIONS_DEFAULT)
+
+    BATCH_SIZE = 4
+
+    # Which contrast directions to intervene with. The string must match
+    # the contrast NPZ suffix (`<name>_contrast_directions.npz`) in the
+    # collection-run subfolder.
+    DIRECTION_TYPES = ["entropy", "stated_confidence"]
+
+    # Intervention modes. "steer" uses STEERING_MULTIPLIERS, "ablate" is
+    # parameter-free (full projection-out at the target layer).
+    INTERVENTION_TYPES = ["steer", "ablate"]
+
+    # Llama-3.1-8B has 32 transformer blocks. Mid-late layers are where
+    # most prior work finds the largest steering effect; pick a small set
+    # to keep wall time bounded.
+    INTERVENTION_LAYERS = [10, 14, 18, 22, 26]
+
+    # Multipliers applied to the unit-norm direction in residual-stream
+    # units. Llama-3.1-8B residual norms at mid layers are O(50–200), so
+    # ±10 is a modest perturbation and ±50 is strong. Tune per direction
+    # / layer once you've seen the first sweep.
+    STEERING_MULTIPLIERS = [-50.0, -20.0, -5.0, 5.0, 20.0, 50.0]
+
+    # Always include a no-intervention baseline run (one row per direction
+    # is enough; we collect it once and reuse).
+    INCLUDE_BASELINE = True
+
+    # Output root. Per-run subfolder uses the same `_run_subfolder_name()`
+    # convention as the introspection runner (8b_<model_tag>_<dataset>).
+    OUTPUTS_DIR = OUTPUTS_DIR / "causal_interventions"

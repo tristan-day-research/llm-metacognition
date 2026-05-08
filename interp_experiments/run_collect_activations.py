@@ -73,7 +73,7 @@ from _collection import (
     collect_other_confidence,
     collect_paired_data,
 )
-from _io import (
+from _runio import (
     _atomic_savez_compressed,
     _atomic_write_json,
     _pad_token_id_groups,
@@ -262,6 +262,7 @@ def run_single_experiment(
 
     # ------------------------------------------------------------------
     # Logit-lens projection on the saved last-token activations.
+    # Two flavours — vanilla and tuned — controlled by LENS_TYPE.
     # ------------------------------------------------------------------
     first_q = questions[0]
     if is_base:
@@ -277,39 +278,90 @@ def run_single_experiment(
     ))
     meta_option_token_ids = option_token_id_groups(tokenizer, meta_option_strs)
 
-    if not reuse_direct:
-        print("\nComputing logit lens (direct)...")
-        direct_lens = apply_logit_lens(
-            data["direct_activations"], model, direct_option_token_ids,
-        )
+    def _save_lens_npz(path: str, lens_out: dict, option_strs, option_token_ids):
         _atomic_savez_compressed(
-            f"{base_prefix}_direct_logit_lens.npz",
-            option_logits=direct_lens["option_logits"],
-            top_k_ids=direct_lens["top_k_ids"],
-            top_k_logits=direct_lens["top_k_logits"],
-            layer_indices=direct_lens["layer_indices"],
-            option_strs=np.array(direct_option_strs, dtype=object),
-            option_token_ids=_pad_token_id_groups(direct_option_token_ids),
+            path,
+            option_logits=lens_out["option_logits"],
+            top_k_ids=lens_out["top_k_ids"],
+            top_k_logits=lens_out["top_k_logits"],
+            layer_indices=lens_out["layer_indices"],
+            option_strs=np.array(option_strs, dtype=object),
+            option_token_ids=_pad_token_id_groups(option_token_ids),
             run_id=run_id_array,
             question_ids=qid_array,
         )
 
-    print("Computing logit lens (meta)...")
-    meta_lens = apply_logit_lens(
-        data["meta_activations"], model, meta_option_token_ids,
-    )
-    _atomic_savez_compressed(
-        f"{base_prefix}_meta_logit_lens.npz",
-        option_logits=meta_lens["option_logits"],
-        top_k_ids=meta_lens["top_k_ids"],
-        top_k_logits=meta_lens["top_k_logits"],
-        layer_indices=meta_lens["layer_indices"],
-        option_strs=np.array(meta_option_strs, dtype=object),
-        option_token_ids=_pad_token_id_groups(meta_option_token_ids),
-        run_id=run_id_array,
-        question_ids=qid_array,
-    )
-    print(f"Saved logit lens to {base_prefix}_*_logit_lens.npz")
+    # ----- Vanilla logit lens ----------------------------------------
+    if _C.LENS_TYPE in ("vanilla", "both"):
+        if not reuse_direct:
+            print("\nComputing logit lens — vanilla (direct)...")
+            direct_lens = apply_logit_lens(
+                data["direct_activations"], model, direct_option_token_ids,
+            )
+            _save_lens_npz(f"{base_prefix}_direct_logit_lens.npz",
+                           direct_lens, direct_option_strs, direct_option_token_ids)
+
+        print("Computing logit lens — vanilla (meta)...")
+        meta_lens = apply_logit_lens(
+            data["meta_activations"], model, meta_option_token_ids,
+        )
+        _save_lens_npz(f"{base_prefix}_meta_logit_lens.npz",
+                       meta_lens, meta_option_strs, meta_option_token_ids)
+        print(f"Saved vanilla logit lens to {base_prefix}_*_logit_lens.npz")
+
+    # ----- Tuned lens ------------------------------------------------
+    if _C.LENS_TYPE in ("tuned", "both"):
+        from _tuned_lens import (
+            apply_tuned_lens, load_tuned_lens, save_tuned_lens, train_tuned_lens,
+        )
+
+        tuned_lens_path = f"{base_prefix}_tuned_lens.pt"
+        if Path(tuned_lens_path).exists():
+            print(f"\nLoading cached tuned lens from {tuned_lens_path}...")
+            tuned_lens = load_tuned_lens(tuned_lens_path, device=DEVICE)
+        else:
+            print("\nTraining tuned lens (per-layer affine, KL-to-final-logits)...")
+            # Calibration set = direct ∪ meta residuals so the affines
+            # generalize across both prompt types we'll then lens.
+            combined_acts = {
+                layer_idx: np.concatenate(
+                    [data["direct_activations"][layer_idx],
+                     data["meta_activations"][layer_idx]],
+                    axis=0,
+                )
+                for layer_idx in data["direct_activations"]
+            }
+            tuned_lens, train_losses = train_tuned_lens(
+                model, combined_acts,
+                n_epochs=_C.TUNED_LENS_EPOCHS,
+                lr=_C.TUNED_LENS_LR,
+                batch_size=_C.TUNED_LENS_BATCH_SIZE,
+                weight_decay=_C.TUNED_LENS_WEIGHT_DECAY,
+            )
+            save_tuned_lens(tuned_lens, tuned_lens_path)
+            print(f"Saved tuned-lens affines → {tuned_lens_path}")
+            # Quick convergence summary so it's clear training worked.
+            print("Tuned-lens training (initial → final mean loss per layer):")
+            for layer_idx in sorted(train_losses.keys())[::4]:
+                losses = train_losses[layer_idx]
+                if losses:
+                    print(f"  layer {layer_idx:>2d}: {losses[0]:.4f} → {losses[-1]:.4f}")
+
+        if not reuse_direct:
+            print("Computing logit lens — tuned (direct)...")
+            direct_tuned = apply_tuned_lens(
+                data["direct_activations"], model, tuned_lens, direct_option_token_ids,
+            )
+            _save_lens_npz(f"{base_prefix}_direct_tuned_logit_lens.npz",
+                           direct_tuned, direct_option_strs, direct_option_token_ids)
+
+        print("Computing logit lens — tuned (meta)...")
+        meta_tuned = apply_tuned_lens(
+            data["meta_activations"], model, tuned_lens, meta_option_token_ids,
+        )
+        _save_lens_npz(f"{base_prefix}_meta_tuned_logit_lens.npz",
+                       meta_tuned, meta_option_strs, meta_option_token_ids)
+        print(f"Saved tuned logit lens to {base_prefix}_*_tuned_logit_lens.npz")
 
     # Quick-look PNG before the slow analysis kicks in.
     try:
@@ -853,7 +905,7 @@ def run_single_experiment(
 
 def _io_dataset_short(name: str) -> str:
     """Local re-import — avoids circular awkwardness when typing the cache lookup."""
-    from _io import _dataset_short_name
+    from _runio import _dataset_short_name
     return _dataset_short_name(name)
 
 

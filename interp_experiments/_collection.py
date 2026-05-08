@@ -40,7 +40,7 @@ from prompts import (
 )
 
 from _extractor import BatchedExtractor
-from _io import ctx as _ctx
+from _runio import ctx as _ctx
 from core.metrics import compute_metrics_single as compute_uncertainty_metrics
 
 

@@ -45,7 +45,7 @@ from prompts import (
     response_to_confidence,
 )
 
-from _io import _run_subfolder_name, ctx as _ctx, get_model_display_label
+from _runio import _run_subfolder_name, ctx as _ctx, get_model_display_label
 
 
 # =============================================================================

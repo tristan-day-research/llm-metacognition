@@ -186,11 +186,11 @@ TRAIN_SPLIT = _C.TRAIN_SPLIT
 PROBE_ALPHA = _C.PROBE_ALPHA
 USE_PCA = _C.USE_PCA
 PCA_COMPONENTS = _C.PCA_COMPONENTS
-LOAD_PRETRAINED_PROBE = _C.LOAD_PRETRAINED_PROBE
-PRETRAINED_PROBE_PATH = _C.PRETRAINED_PROBE_PATH
 AVAILABLE_METRICS = list(_C.AVAILABLE_METRICS)
 UNCERTAINTY_METRICS = set(_C.UNCERTAINTY_METRICS)
 METRIC = _C.METRIC
+EXTRACT_CONTRAST_DIRECTIONS = _C.EXTRACT_CONTRAST_DIRECTIONS
+CONTRAST_QUANTILE = _C.CONTRAST_QUANTILE
 
 np.random.seed(SEED)
 torch.manual_seed(SEED)
@@ -203,6 +203,19 @@ def get_model_short_name(model_name: str) -> str:
         parts = model_name.split("/")
         return parts[-1]
     return model_name
+
+
+def _dataset_short_name(name: str) -> str:
+    """Filesystem-safe token for a dataset entry.
+
+    Accepts either a registered dataset name (e.g. "TriviaMC") or a
+    .jsonl path (e.g. "data/mixed_11931_max_balanced.jsonl"); for paths,
+    strips the directory and the .jsonl suffix so output filenames stay
+    flat and don't sprout slashes.
+    """
+    if name.endswith(".jsonl"):
+        return Path(name).stem
+    return name
 
 
 def get_model_type_label() -> str:
@@ -241,6 +254,7 @@ def get_output_prefix(metric: str = None) -> str:
                 If None, return base prefix (for shared outputs like activations).
     """
     model_short = get_model_short_name(BASE_MODEL_NAME)
+    dataset_short = _dataset_short_name(DATASET_NAME)
     # Include meta task type in output prefix for clarity
     task_suffix = f"_{META_TASK}" if META_TASK != "confidence" else ""
     # Only suffix the filename if scale != 'letters' (keep letters as default for backward compat)
@@ -248,8 +262,8 @@ def get_output_prefix(metric: str = None) -> str:
     metric_suffix = f"_{metric}" if metric else ""
     if MODEL_NAME != BASE_MODEL_NAME:
         adapter_short = get_model_short_name(MODEL_NAME)
-        return str(OUTPUTS_DIR / f"{model_short}_adapter-{adapter_short}_{DATASET_NAME}_introspection{task_suffix}{scale_suffix}{metric_suffix}")
-    return str(OUTPUTS_DIR / f"{model_short}_{DATASET_NAME}_introspection{task_suffix}{scale_suffix}{metric_suffix}")
+        return str(OUTPUTS_DIR / f"{model_short}_adapter-{adapter_short}_{dataset_short}_introspection{task_suffix}{scale_suffix}{metric_suffix}")
+    return str(OUTPUTS_DIR / f"{model_short}_{dataset_short}_introspection{task_suffix}{scale_suffix}{metric_suffix}")
 
 
 def get_directions_prefix(metric: str = None) -> str:
@@ -263,13 +277,14 @@ def get_directions_prefix(metric: str = None) -> str:
         metric: If provided, include metric in prefix.
     """
     model_short = get_model_short_name(BASE_MODEL_NAME)
+    dataset_short = _dataset_short_name(DATASET_NAME)
     # NO task suffix - directions are task-independent. Scale IS relevant (stated-conf direction depends on scale)
     scale_suffix = f"_scale-{CONFIDENCE_SCALE}" if CONFIDENCE_SCALE != "letters" else ""
     metric_suffix = f"_{metric}" if metric else ""
     if MODEL_NAME != BASE_MODEL_NAME:
         adapter_short = get_model_short_name(MODEL_NAME)
-        return str(OUTPUTS_DIR / f"{model_short}_adapter-{adapter_short}_{DATASET_NAME}_introspection{scale_suffix}{metric_suffix}")
-    return str(OUTPUTS_DIR / f"{model_short}_{DATASET_NAME}_introspection{scale_suffix}{metric_suffix}")
+        return str(OUTPUTS_DIR / f"{model_short}_adapter-{adapter_short}_{dataset_short}_introspection{scale_suffix}{metric_suffix}")
+    return str(OUTPUTS_DIR / f"{model_short}_{dataset_short}_introspection{scale_suffix}{metric_suffix}")
 
 
 # ============================================================================
@@ -316,15 +331,59 @@ from core.model_utils import is_base_model, has_chat_template
 # ============================================================================
 
 def load_questions(dataset_name: str, num_questions: int = None) -> List[Dict]:
-    """Load MC questions using load_and_format_dataset."""
-    from core.datasets import load_and_format_dataset
+    """Load MC questions either from a registered dataset name or a .jsonl path.
 
-    questions = load_and_format_dataset(dataset_name, num_questions_needed=num_questions)
+    JSONL rows must contain at minimum question / options / correct_answer (or
+    correct_letter); id / qid is optional and falls back to the row index.
+    """
+    if dataset_name.endswith(".jsonl"):
+        questions = _load_questions_from_jsonl(dataset_name, num_questions)
+    else:
+        from core.datasets import load_and_format_dataset
+        questions = load_and_format_dataset(dataset_name, num_questions_needed=num_questions)
 
     if questions is None:
         raise ValueError(f"Failed to load dataset: {dataset_name}")
 
     return questions
+
+
+def _load_questions_from_jsonl(path: str, num_questions: int = None) -> List[Dict]:
+    """Read a generic question-per-row .jsonl and normalise to the runner schema.
+
+    Drops rows that are missing question / options / correct_answer. Subsamples
+    deterministically (SEED) when more rows are present than NUM_QUESTIONS.
+    """
+    rows = []
+    with open(path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            rows.append(json.loads(line))
+
+    formatted = []
+    for i, row in enumerate(rows):
+        question = row.get("question")
+        options = row.get("options")
+        correct = row.get("correct_answer") or row.get("correct_letter")
+        if not question or not options or correct is None:
+            continue
+        qid = row.get("id") or row.get("qid") or f"{Path(path).stem}_{i}"
+        formatted.append({
+            "id": str(qid),
+            "question": question,
+            "options": options,
+            "correct_answer": correct,
+        })
+
+    if num_questions is not None and len(formatted) > num_questions:
+        rng = random.Random(SEED)
+        rng.shuffle(formatted)
+        formatted = formatted[:num_questions]
+
+    print(f"Loaded {len(formatted)} questions from {path}")
+    return formatted
 
 
 # Use formatting functions from tasks.py (imported at top)
@@ -1472,6 +1531,66 @@ def extract_mc_answer_direction(
     direction_original = direction_original / np.linalg.norm(direction_original)
 
     return direction_original
+
+
+def compute_contrast_directions(
+    activations: Dict[int, np.ndarray],
+    signal: np.ndarray,
+    quantile: float = 0.25,
+) -> Tuple[Dict[int, np.ndarray], Dict[str, np.ndarray]]:
+    """Per-layer mean-difference direction between top and bottom groups of `signal`.
+
+    Splits questions by quantile (default: bottom 25% vs top 25% of signal,
+    middle 50% dropped) and at each layer takes
+        mean(activations[high]) - mean(activations[low]),
+    normalised to unit length.
+
+    Args:
+        activations: {layer_idx: (n_questions, hidden_dim)} float array per layer.
+            All layers must share the same n_questions and row ordering.
+        signal: (n_questions,) scalar value per question (e.g. entropy, soft
+            stated confidence). NaNs must be filtered out by the caller.
+        quantile: low/high tail size, in (0, 0.5). 0.25 → bottom 25% vs top 25%.
+
+    Returns:
+        directions: {layer_idx: (hidden_dim,) unit-norm contrast vector}
+        meta: small dict of scalar numpy arrays describing the split — keys
+            "quantile", "low_threshold", "high_threshold", "n_low", "n_high".
+            Suitable for splatting into np.savez_compressed alongside the
+            per-layer direction arrays.
+    """
+    if not (0 < quantile < 0.5):
+        raise ValueError(f"quantile must be in (0, 0.5), got {quantile}")
+
+    signal = np.asarray(signal, dtype=np.float64)
+    lo_thresh = float(np.quantile(signal, quantile))
+    hi_thresh = float(np.quantile(signal, 1.0 - quantile))
+    low_mask = signal <= lo_thresh
+    high_mask = signal >= hi_thresh
+    n_low = int(low_mask.sum())
+    n_high = int(high_mask.sum())
+    if n_low == 0 or n_high == 0:
+        raise ValueError(
+            f"Empty contrast group(s): n_low={n_low}, n_high={n_high} "
+            f"(quantile={quantile}, signal range "
+            f"[{float(signal.min()):.3f}, {float(signal.max()):.3f}])"
+        )
+
+    directions: Dict[int, np.ndarray] = {}
+    for layer_idx in sorted(activations.keys()):
+        acts = activations[layer_idx]
+        diff = acts[high_mask].mean(axis=0) - acts[low_mask].mean(axis=0)
+        norm = float(np.linalg.norm(diff))
+        directions[layer_idx] = diff if norm < 1e-10 else (diff / norm)
+
+    meta = {
+        "quantile": np.array(quantile, dtype=np.float32),
+        "low_threshold": np.array(lo_thresh, dtype=np.float32),
+        "high_threshold": np.array(hi_thresh, dtype=np.float32),
+        "n_low": np.array(n_low, dtype=np.int32),
+        "n_high": np.array(n_high, dtype=np.int32),
+    }
+    return directions, meta
 
 
 def train_probe(
@@ -2967,7 +3086,10 @@ def run_single_experiment(
     DATASET_NAME = dataset_name
     META_TASK = meta_task
     METRIC = metric
-    NUM_QUESTIONS = NUM_QUESTIONS_BY_DATASET.get(dataset_name, NUM_QUESTIONS_DEFAULT)
+    NUM_QUESTIONS = NUM_QUESTIONS_BY_DATASET.get(
+        dataset_name,
+        NUM_QUESTIONS_BY_DATASET.get(_dataset_short_name(dataset_name), NUM_QUESTIONS_DEFAULT),
+    )
 
     # One run_id per (model, dataset, meta_task) invocation. Stamped into the
     # paired_data.json and both NPZ files at save time so a future loader can
@@ -3460,6 +3582,79 @@ def run_single_experiment(
     mc_directions_path = f"{mc_directions_prefix}_mc_answer_directions.npz"
     np.savez_compressed(mc_directions_path, **mc_directions_data)
     print(f"Saved MC answer directions to {mc_directions_path}")
+
+    # ------------------------------------------------------------------
+    # Contrast (mean-difference) directions per layer.
+    #
+    # Two signals, two activation sources:
+    #   entropy            → direct activations, top-vs-bottom quantile of
+    #                        direct-task entropy. Always extracted.
+    #   stated_confidence  → meta activations, top-vs-bottom quantile of soft
+    #                        stated confidence. Only confidence-task runs
+    #                        produce a stated-confidence signal, so this one
+    #                        is skipped for delegate runs.
+    # ------------------------------------------------------------------
+    if EXTRACT_CONTRAST_DIRECTIONS:
+        print(f"\nComputing contrast (mean-difference) directions (quantile={CONTRAST_QUANTILE})...")
+
+        # Entropy contrast — direct activations, signal = direct-task entropy.
+        entropy_signal = np.asarray(data["direct_metrics"]["entropy"], dtype=np.float64)
+        entropy_dirs, entropy_meta = compute_contrast_directions(
+            data["direct_activations"], entropy_signal, quantile=CONTRAST_QUANTILE,
+        )
+        entropy_payload = {f"layer_{i}": d for i, d in entropy_dirs.items()}
+        entropy_payload.update(entropy_meta)
+        entropy_payload["signal_kind"] = np.array("entropy")
+        entropy_payload["activation_source"] = np.array("direct")
+        entropy_payload["dataset"] = np.array(DATASET_NAME)
+        entropy_payload["model"] = np.array(BASE_MODEL_NAME)
+        entropy_path = f"{mc_directions_prefix}_entropy_contrast_directions.npz"
+        np.savez_compressed(entropy_path, **entropy_payload)
+        print(
+            f"  entropy: low n={int(entropy_meta['n_low'])} (≤{float(entropy_meta['low_threshold']):.3f})"
+            f"  vs high n={int(entropy_meta['n_high'])} (≥{float(entropy_meta['high_threshold']):.3f})"
+        )
+        print(f"  saved → {entropy_path}")
+
+        # Stated-confidence contrast — meta activations, signal = soft stated conf.
+        if META_TASK == "confidence":
+            sc_signal = np.asarray(stated_confidence_numeric, dtype=np.float64)
+            valid_mask = ~np.isnan(sc_signal)
+            min_required = int(np.ceil(2.0 / CONTRAST_QUANTILE))
+            if valid_mask.sum() < min_required:
+                print(
+                    f"  stated_confidence: skipped — only {int(valid_mask.sum())} valid "
+                    f"values, need ≥{min_required} for quantile={CONTRAST_QUANTILE}"
+                )
+            else:
+                valid_idx = np.where(valid_mask)[0]
+                meta_acts_valid = {
+                    l: a[valid_idx] for l, a in data["meta_activations"].items()
+                }
+                sc_dirs, sc_meta = compute_contrast_directions(
+                    meta_acts_valid, sc_signal[valid_idx], quantile=CONTRAST_QUANTILE,
+                )
+                sc_payload = {f"layer_{i}": d for i, d in sc_dirs.items()}
+                sc_payload.update(sc_meta)
+                sc_payload["signal_kind"] = np.array("stated_confidence")
+                sc_payload["activation_source"] = np.array("meta")
+                sc_payload["dataset"] = np.array(DATASET_NAME)
+                sc_payload["model"] = np.array(BASE_MODEL_NAME)
+                sc_payload["n_valid"] = np.array(int(valid_mask.sum()), dtype=np.int32)
+                sc_path = f"{mc_directions_prefix}_stated_confidence_contrast_directions.npz"
+                np.savez_compressed(sc_path, **sc_payload)
+                print(
+                    f"  stated_confidence: low n={int(sc_meta['n_low'])} "
+                    f"(≤{float(sc_meta['low_threshold']):.3f})"
+                    f"  vs high n={int(sc_meta['n_high'])} "
+                    f"(≥{float(sc_meta['high_threshold']):.3f})"
+                )
+                print(f"  saved → {sc_path}")
+        else:
+            print(
+                f"  stated_confidence: skipped — META_TASK is {META_TASK!r}, "
+                "no stated-confidence signal in this run"
+            )
 
     # Behavioral analysis (uses selected METRIC for correlation with stated confidence)
     behavioral = analyze_behavioral_introspection(

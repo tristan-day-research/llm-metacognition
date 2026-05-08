@@ -10,8 +10,8 @@ logit lens projection is then almost free: one `(n_questions, hidden_dim) @
     model is "thinking" mid-stack)
 which keeps the artefact under ~1 MB per (prompt-type, model, dataset).
 
-Reuses unembed/LN extraction from `core.logit_lens` so we don't drift from
-the standalone `run_logit_lens.py` script.
+Reuses unembed/LN extraction from `core.logit_lens` so per-question lens
+projection in the introspection runner stays consistent with the helpers.
 """
 
 from typing import Dict, List

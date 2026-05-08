@@ -18,8 +18,8 @@ it should internally access the same representations it would use for the direct
 A probe trained on direct data should therefore transfer to meta data.
 
 Usage:
-    python run_introspection_experiment.py --metric logit_gap   # Probe logit_gap (default)
-    python run_introspection_experiment.py --metric entropy     # Probe entropy
+    python run_introspection.py --metric logit_gap   # Probe logit_gap (default)
+    python run_introspection.py --metric entropy     # Probe entropy
 """
 
 # --- repo path bootstrap (so `from core import ...` works when this file is
@@ -36,7 +36,6 @@ from collections import defaultdict
 import datetime
 import torch
 import numpy as np
-from transformers import AutoTokenizer, AutoModelForCausalLM
 import json
 from pathlib import Path
 from tqdm import tqdm
@@ -113,7 +112,7 @@ def _question_ids_array(questions) -> np.ndarray:
         dtype=object,
     )
 
-from core.model_utils import load_model_and_tokenizer, DEVICE, HF_TOKEN
+from core.model_utils import load_model_and_tokenizer, DEVICE
 from prompts import (
     # Direct MC task
     MC_SETUP_PROMPT,
@@ -181,7 +180,7 @@ DELEGATE_PROMPT_DESIGN = _C.DELEGATE_PROMPT_DESIGN
 REUSE_DIRECT_FROM_CONFIDENCE = _C.REUSE_DIRECT_FROM_CONFIDENCE
 CONFIDENCE_SCALE = _C.CONFIDENCE_SCALE
 OUTPUTS_DIR = _C.OUTPUTS_DIR
-OUTPUTS_DIR.mkdir(exist_ok=True)
+OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
 TRAIN_SPLIT = _C.TRAIN_SPLIT
 PROBE_ALPHA = _C.PROBE_ALPHA
 USE_PCA = _C.USE_PCA
@@ -309,17 +308,6 @@ def _scale_question() -> str:
     return NUMERIC_CONFIDENCE_QUESTION if CONFIDENCE_SCALE == "numeric" else STATED_CONFIDENCE_QUESTION
 
 
-# Confidence task aliases (kept for any external callers; resolved against the
-# currently-selected scale each time they're accessed via properties above).
-META_SETUP_PROMPT = STATED_CONFIDENCE_SETUP  # letter-scale default; use _scale_setup() for scale-aware
-META_QUESTION_PROMPT = STATED_CONFIDENCE_QUESTION
-META_OPTION_DICT = STATED_CONFIDENCE_OPTIONS
-META_RANGE_MIDPOINTS = STATED_CONFIDENCE_MIDPOINTS
-
-# Delegate task aliases
-DELEGATE_SETUP_PROMPT = ANSWER_OR_DELEGATE_SETUP
-DELEGATE_SYSPROMPT = ANSWER_OR_DELEGATE_SYSPROMPT
-DELEGATE_OPTIONS = ANSWER_OR_DELEGATE_OPTIONS
 
 
 # Import utility functions from core (instead of duplicating)
@@ -468,7 +456,7 @@ def get_meta_options():
     if META_TASK == "delegate":
         if DELEGATE_PROMPT_DESIGN == "mc_integrated":
             return ANSWER_WITH_DELEGATE_OPTIONS
-        return DELEGATE_OPTIONS
+        return ANSWER_OR_DELEGATE_OPTIONS
     # Confidence task — scale-dependent
     return list(_scale_options().keys())
 
@@ -784,7 +772,7 @@ def save_quick_summary_png(data: dict, questions: list, output_path: str) -> Non
 # Metric and extraction helpers live in sibling modules so other interp scripts
 # (logit lens, ablation analyses) can reuse them without re-importing this
 # 4k-line runner.
-from _metrics import compute_entropy_from_probs, compute_uncertainty_metrics
+from _metrics import compute_uncertainty_metrics
 from _extractor import (
     extract_cache_tensors,
     create_fresh_cache,
@@ -2990,79 +2978,6 @@ def plot_results(
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     print(f"\nPlot saved to {output_path}")
                     
-def get_mc_prefix() -> str:
-    """Get prefix for mc_entropy_probe.py output files."""
-    model_short = get_model_short_name(BASE_MODEL_NAME)
-    if MODEL_NAME != BASE_MODEL_NAME:
-        adapter_short = get_model_short_name(MODEL_NAME)
-        return str(OUTPUTS_DIR / f"{model_short}_adapter-{adapter_short}_{DATASET_NAME}_mc")
-    return str(OUTPUTS_DIR / f"{model_short}_{DATASET_NAME}_mc")
-
-
-def try_load_mc_data() -> Optional[Dict]:
-    """
-    Try to load existing MC data from mc_entropy_probe.py output.
-
-    Returns dict with direct_activations, direct_metrics, metadata
-    if files exist and config matches. Returns None otherwise.
-
-    direct_metrics is a dict mapping metric names to numpy arrays.
-    """
-    mc_prefix = get_mc_prefix()
-    activations_path = Path(f"{mc_prefix}_activations.npz")
-    dataset_path = Path(f"{mc_prefix}_dataset.json")
-
-    if not activations_path.exists() or not dataset_path.exists():
-        return None
-
-    print(f"\nFound existing MC data: {mc_prefix}")
-
-    # Load and verify config
-    with open(dataset_path) as f:
-        dataset_data = json.load(f)
-
-    config = dataset_data.get("config", {})
-    if config.get("dataset") != DATASET_NAME:
-        print(f"  Dataset mismatch: {config.get('dataset')} vs {DATASET_NAME}")
-        return None
-    if config.get("num_questions") != NUM_QUESTIONS:
-        print(f"  Question count mismatch: {config.get('num_questions')} vs {NUM_QUESTIONS}")
-        return None
-    if config.get("seed") != SEED:
-        print(f"  Seed mismatch: {config.get('seed')} vs {SEED}")
-        return None
-
-    # Load activations
-    print(f"  Loading activations from {activations_path}...")
-    acts_data = np.load(activations_path)
-    direct_activations = {
-        int(k.split("_")[1]): acts_data[k]
-        for k in acts_data.files if k.startswith("layer_")
-    }
-
-    # Load all metrics (new format stores: entropy, top_prob, margin, logit_gap, top_logit)
-    # Fall back to "entropies" key for backward compatibility with old files
-    direct_metrics = {}
-    metric_keys = ["entropy", "top_prob", "margin", "logit_gap", "top_logit"]
-    for key in metric_keys:
-        if key in acts_data.files:
-            direct_metrics[key] = acts_data[key]
-    # Backward compatibility: old files have "entropies" key
-    if not direct_metrics and "entropies" in acts_data.files:
-        direct_metrics["entropy"] = acts_data["entropies"]
-
-    # Get metadata (includes questions, probs, etc.)
-    metadata = dataset_data.get("data", [])
-
-    print(f"  Loaded {len(direct_activations)} layers, {len(direct_metrics.get('entropy', []))} questions")
-    print(f"  Metrics available: {list(direct_metrics.keys())}")
-    print(f"  Reusing direct activations from mc_entropy_probe.py!")
-
-    return {
-        "direct_activations": direct_activations,
-        "direct_metrics": direct_metrics,
-        "metadata": metadata,
-    }
 
 
 # ============================================================================

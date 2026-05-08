@@ -8,7 +8,7 @@ time via `from experiment_config import <Cls> as _C`.
 
 Driver scripts can still mutate the runner's module-level alias for one-off
 overrides (e.g. swapping `_C.MODEL_NAME` between calls of
-`run_introspection_experiment.run_single_experiment`); the alias overwrite
+`run_introspection.run_single_experiment`); the alias overwrite
 does NOT touch this file.
 
 All paths are relative to the project root.
@@ -50,7 +50,7 @@ AVAILABLE_METRICS = ["entropy", "top_prob", "margin", "logit_gap", "top_logit"]
 
 # =============================================================================
 # IntrospectionExperimentConfig
-# Used by: interp_experiments/run_introspection_experiment.py
+# Used by: interp_experiments/run_introspection.py
 # =============================================================================
 class IntrospectionExperimentConfig:
     """Activation + logit-lens + probe collection for one model at a time.
@@ -229,69 +229,7 @@ class IntrospectionExperimentConfig:
     # dropped from the mean-diff pool.
     CONTRAST_QUANTILE = 0.25
 
-    OUTPUTS_DIR = OUTPUTS_DIR
-
-
-# =============================================================================
-# LogitLensConfig
-# Used by: interp_experiments/run_logit_lens.py
-# =============================================================================
-class LogitLensConfig:
-    """Single-question logit-lens diagnostic plot.
-
-    Standalone helper — NOT part of the introspection collection pipeline
-    (run_introspection_experiment.py already saves a per-layer logit-lens
-    NPZ alongside its activations).
-    """
-
-    BASE_MODEL_NAME = LLAMA_8B_INSTRUCT
-    ADAPTER = None  # HF adapter repo id for the finetuned model, or None
-
-    # If True, pull the test question from DATA_FILE by QID. Otherwise use
-    # the inline TEST_QUESTION dict.
-    USE_DATASET_QUESTION = True
-    DATA_FILE = "data/TriviaMC.jsonl"
-    QID = "triviamc_146"
-
-    TEST_QUESTION = {
-        "question": "What is the capital of France?",
-        "options": {"A": "New York", "B": "Tokyo", "C": "Paris", "D": "Denver"},
-        "correct_answer": "C",
-    }
-
-    # Prompt formatting:
-    #   "direct_mc"           — A/B/C/D MC question.
-    #   "stated_confidence"   — confidence prompt (S-Z scale).
-    #   "other_confidence"    — "what % of college-educated people would know".
-    #   "answer_or_delegate"  — legacy 1-vs-2 delegate prompt.
-    #   "raw"                 — DEFAULT_PROMPT used verbatim.
-    TASK_TYPE = "stated_confidence"
-    DEFAULT_PROMPT = "The capital of France is"
-
-    # Which residual stream to project through the lens.
-    #   "resid_post" — output of each transformer block (standard "logit lens").
-    #   "resid_pre"  — input of each transformer block.
-    ACTIVATION_STREAM = "resid_post"
-
-    # LayerNorm convention before unembed.
-    #   "final_ln"      — apply the model's final RMSNorm (standard).
-    #   "model_default" — same as final_ln on Llama (kept for API symmetry).
-    #   "none"          — raw residuals, no LN.
-    LN_MODE = "final_ln"
-
-    # Token position to lens. "last" = final real token (left-padded), or
-    # an integer index into the prompt.
-    TOKEN_POSITION = "last"
-
-    # Top-K tokens to report per layer.
-    TOP_K = 20
-
-    # Which layers to lens.
-    #   "all"  — every layer.
-    #   "auto" — [0, mid, last].
-    #   "0,15,31" — comma-separated explicit indices.
-    LAYERS_DEFAULT = "all"
-
-    LOAD_IN_4BIT = False
-    LOAD_IN_8BIT = False
-    OUTPUTS_DIR = OUTPUTS_DIR
+    # Where the runner writes activations / directions / logit-lens / paired
+    # JSON / per-layer probe results / quick-look PNGs. The folder is created
+    # on first import (the runner calls .mkdir(parents=True, exist_ok=True)).
+    OUTPUTS_DIR = OUTPUTS_DIR / "activations_directions_logitlens"

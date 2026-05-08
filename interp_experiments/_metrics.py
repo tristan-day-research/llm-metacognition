@@ -2,7 +2,7 @@
 Uncertainty metrics computed from option-level probability/logit vectors.
 
 These are pure functions over numpy arrays — no model state, no module-level
-config. Extracted from `run_introspection_experiment.py` so the same metric
+config. Extracted from `run_introspection.py` so the same metric
 definitions can be reused by other interp scripts (logit lens, ablation
 analyses, etc.) without re-importing the giant runner module.
 """

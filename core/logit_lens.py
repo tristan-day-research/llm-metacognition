@@ -569,7 +569,8 @@ if __name__ == "__main__":
     Usage:
         python -m core.logit_lens
     
-    Note: This is a smoke test only. For full functionality, use run_logit_lens.py
+    Note: This is a smoke test only. For dataset-scale logit lens, see the
+    per-layer NPZs saved by interp_experiments/run_introspection.py.
     """
     import sys
     sys.path.insert(0, str(__file__).rsplit("/core/", 1)[0])

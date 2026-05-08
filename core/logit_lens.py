@@ -570,7 +570,7 @@ if __name__ == "__main__":
         python -m core.logit_lens
     
     Note: This is a smoke test only. For dataset-scale logit lens, see the
-    per-layer NPZs saved by interp_experiments/run_introspection.py.
+    per-layer NPZs saved by interp_experiments/run_collect_activations.py.
     """
     import sys
     sys.path.insert(0, str(__file__).rsplit("/core/", 1)[0])

@@ -125,10 +125,20 @@ class BatchedExtractor:
             self.activations[layer_idx] = hidden_states[:, -1, :].detach()
         return hook
 
-    def _compute_extended_metrics(self, final_logits: torch.Tensor, option_token_ids: List[int], metrics: dict):
-        """Add full-vocab metrics to an existing metrics dict. Operates on GPU tensors."""
+    def _compute_extended_metrics(self, final_logits: torch.Tensor, option_token_ids: List[List[int]], metrics: dict):
+        """Add full-vocab metrics to an existing metrics dict. Operates on GPU tensors.
+
+        `option_token_ids` is a list of token-id GROUPS, one per option (e.g. [' A', 'A']
+        for option "A" if both encode as single tokens). Sub-token aggregation matches
+        finetune.run_evaluations → run_mcq_forward_pass: logsumexp BEFORE log_softmax,
+        so option_logprobs sum the probability mass across all surface variants of each
+        option.
+        """
         full_log_probs = torch.log_softmax(final_logits, dim=-1)
-        metrics["option_logprobs"] = full_log_probs[option_token_ids].cpu().numpy().tolist()
+        metrics["option_logprobs"] = [
+            torch.logsumexp(full_log_probs[ids], dim=-1).item()
+            for ids in option_token_ids
+        ]
 
         full_probs = torch.softmax(final_logits, dim=-1)
         metrics["entropy_full_vocab"] = -(full_probs * full_probs.log().nan_to_num()).sum().item()
@@ -166,7 +176,7 @@ class BatchedExtractor:
         self,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
-        option_token_ids: List[int]
+        option_token_ids: List[List[int]]
     ) -> Tuple[List[Dict[int, np.ndarray]], List[np.ndarray], List[np.ndarray], List[Dict[str, float]]]:
         """
         Extract activations AND compute option probabilities/metrics in one forward pass.
@@ -174,12 +184,16 @@ class BatchedExtractor:
         Args:
             input_ids: (batch_size, seq_len)
             attention_mask: (batch_size, seq_len)
-            option_token_ids: List of token IDs for the options
+            option_token_ids: list of token-id GROUPS, one group per option. Each
+                group is a list of vocabulary IDs whose probability should be
+                summed for that option (e.g. [" A", "A"] both → option "A").
+                Aggregation is done with logsumexp BEFORE softmax to match
+                finetune/run_evaluations → run_mcq_forward_pass.
 
         Returns:
             layer_activations: List of {layer_idx: activation} dicts, one per batch item
             option_probs: List of probability arrays, one per batch item
-            option_logits: List of logit arrays, one per batch item
+            option_logits: List of (aggregated) logit arrays, one per batch item
             all_metrics: List of metric dicts, one per batch item
         """
         self.activations = {}
@@ -203,13 +217,16 @@ class BatchedExtractor:
             }
             all_layer_activations.append(item_activations)
 
-        # Extract logits and compute probabilities/metrics for each batch item
+        # Extract logits and compute probabilities/metrics for each batch item.
+        # Per-option logit = logsumexp over the option's sub-token IDs.
         all_probs = []
         all_logits = []
         all_metrics = []
         for batch_idx in range(batch_size):
             final_logits = outputs.logits[batch_idx, -1, :]
-            option_logits = final_logits[option_token_ids]
+            option_logits = torch.stack([
+                torch.logsumexp(final_logits[ids], dim=-1) for ids in option_token_ids
+            ], dim=0)
             option_logits_np = option_logits.cpu().numpy()
             probs = torch.softmax(option_logits, dim=-1).cpu().numpy()
             metrics = compute_uncertainty_metrics(probs, option_logits_np)
@@ -230,7 +247,7 @@ class BatchedExtractor:
         self,
         suffix_ids: torch.Tensor,
         prefix_cache_data: Tuple,
-        option_token_ids: List[int],
+        option_token_ids: List[List[int]],
         pad_token_id: int = 0
     ) -> Tuple[List[Dict], List[np.ndarray], List[np.ndarray], List[Dict]]:
         """
@@ -239,7 +256,9 @@ class BatchedExtractor:
         Args:
             suffix_ids: (batch_size, suffix_len) - left-padded suffix token IDs
             prefix_cache_data: (keys, values) tuple from compute_prefix_cache
-            option_token_ids: List of token IDs for the options
+            option_token_ids: list of token-id GROUPS, one group per option.
+                Each group's probabilities are summed via logsumexp before
+                softmax (matches run_evaluations.run_mcq_forward_pass).
             pad_token_id: Token ID used for padding (default 0)
 
         Returns:
@@ -278,13 +297,16 @@ class BatchedExtractor:
             }
             all_layer_activations.append(item_activations)
 
-        # Extract logits and compute probabilities/metrics for each batch item
+        # Extract logits and compute probabilities/metrics for each batch item.
+        # Per-option logit = logsumexp over the option's sub-token IDs.
         all_probs = []
         all_logits = []
         all_metrics = []
         for batch_idx in range(batch_size):
             final_logits = outputs.logits[batch_idx, -1, :]
-            option_logits = final_logits[option_token_ids]
+            option_logits = torch.stack([
+                torch.logsumexp(final_logits[ids], dim=-1) for ids in option_token_ids
+            ], dim=0)
             option_logits_np = option_logits.cpu().numpy()
             probs = torch.softmax(option_logits, dim=-1).cpu().numpy()
             metrics = compute_uncertainty_metrics(probs, option_logits_np)

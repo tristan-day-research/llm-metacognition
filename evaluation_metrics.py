@@ -1,9 +1,16 @@
 
-# --- repo path bootstrap (so root-level imports like `prompts`,
-# `finetune_config` resolve when run from anywhere) ---
+# --- import bootstrap ---------------------------------------------------------
+# This file lives at the repo root so it can be shared between finetune/* and
+# interp_experiments/* runners (and notebooks). Some of the helpers it depends
+# on still live in finetune/ (utils, loss, data_handling) — they're left there
+# per the "don't touch finetune/" constraint — so we add BOTH the repo root and
+# finetune/ to sys.path. Root-only callers (e.g. interp_experiments) can import
+# this module without first wiring finetune/ themselves.
 import sys as _sys
 from pathlib import Path as _Path
-_sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
+_REPO_ROOT = _Path(__file__).resolve().parent
+_sys.path.insert(0, str(_REPO_ROOT))
+_sys.path.insert(0, str(_REPO_ROOT / "finetune"))
 
 import math
 import os

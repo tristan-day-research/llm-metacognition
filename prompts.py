@@ -2929,3 +2929,136 @@ def run_delegate_at_forward_pass(
         "p_answer": probs2[:, 0],
         "p_delegate": probs2[:, 1],
     }
+
+
+# =============================================================================
+# Meta-task / scale dispatchers
+# =============================================================================
+#
+# Thin wrappers that pick the right scale-aware formatter (numeric 1..N vs
+# letter S..Z for confidence; mc_integrated A/B/C/D/T vs two_step_digit 1/2
+# for delegate). All dispatchers take the relevant config knobs as explicit
+# kwargs so this module has no back-dependency on experiment_config or any
+# runner-side state.
+#
+# Used by interp_experiments/run_collect_activations.py (and the planned
+# run_causal_interventions.py) so introspection inference uses BYTE-IDENTICAL
+# prompts to finetune/run_finetuning.py and finetune/run_evaluations.py.
+# Single source of truth: this file.
+
+
+def option_token_id_groups(tokenizer, options: List[str]) -> List[List[int]]:
+    """Per-option token-id groups covering both ' X' and 'X' surface forms.
+
+    Mirrors `get_letter_token_ids` semantics so per-option probabilities
+    aggregated downstream (logsumexp before softmax) match
+    `finetune.run_evaluations → run_mcq_forward_pass`. Strips a leading
+    space if the formatter handed back " A" rather than "A".
+    """
+    return [get_letter_token_ids(tokenizer, opt.strip()) for opt in options]
+
+
+def _scale_options(scale: str) -> dict:
+    return NUMERIC_CONFIDENCE_OPTIONS if scale == "numeric" else STATED_CONFIDENCE_OPTIONS
+
+
+def _scale_midpoints(scale: str) -> dict:
+    return NUMERIC_CONFIDENCE_MIDPOINTS if scale == "numeric" else STATED_CONFIDENCE_MIDPOINTS
+
+
+def _scale_setup(scale: str) -> str:
+    return NUMERIC_CONFIDENCE_SETUP if scale == "numeric" else STATED_CONFIDENCE_SETUP
+
+
+def _scale_question(scale: str) -> str:
+    return NUMERIC_CONFIDENCE_QUESTION if scale == "numeric" else STATED_CONFIDENCE_QUESTION
+
+
+def format_meta_prompt(
+    question: dict, tokenizer, use_chat_template: bool = True,
+    *, scale: str,
+) -> Tuple[str, List[str]]:
+    """Format a confidence/meta prompt for instruct/finetuned models.
+
+    `scale` ∈ {"numeric", "letters"} chooses the 1..N digit scale or the S..Z
+    letter scale.
+    """
+    if scale == "numeric":
+        return format_numeric_confidence_prompt(question, tokenizer, use_chat_template)
+    return format_stated_confidence_prompt(question, tokenizer, use_chat_template)
+
+
+def format_meta_prompt_base(
+    question: dict, mode: str = "fixed", pool=None, *, scale: str,
+) -> Tuple[str, List[str]]:
+    """Base-model (no chat template) variant of format_meta_prompt."""
+    if scale == "numeric":
+        return format_numeric_confidence_prompt_base(question, mode=mode, pool=pool)
+    return format_stated_confidence_prompt_base(question, mode=mode, pool=pool)
+
+
+def format_delegate_prompt(
+    question: dict,
+    tokenizer,
+    use_chat_template: bool = True,
+    trial_index: int = 0,
+    is_base: bool = False,
+    few_shot_mode: str = "fixed",
+    few_shot_pool: Optional[List[dict]] = None,
+    teammate_accuracy: float = 0.7,
+    *,
+    prompt_design: str,
+) -> Tuple[str, List[str], Optional[Dict[str, str]]]:
+    """Format a delegate prompt. `prompt_design` selects the design.
+
+    "mc_integrated"  — single-shot A/B/C/D/T (instruct/finetuned only).
+                       Returns (prompt, ["A","B","C","D","T"], None).
+    "two_step_digit" — legacy 1-vs-2 with alternating mapping (base ok).
+    """
+    if prompt_design == "mc_integrated":
+        if is_base:
+            return format_answer_with_delegate_prompt_base(
+                question, mode=few_shot_mode, pool=few_shot_pool,
+                teammate_accuracy=teammate_accuracy,
+            )
+        return format_answer_with_delegate_prompt(
+            question, tokenizer,
+            use_chat_template=use_chat_template,
+            teammate_accuracy=teammate_accuracy,
+        )
+
+    if is_base:
+        return format_answer_or_delegate_prompt_base(
+            question, trial_index=trial_index, mode=few_shot_mode, pool=few_shot_pool,
+            teammate_accuracy=teammate_accuracy,
+        )
+    return format_answer_or_delegate_prompt(
+        question, tokenizer, trial_index=trial_index,
+        alternate_mapping=True, use_chat_template=use_chat_template,
+        teammate_accuracy=teammate_accuracy,
+    )
+
+
+def get_meta_options(*, meta_task: str, scale: str, prompt_design: str) -> List[str]:
+    """Return the active meta-option list for the (meta_task, scale, design) triple."""
+    if meta_task == "delegate":
+        if prompt_design == "mc_integrated":
+            return ANSWER_WITH_DELEGATE_OPTIONS
+        return ANSWER_OR_DELEGATE_OPTIONS
+    return list(_scale_options(scale).keys())
+
+
+def meta_task_type(*, meta_task: str, scale: str) -> str:
+    """Map (meta_task, scale) to the task_type string used by `response_to_confidence`."""
+    if meta_task == "delegate":
+        return "delegate"
+    if scale == "numeric":
+        return "confidence_numeric"
+    return "confidence"
+
+
+def get_meta_signal(probs, *, scale: str) -> float:
+    """Scale-aware probability-weighted confidence signal (confidence task)."""
+    if scale == "numeric":
+        return get_numeric_confidence_signal(probs)
+    return get_stated_confidence_signal(probs)

@@ -8,7 +8,7 @@ time via `from experiment_config import <Cls> as _C`.
 
 Driver scripts can still mutate the runner's module-level alias for one-off
 overrides (e.g. swapping `_C.MODEL_NAME` between calls of
-`run_introspection.run_single_experiment`); the alias overwrite
+`run_collect_activations.run_single_experiment`); the alias overwrite
 does NOT touch this file.
 
 All paths are relative to the project root.
@@ -50,7 +50,7 @@ AVAILABLE_METRICS = ["entropy", "top_prob", "margin", "logit_gap", "top_logit"]
 
 # =============================================================================
 # IntrospectionExperimentConfig
-# Used by: interp_experiments/run_introspection.py
+# Used by: interp_experiments/run_collect_activations.py
 # =============================================================================
 class IntrospectionExperimentConfig:
     """Activation + logit-lens + probe collection for one model at a time.
@@ -93,6 +93,12 @@ class IntrospectionExperimentConfig:
     #   1. A path to a .jsonl file on disk, OR
     #   2. A registered dataset NAME recognised by core.datasets.
     #
+    # Use the TEST split for every model (base, instruct, finetuned), not
+    # the full file. Reason: the finetuned model saw the train split during
+    # optimisation, so its activations there reflect memorisation as much
+    # as uncertainty. Test is the only honestly held-out cohort. Using the
+    # same split for base/instruct keeps directions cross-comparable.
+    #
     # JSONL rows must contain at minimum:
     #     question      : str
     #     options       : {"A": str, "B": str, "C": str, "D": str}
@@ -103,16 +109,49 @@ class IntrospectionExperimentConfig:
     #   "GPQA", "GPSA", "MMLU", "TruthfulQA", "SimpleQA",
     #   "SimpleMC", "PopMC", "PopMC_0_difficulty_filtered", "TriviaMC",
     #   "Garupanese", "GarupaneseMC".
-    DATASETS = ["data/mixed_11931_max_balanced.jsonl"]
+    DATASETS = ["data/mixed_11931_max_balanced_test.jsonl"]
     DATASET_NAME = DATASETS[0]  # default for single-run callers; runner sweeps DATASETS
 
-    # Number of questions per dataset. Higher = more reliable probe and
-    # contrast directions, more wall time.
-    NUM_QUESTIONS_DEFAULT = 800
+    # ------------------------------------------------------------------
+    # Sample-size control — read this carefully if you change DATASETS.
+    # ------------------------------------------------------------------
+    #
+    # Pipeline order:
+    #   1. The runner loads the dataset and (deterministically, via SEED)
+    #      truncates to NUM_QUESTIONS rows. If NUM_QUESTIONS >= len(dataset),
+    #      every row is loaded and no subsampling happens.
+    #   2. ONE forward pass is run over those rows, recording entropy,
+    #      stated confidence, activations, and the logit lens for each.
+    #   3. compute_contrast_directions takes percentiles of the **loaded**
+    #      distribution (not the underlying file) and selects the bottom
+    #      CONTRAST_PERCENT_* and top CONTRAST_PERCENT_* tails.
+    #
+    # Implication:
+    #   - When NUM_QUESTIONS >= len(dataset)  → percentiles are over the
+    #     full dataset distribution. Cleanest contrast — no middle-valued
+    #     rows contaminate the tails. THIS IS WHAT YOU WANT.
+    #   - When NUM_QUESTIONS <  len(dataset)  → the runner first picks a
+    #     deterministic random subset of size NUM_QUESTIONS, THEN takes
+    #     percentiles of THAT subset. The tails are correct relative to
+    #     the subset but a "high-tail" question in the subset may not be
+    #     a high-tail question in the full file.
+    #
+    # mixed_11931_max_balanced_test.jsonl is 1189 rows, so the default
+    # 1200 below loads every test row → percentiles are over the full
+    # test distribution. If you swap to a different / larger dataset and
+    # want the same property, set NUM_QUESTIONS_DEFAULT >= len(dataset)
+    # (or add a NUM_QUESTIONS_BY_DATASET entry for it).
+    NUM_QUESTIONS_DEFAULT = 1200
 
     # Per-dataset overrides. Key is the dataset name OR the .jsonl filename
-    # stem (e.g. "mixed_11931_max_balanced"). Useful when one dataset is
-    # smaller than NUM_QUESTIONS_DEFAULT (GPQA only has 447 rows).
+    # stem (e.g. "mixed_11931_max_balanced_test"). Useful for two cases:
+    #   (a) Smaller datasets where the default would over-shoot the file
+    #       size — e.g. "GPQA" only has 447 rows and capping at 447 just
+    #       documents the truth in the saved config.
+    #   (b) Larger datasets where you DON'T want to load all rows (e.g.
+    #       to keep wall time bounded) — set a deliberate cap here and
+    #       accept that contrast tails are over the loaded subset, not
+    #       the full file.
     NUM_QUESTIONS_BY_DATASET = {"GPQA": 447}
     NUM_QUESTIONS = NUM_QUESTIONS_BY_DATASET.get(DATASET_NAME, NUM_QUESTIONS_DEFAULT)
 

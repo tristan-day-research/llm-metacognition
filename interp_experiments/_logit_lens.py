@@ -25,7 +25,7 @@ from core.logit_lens import get_final_layernorm, get_unembedding_matrix
 def apply_logit_lens(
     activations: Dict[int, np.ndarray],
     model,
-    option_token_ids: List[int],
+    option_token_ids: List[List[int]],
     *,
     top_k: int = 20,
     ln_mode: str = "final_ln",
@@ -38,9 +38,12 @@ def apply_logit_lens(
         activations: {layer_idx: (n_questions, hidden_dim) float array}
         model: HuggingFace causal LM. The unembed weight (and final norm,
             when ln_mode='final_ln') are read off this model.
-        option_token_ids: token IDs whose logits to record at every layer
-            (e.g. A/B/C/D for direct prompts, A/B/C/D/T for delegate, S–Z or
-            1–9 for confidence).
+        option_token_ids: list of token-id GROUPS, one group per option. Each
+            group is a list of vocab IDs whose lensed logits should be summed
+            (logsumexp) for that option — same surface-form aggregation as
+            finetune.run_evaluations.run_mcq_forward_pass. So an option "A"
+            with both " A" and "A" as single-token forms becomes one logit
+            per layer that sums the probability mass across both.
         top_k: also store the top-K tokens at every layer (for diagnostics).
         ln_mode: 'final_ln' applies the model's final RMSNorm before unembed
             (the standard "logit lens" definition); 'none' uses raw residuals.
@@ -48,7 +51,7 @@ def apply_logit_lens(
 
     Returns:
         Dict of np arrays:
-          option_logits: (n_questions, n_layers, n_options) float32
+          option_logits: (n_questions, n_layers, n_options) float32 — aggregated
           top_k_ids:     (n_questions, n_layers, top_k)    int32
           top_k_logits:  (n_questions, n_layers, top_k)    float32
           layer_indices: (n_layers,)                        int32
@@ -63,7 +66,9 @@ def apply_logit_lens(
 
     device = W_U.device
     dtype = W_U.dtype
-    option_ids_t = torch.tensor(option_token_ids, device=device, dtype=torch.long)
+    option_ids_per_opt = [
+        torch.tensor(ids, device=device, dtype=torch.long) for ids in option_token_ids
+    ]
 
     option_logits_out = np.zeros((n_questions, n_layers, n_options), dtype=np.float32)
     top_k_ids_out = np.zeros((n_questions, n_layers, top_k), dtype=np.int32)
@@ -84,7 +89,11 @@ def apply_logit_lens(
                 if b_U is not None:
                     logits = logits + b_U
 
-                opt_logits = logits.index_select(1, option_ids_t)
+                # Aggregate sub-token logits per option via logsumexp.
+                opt_logits = torch.stack([
+                    torch.logsumexp(logits.index_select(1, ids_t), dim=1)
+                    for ids_t in option_ids_per_opt
+                ], dim=1)  # (chunk, n_options)
                 option_logits_out[start:end, li, :] = opt_logits.float().cpu().numpy()
 
                 topk_vals, topk_ids = torch.topk(logits, top_k, dim=1)

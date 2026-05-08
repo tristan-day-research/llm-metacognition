@@ -9,17 +9,42 @@ logit lens projection is then almost free: one `(n_questions, hidden_dim) @
   - the top-K tokens per layer (so post-hoc analyses can see what else the
     model is "thinking" mid-stack)
 which keeps the artefact under ~1 MB per (prompt-type, model, dataset).
-
-Reuses unembed/LN extraction from `core.logit_lens` so per-question lens
-projection in the introspection runner stays consistent with the helpers.
 """
 
-from typing import Dict, List
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
 
-from core.logit_lens import get_final_layernorm, get_unembedding_matrix
+
+def get_unembedding_matrix(model) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    """Extract the unembedding weight (and optional bias) from a HuggingFace LM.
+
+    Returns:
+        W_U: (d_model, vocab_size) — already transposed from HF's (vocab, d_model).
+        b_U: (vocab_size,) bias if `lm_head` has one, else None.
+    """
+    base = model.get_base_model() if hasattr(model, "get_base_model") else model
+    lm_head = base.lm_head
+    W_U = lm_head.weight.T
+    b_U = lm_head.bias if hasattr(lm_head, "bias") and lm_head.bias is not None else None
+    return W_U, b_U
+
+
+def get_final_layernorm(model) -> torch.nn.Module:
+    """Find the final RMSNorm/LayerNorm before the LM head.
+
+    Llama / Mistral: model.model.norm. GPT-2 style: transformer.ln_f.
+    """
+    base = model.get_base_model() if hasattr(model, "get_base_model") else model
+    if hasattr(base, "model") and hasattr(base.model, "norm"):
+        return base.model.norm
+    if hasattr(base, "transformer") and hasattr(base.transformer, "ln_f"):
+        return base.transformer.ln_f
+    raise AttributeError(
+        "Could not find final LayerNorm. Supported architectures: "
+        "Llama (model.model.norm), GPT-2 (transformer.ln_f)"
+    )
 
 
 def apply_logit_lens(

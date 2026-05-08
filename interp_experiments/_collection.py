@@ -41,7 +41,7 @@ from prompts import (
 
 from _extractor import BatchedExtractor
 from _io import ctx as _ctx
-from _metrics import compute_uncertainty_metrics
+from core.metrics import compute_metrics_single as compute_uncertainty_metrics
 
 
 # Default batch size for processing (adjust based on GPU memory).

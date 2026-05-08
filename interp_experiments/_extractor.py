@@ -19,7 +19,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 import torch
 
-from _metrics import compute_uncertainty_metrics
+from core.metrics import compute_metrics_single as compute_uncertainty_metrics
 
 try:
     from transformers.cache_utils import DynamicCache

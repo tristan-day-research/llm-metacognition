@@ -74,7 +74,7 @@ class ECTConfig:
     #   "delegate_abcdt"      — Delegate Game, single-shot A/B/C/D/T. Same
     #                           soft delegation BCE plus a downweighted CE on
     #                           the recorded model answer for the answer head.
-    TASK_TYPE = "delegate_at"
+    TASK_TYPE = "delegate_abcdt"
 
     # Base model. Single source of truth for which Llama version is being
     # finetuned AND evaluated. Imported from experiment_config so eval and
@@ -190,10 +190,27 @@ class ECTConfig:
     #     Weight on the answer-selection CE against the recorded model
     #     answer. The CE is multiplied by (1 - target_delegate) so it
     #     vanishes on samples we want to delegate.
-    DELEGATE_TARGET_SOURCE = "entropy"
+    #     Default 0.05 for ABCDT (down from the spec's 0.2): the answer term
+    #     and the delegation BCE share a softmax denominator
+    #     (logsumexp(A,B,C,D) appears in both), so a too-large answer weight
+    #     makes the delegation gradient chase a moving target as the answer
+    #     head sharpens. 0.05 keeps the answer term subordinate to the
+    #     delegation signal. Bump back toward 0.2 if you want the answer
+    #     head to be more strongly preserved.
+    # DELEGATE_ANSWER_LOSS_ANNEAL_STEPS — only used for TASK_TYPE='delegate_abcdt'.
+    #     Linear warmup window for the answer-loss weight. For the first
+    #     ANNEAL_STEPS steps, the effective weight is
+    #         base * (step / ANNEAL_STEPS)
+    #     clamped to [0, base]; after that, the full base weight is used.
+    #     Lets the delegation logit move freely first, before the answer-CE
+    #     term entrenches the A-D logits and the two losses start fighting
+    #     through their shared softmax. 0 disables annealing (constant base
+    #     weight from step 0).
+    DELEGATE_TARGET_SOURCE = "top_prob"
     DELEGATE_TRAIN_TEAMMATE_ACCURACY = 0.7
     DELEGATE_TAU = 0.05
-    DELEGATE_ANSWER_LOSS_WEIGHT = 0.2
+    DELEGATE_ANSWER_LOSS_WEIGHT = 0.05 if TASK_TYPE == "delegate_abcdt" else 0.2
+    DELEGATE_ANSWER_LOSS_ANNEAL_STEPS = 300 if TASK_TYPE == "delegate_abcdt" else 0
 
     # =========================================================================
     # TRAINING — used solely by run_finetuning.py.
@@ -239,12 +256,16 @@ class ECTConfig:
     VAL_RUN_BOTH_FROZEN_AND_LIVE = True
 
     # LoRA
-    # NOTE: starting smaller for the delegate task (r=8 / α=16) per the
-    # delegate-game spec — the model only has to learn a single binary
-    # decision, so a fatter adapter risks overfitting noise. For ECT runs
-    # bump back to r=16 / α=32.
-    LORA_R = 16
-    LORA_ALPHA = 32
+    # AT and ECT use r=16 / α=32 — AT only has to learn a single binary
+    # delegation decision, and the original delegate-game spec started even
+    # smaller (r=8 / α=16) to avoid overfitting noise.
+    # ABCDT bumps to r=32 / α=64 because the same adapter has to do TWO
+    # jobs: learn the delegation decision AND preserve the recorded MC
+    # answer (the answer-CE term in compute_delegate_abcdt_loss). With
+    # r=16 the two losses compete for the same low-rank capacity and
+    # delegation training is markedly worse than AT.
+    LORA_R = 32 if TASK_TYPE == "delegate_abcdt" else 16
+    LORA_ALPHA = 64 if TASK_TYPE == "delegate_abcdt" else 32
     LORA_DROPOUT = 0.05
     LORA_TARGET_MODULES = ("q_proj", "v_proj", "o_proj")
     # LORA_TARGET_MODULES = ("q_proj", "v_proj")
@@ -253,7 +274,7 @@ class ECTConfig:
     # Delegate-task defaults from the spec. ECT defaults were lr=2e-5,
     # max_steps=2500, val_interval=150, checkpoint_steps=200; restore those
     # when flipping TASK_TYPE back to "explicit_confidence".
-    LEARNING_RATE = 2e-5
+    LEARNING_RATE = 1e-5
     MAX_STEPS = 2500
     LOG_INTERVAL = 20
     VAL_INTERVAL = 100
@@ -357,7 +378,8 @@ class ECTConfig:
     # LoRA adapter — only loaded when EVAL_MODEL_TYPE == "finetuned".
     # Harmless to leave set when evaluating "base" or "instruct"; ignored.
     # EVAL_LORA_REPO = "Tristan-Day/ect_20251222_215412_v0uei7y1_2000"
-    EVAL_LORA_REPO = 'Tristan-Day/20260506-034609_delegate_at_mixed_17173_all_ckpt_step_500'
+    EVAL_LORA_REPO = 'Tristan-Day/20260506-034609_delegate_at_mixed_17173_all_top_prob_tm0.7_tau0.05_2e_ckpt_step_300'
+    # EVAL_LORA_REPO = 'Tristan-Day/20260506-034609_delegate_at_mixed_17173_all_ckpt_step_500'
     # EVAL_LORA_REPO = "Tristan-Day/20260506-034609_delegate_at_mixed_17173_all_top_prob_tm0.7_tau0.05_2e_ckpt_step_1600"
     EVAL_MERGE_LORA = False  # if True, merge LoRA into base before eval
 

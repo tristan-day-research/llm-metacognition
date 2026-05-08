@@ -1,5 +1,5 @@
 """
-Shared run-logging utilities for run_finetuning.py and run_evaluations.py.
+Shared logging utilities for run_finetuning.py and run_evaluations.py.
 
 Both scripts emit a paired .txt log next to their JSONL/checkpoint output that
 contains:

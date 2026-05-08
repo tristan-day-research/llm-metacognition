@@ -102,7 +102,7 @@ from prompts import (
     get_confidence_letter_mapping,
     get_mcq_letter_mapping,
 )
-from run_logging import (
+from logging_utils import (
     RunLogger,
     dump_config_snapshot,
     install_warning_capture,
@@ -144,6 +144,7 @@ def _delegate_train_step(
     second_prob: torch.Tensor,
     subject_answer_idx: torch.Tensor | None,
     mcq_letter_mapping,
+    step: int = 0,
 ):
     target_source = getattr(args, "delegate_target_source", "top_prob")
     teammate_acc = float(getattr(args, "delegate_train_teammate_accuracy", 0.7))
@@ -198,10 +199,22 @@ def _delegate_train_step(
                 "with a frozen lookup that has subject_answer, or use "
                 "task_type='delegate_at' which doesn't need it."
             )
+        # Optionally linearly anneal the answer-loss weight in over the
+        # first N steps. Lets the delegation BCE drive the LoRA initially
+        # before the answer-CE term entrenches the A-D logits and the two
+        # losses start fighting through their shared softmax denominator
+        # (logsumexp(A,B,C,D)). See DELEGATE_ANSWER_LOSS_ANNEAL_STEPS in
+        # finetune_config.py.
+        base_w = float(getattr(args, "delegate_answer_loss_weight", 0.2))
+        anneal = int(getattr(args, "delegate_answer_loss_anneal_steps", 0) or 0)
+        if anneal > 0:
+            effective_w = base_w * min(1.0, max(0, step) / anneal)
+        else:
+            effective_w = base_w
         loss = compute_delegate_abcdt_loss(
             logits5, target_delegate,
             recorded_answer_idx=subject_answer_idx,
-            answer_loss_weight=float(getattr(args, "delegate_answer_loss_weight", 0.2)),
+            answer_loss_weight=effective_w,
             reduction="mean",
         )
 
@@ -214,6 +227,10 @@ def _delegate_train_step(
         "self_live_corr_spearman": 0.0,
         "self_live_corr_pearson": 0.0,
     }
+    if task_type == "delegate_abcdt":
+        # Surface the post-anneal effective weight so it's visible in
+        # W&B / printouts during the warmup window.
+        step_metrics["delegate_answer_loss_weight_effective"] = float(effective_w)
     try:
         p_del_np = p_delegate.detach().to("cpu").float().numpy()
         target_np = target_delegate.detach().to("cpu").float().numpy()
@@ -245,7 +262,7 @@ def _delegate_train_step(
 # ------------------------------------------------------------------
 
 def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=None,
-               train_dataset_qids=None, train_dataset_questions=None):
+               train_dataset_qids=None, train_dataset_questions=None, step: int = 0):
     """
     Train step with support for frozen teacher (pre-recorded) or dynamic teacher.
     
@@ -407,6 +424,7 @@ def train_step(model, tokenizer, batch, device, sigma, args, mcq_results_lookup=
             second_prob=second_prob,
             subject_answer_idx=subject_answer_idx,
             mcq_letter_mapping=mcq_letter_mapping,
+            step=step,
         )
 
     if task_type != "explicit_confidence":
@@ -638,12 +656,14 @@ def train(args):
         flush=True,
     )
     if task_type in ("delegate_at", "delegate_abcdt"):
+        anneal = int(getattr(args, "delegate_answer_loss_anneal_steps", 0) or 0)
         print(
             "[config] delegate-game knobs: "
             f"target_source={args.delegate_target_source}  "
             f"teammate_acc={args.delegate_train_teammate_accuracy}  "
             f"tau={args.delegate_tau}  "
-            f"answer_loss_weight={args.delegate_answer_loss_weight}",
+            f"answer_loss_weight={args.delegate_answer_loss_weight}  "
+            f"answer_loss_anneal_steps={anneal}",
             flush=True,
         )
 
@@ -941,7 +961,7 @@ def train(args):
     # Sample prompts + actual model replies — written to the structured
     # .txt run record so we can verify the model sees the exact same prompt
     # (chat tags included) that run_evaluations.py uses. Routes through the
-    # shared run_logging helper, which dispatches to numeric vs letter
+    # shared logging_utils helper, which dispatches to numeric vs letter
     # confidence prompts based on CONFIDENCE_FORMAT.
     # ============================================================
     if args.randomize_letters_per_question:
@@ -1023,6 +1043,7 @@ def train(args):
             mcq_results_lookup=mcq_results_lookup,
             train_dataset_qids=train_dataset_qids,
             train_dataset_questions=train_dataset_questions,
+            step=step,
         )
 
         # Skip optimizer step if batch was skipped
@@ -1259,6 +1280,7 @@ def build_args_from_config():
         delegate_train_teammate_accuracy=_C.DELEGATE_TRAIN_TEAMMATE_ACCURACY,
         delegate_tau=_C.DELEGATE_TAU,
         delegate_answer_loss_weight=_C.DELEGATE_ANSWER_LOSS_WEIGHT,
+        delegate_answer_loss_anneal_steps=_C.DELEGATE_ANSWER_LOSS_ANNEAL_STEPS,
         # Model
         model_name=_C.MODEL_NAME,
         device=_C.DEVICE,

@@ -189,7 +189,9 @@ AVAILABLE_METRICS = list(_C.AVAILABLE_METRICS)
 UNCERTAINTY_METRICS = set(_C.UNCERTAINTY_METRICS)
 METRIC = _C.METRIC
 EXTRACT_CONTRAST_DIRECTIONS = _C.EXTRACT_CONTRAST_DIRECTIONS
-CONTRAST_QUANTILE = _C.CONTRAST_QUANTILE
+CONTRAST_PERCENT_ENTROPY = _C.CONTRAST_PERCENT_ENTROPY
+CONTRAST_PERCENT_STATED_CONFIDENCE = _C.CONTRAST_PERCENT_STATED_CONFIDENCE
+CONTRAST_SAMPLES_PER_BIN = _C.CONTRAST_SAMPLES_PER_BIN
 
 np.random.seed(SEED)
 torch.manual_seed(SEED)
@@ -215,6 +217,50 @@ def _dataset_short_name(name: str) -> str:
     if name.endswith(".jsonl"):
         return Path(name).stem
     return name
+
+
+def _finetuned_short_tag(adapter: str) -> str:
+    """Compact id for a finetuned adapter.
+
+    Pulls out the run's date-time prefix and the checkpoint step. Example:
+        'Tristan-Day/20260506-034609_delegate_at_..._ckpt_step_300'
+        →  '20260506-034609_step_300'
+    Falls back to the bare adapter basename if the pattern doesn't match.
+    """
+    import re
+    name = adapter.split("/")[-1]
+    m_prefix = re.match(r"^(\d+-\d+)", name)
+    m_step = re.search(r"step_(\d+)\b", name)
+    if m_prefix and m_step:
+        return f"{m_prefix.group(1)}_step_{m_step.group(1)}"
+    return name
+
+
+def _run_subfolder_name() -> str:
+    """Per-run output subfolder name under OUTPUTS_DIR.
+
+    Format: '8b_<model_tag>_<dataset_short>' where model_tag is
+        'base'                    — Llama-3.1-8B with no adapter
+        'instruct'                — Llama-3.1-8B-Instruct with no adapter
+        '<run-id>_step_<N>'       — Llama-3.1-8B-Instruct + LoRA adapter
+    Reads BASE_MODEL_NAME / MODEL_NAME / DATASET_NAME from module globals
+    so it picks up `globals()["DATASET_NAME"] = ...` mutations from
+    `run_single_experiment` automatically.
+    """
+    if MODEL_NAME != BASE_MODEL_NAME:
+        model_tag = _finetuned_short_tag(MODEL_NAME)
+    elif "Instruct" in BASE_MODEL_NAME:
+        model_tag = "instruct"
+    else:
+        model_tag = "base"
+    return f"8b_{model_tag}_{_dataset_short_name(DATASET_NAME)}"
+
+
+def _run_dir() -> Path:
+    """Concrete output directory for the current run, mkdir'd if needed."""
+    d = OUTPUTS_DIR / _run_subfolder_name()
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 
 
 def get_model_type_label() -> str:
@@ -259,10 +305,11 @@ def get_output_prefix(metric: str = None) -> str:
     # Only suffix the filename if scale != 'letters' (keep letters as default for backward compat)
     scale_suffix = f"_scale-{CONFIDENCE_SCALE}" if CONFIDENCE_SCALE != "letters" else ""
     metric_suffix = f"_{metric}" if metric else ""
+    run_dir = _run_dir()
     if MODEL_NAME != BASE_MODEL_NAME:
         adapter_short = get_model_short_name(MODEL_NAME)
-        return str(OUTPUTS_DIR / f"{model_short}_adapter-{adapter_short}_{dataset_short}_introspection{task_suffix}{scale_suffix}{metric_suffix}")
-    return str(OUTPUTS_DIR / f"{model_short}_{dataset_short}_introspection{task_suffix}{scale_suffix}{metric_suffix}")
+        return str(run_dir / f"{model_short}_adapter-{adapter_short}_{dataset_short}_introspection{task_suffix}{scale_suffix}{metric_suffix}")
+    return str(run_dir / f"{model_short}_{dataset_short}_introspection{task_suffix}{scale_suffix}{metric_suffix}")
 
 
 def get_directions_prefix(metric: str = None) -> str:
@@ -280,10 +327,11 @@ def get_directions_prefix(metric: str = None) -> str:
     # NO task suffix - directions are task-independent. Scale IS relevant (stated-conf direction depends on scale)
     scale_suffix = f"_scale-{CONFIDENCE_SCALE}" if CONFIDENCE_SCALE != "letters" else ""
     metric_suffix = f"_{metric}" if metric else ""
+    run_dir = _run_dir()
     if MODEL_NAME != BASE_MODEL_NAME:
         adapter_short = get_model_short_name(MODEL_NAME)
-        return str(OUTPUTS_DIR / f"{model_short}_adapter-{adapter_short}_{dataset_short}_introspection{scale_suffix}{metric_suffix}")
-    return str(OUTPUTS_DIR / f"{model_short}_{dataset_short}_introspection{scale_suffix}{metric_suffix}")
+        return str(run_dir / f"{model_short}_adapter-{adapter_short}_{dataset_short}_introspection{scale_suffix}{metric_suffix}")
+    return str(run_dir / f"{model_short}_{dataset_short}_introspection{scale_suffix}{metric_suffix}")
 
 
 # ============================================================================
@@ -1524,11 +1572,13 @@ def extract_mc_answer_direction(
 def compute_contrast_directions(
     activations: Dict[int, np.ndarray],
     signal: np.ndarray,
-    quantile: float = 0.25,
+    percent: float = 25.0,
+    samples_per_bin: Optional[int] = None,
+    seed: int = 0,
 ) -> Tuple[Dict[int, np.ndarray], Dict[str, np.ndarray]]:
     """Per-layer mean-difference direction between top and bottom groups of `signal`.
 
-    Splits questions by quantile (default: bottom 25% vs top 25% of signal,
+    Splits questions by percentile (default: top 25% vs bottom 25% of signal,
     middle 50% dropped) and at each layer takes
         mean(activations[high]) - mean(activations[low]),
     normalised to unit length.
@@ -1538,45 +1588,67 @@ def compute_contrast_directions(
             All layers must share the same n_questions and row ordering.
         signal: (n_questions,) scalar value per question (e.g. entropy, soft
             stated confidence). NaNs must be filtered out by the caller.
-        quantile: low/high tail size, in (0, 0.5). 0.25 → bottom 25% vs top 25%.
+        percent: tail width in percent, in (0, 50). 25 → bottom 25% vs top 25%.
+        samples_per_bin: if set, randomly subsample to this many questions per
+            tail before averaging (deterministic, uses `seed`). None →
+            use every question that falls in the tail.
+        seed: RNG seed for the subsample step.
 
     Returns:
         directions: {layer_idx: (hidden_dim,) unit-norm contrast vector}
         meta: small dict of scalar numpy arrays describing the split — keys
-            "quantile", "low_threshold", "high_threshold", "n_low", "n_high".
+            "percent", "low_threshold", "high_threshold", "n_low", "n_high",
+            "n_low_used", "n_high_used", "samples_per_bin", "seed".
             Suitable for splatting into np.savez_compressed alongside the
             per-layer direction arrays.
     """
-    if not (0 < quantile < 0.5):
-        raise ValueError(f"quantile must be in (0, 0.5), got {quantile}")
+    if not (0 < percent < 50):
+        raise ValueError(f"percent must be in (0, 50), got {percent}")
 
     signal = np.asarray(signal, dtype=np.float64)
+    quantile = percent / 100.0
     lo_thresh = float(np.quantile(signal, quantile))
     hi_thresh = float(np.quantile(signal, 1.0 - quantile))
-    low_mask = signal <= lo_thresh
-    high_mask = signal >= hi_thresh
-    n_low = int(low_mask.sum())
-    n_high = int(high_mask.sum())
+    low_idx = np.where(signal <= lo_thresh)[0]
+    high_idx = np.where(signal >= hi_thresh)[0]
+    n_low = int(low_idx.size)
+    n_high = int(high_idx.size)
     if n_low == 0 or n_high == 0:
         raise ValueError(
             f"Empty contrast group(s): n_low={n_low}, n_high={n_high} "
-            f"(quantile={quantile}, signal range "
+            f"(percent={percent}, signal range "
             f"[{float(signal.min()):.3f}, {float(signal.max()):.3f}])"
         )
+
+    # Optional subsample to a fixed per-bin sample size.
+    if samples_per_bin is not None and samples_per_bin > 0:
+        rng = np.random.default_rng(seed)
+        if low_idx.size > samples_per_bin:
+            low_idx = rng.choice(low_idx, size=samples_per_bin, replace=False)
+        if high_idx.size > samples_per_bin:
+            high_idx = rng.choice(high_idx, size=samples_per_bin, replace=False)
+    n_low_used = int(low_idx.size)
+    n_high_used = int(high_idx.size)
 
     directions: Dict[int, np.ndarray] = {}
     for layer_idx in sorted(activations.keys()):
         acts = activations[layer_idx]
-        diff = acts[high_mask].mean(axis=0) - acts[low_mask].mean(axis=0)
+        diff = acts[high_idx].mean(axis=0) - acts[low_idx].mean(axis=0)
         norm = float(np.linalg.norm(diff))
         directions[layer_idx] = diff if norm < 1e-10 else (diff / norm)
 
     meta = {
-        "quantile": np.array(quantile, dtype=np.float32),
+        "percent": np.array(percent, dtype=np.float32),
         "low_threshold": np.array(lo_thresh, dtype=np.float32),
         "high_threshold": np.array(hi_thresh, dtype=np.float32),
         "n_low": np.array(n_low, dtype=np.int32),
         "n_high": np.array(n_high, dtype=np.int32),
+        "n_low_used": np.array(n_low_used, dtype=np.int32),
+        "n_high_used": np.array(n_high_used, dtype=np.int32),
+        "samples_per_bin": np.array(
+            -1 if samples_per_bin is None else int(samples_per_bin), dtype=np.int32
+        ),
+        "seed": np.array(int(seed), dtype=np.int32),
     }
     return directions, meta
 
@@ -3510,12 +3582,23 @@ def run_single_experiment(
     #                        is skipped for delegate runs.
     # ------------------------------------------------------------------
     if EXTRACT_CONTRAST_DIRECTIONS:
-        print(f"\nComputing contrast (mean-difference) directions (quantile={CONTRAST_QUANTILE})...")
+        print("\nComputing contrast (mean-difference) directions...")
+        cap_str = (
+            "all available"
+            if CONTRAST_SAMPLES_PER_BIN is None
+            else f"capped at {CONTRAST_SAMPLES_PER_BIN}"
+        )
 
-        # Entropy contrast — direct activations, signal = direct-task entropy.
+        # Entropy contrast — DIRECT activations, signal = direct-task entropy.
+        # Top CONTRAST_PERCENT_ENTROPY% (highest entropy / most uncertain) vs
+        # bottom CONTRAST_PERCENT_ENTROPY% (lowest entropy / most confident).
         entropy_signal = np.asarray(data["direct_metrics"]["entropy"], dtype=np.float64)
         entropy_dirs, entropy_meta = compute_contrast_directions(
-            data["direct_activations"], entropy_signal, quantile=CONTRAST_QUANTILE,
+            data["direct_activations"],
+            entropy_signal,
+            percent=CONTRAST_PERCENT_ENTROPY,
+            samples_per_bin=CONTRAST_SAMPLES_PER_BIN,
+            seed=SEED,
         )
         entropy_payload = {f"layer_{i}": d for i, d in entropy_dirs.items()}
         entropy_payload.update(entropy_meta)
@@ -3526,20 +3609,25 @@ def run_single_experiment(
         entropy_path = f"{mc_directions_prefix}_entropy_contrast_directions.npz"
         np.savez_compressed(entropy_path, **entropy_payload)
         print(
-            f"  entropy: low n={int(entropy_meta['n_low'])} (≤{float(entropy_meta['low_threshold']):.3f})"
-            f"  vs high n={int(entropy_meta['n_high'])} (≥{float(entropy_meta['high_threshold']):.3f})"
+            f"  entropy ({CONTRAST_PERCENT_ENTROPY:g}%, samples/bin {cap_str}): "
+            f"low n={int(entropy_meta['n_low_used'])}/{int(entropy_meta['n_low'])} "
+            f"(≤{float(entropy_meta['low_threshold']):.3f}) vs "
+            f"high n={int(entropy_meta['n_high_used'])}/{int(entropy_meta['n_high'])} "
+            f"(≥{float(entropy_meta['high_threshold']):.3f})"
         )
         print(f"  saved → {entropy_path}")
 
-        # Stated-confidence contrast — meta activations, signal = soft stated conf.
+        # Stated-confidence contrast — META activations, signal = soft stated
+        # confidence. Top CONTRAST_PERCENT_STATED_CONFIDENCE% (most confident)
+        # vs bottom of the same. Only meaningful for the confidence task.
         if META_TASK == "confidence":
             sc_signal = np.asarray(stated_confidence_numeric, dtype=np.float64)
             valid_mask = ~np.isnan(sc_signal)
-            min_required = int(np.ceil(2.0 / CONTRAST_QUANTILE))
+            min_required = int(np.ceil(200.0 / CONTRAST_PERCENT_STATED_CONFIDENCE))
             if valid_mask.sum() < min_required:
                 print(
                     f"  stated_confidence: skipped — only {int(valid_mask.sum())} valid "
-                    f"values, need ≥{min_required} for quantile={CONTRAST_QUANTILE}"
+                    f"values, need ≥{min_required} for percent={CONTRAST_PERCENT_STATED_CONFIDENCE}"
                 )
             else:
                 valid_idx = np.where(valid_mask)[0]
@@ -3547,7 +3635,11 @@ def run_single_experiment(
                     l: a[valid_idx] for l, a in data["meta_activations"].items()
                 }
                 sc_dirs, sc_meta = compute_contrast_directions(
-                    meta_acts_valid, sc_signal[valid_idx], quantile=CONTRAST_QUANTILE,
+                    meta_acts_valid,
+                    sc_signal[valid_idx],
+                    percent=CONTRAST_PERCENT_STATED_CONFIDENCE,
+                    samples_per_bin=CONTRAST_SAMPLES_PER_BIN,
+                    seed=SEED,
                 )
                 sc_payload = {f"layer_{i}": d for i, d in sc_dirs.items()}
                 sc_payload.update(sc_meta)
@@ -3559,9 +3651,11 @@ def run_single_experiment(
                 sc_path = f"{mc_directions_prefix}_stated_confidence_contrast_directions.npz"
                 np.savez_compressed(sc_path, **sc_payload)
                 print(
-                    f"  stated_confidence: low n={int(sc_meta['n_low'])} "
-                    f"(≤{float(sc_meta['low_threshold']):.3f})"
-                    f"  vs high n={int(sc_meta['n_high'])} "
+                    f"  stated_confidence ({CONTRAST_PERCENT_STATED_CONFIDENCE:g}%, "
+                    f"samples/bin {cap_str}): "
+                    f"low n={int(sc_meta['n_low_used'])}/{int(sc_meta['n_low'])} "
+                    f"(≤{float(sc_meta['low_threshold']):.3f}) vs "
+                    f"high n={int(sc_meta['n_high_used'])}/{int(sc_meta['n_high'])} "
                     f"(≥{float(sc_meta['high_threshold']):.3f})"
                 )
                 print(f"  saved → {sc_path}")

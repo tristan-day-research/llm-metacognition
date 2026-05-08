@@ -72,13 +72,13 @@ class IntrospectionExperimentConfig:
 
     # Backbone to load. Choose LLAMA_8B_BASE or LLAMA_8B_INSTRUCT. Base models
     # bypass the chat template and switch the runner to few-shot prompts.
-    BASE_MODEL_NAME = LLAMA_8B_BASE
+    BASE_MODEL_NAME = LLAMA_8B_INSTRUCT
 
     # If equal to BASE_MODEL_NAME → no LoRA adapter loaded.
     # Otherwise → HF repo id (or local PEFT path) of the adapter to load on
     # top of BASE_MODEL_NAME for the "finetuned" run. BASE_MODEL_NAME must
     # be the instruct backbone when an adapter is set.
-    MODEL_NAME = BASE_MODEL_NAME
+    MODEL_NAME = "Tristan-Day/20260506-034609_delegate_at_mixed_17173_all_top_prob_tm0.7_tau0.05_2e_ckpt_step_300"
 
     # Memory knobs. Llama-3.1-8B fits on a single ~24 GB GPU in fp16, so
     # both default to False. Flip on if you're running on a smaller card.
@@ -209,27 +209,62 @@ class IntrospectionExperimentConfig:
     # When True, after the probe-based directions are saved the runner also
     # extracts mean-difference directions per layer for two contrasts:
     #
-    #   entropy_contrast            — top vs bottom CONTRAST_QUANTILE of
-    #                                 direct-task entropy. Computed on
-    #                                 DIRECT activations. Always extracted.
+    #   entropy_contrast            — direct-task entropy from the MC pass.
+    #                                 Top CONTRAST_PERCENT_ENTROPY% vs bottom
+    #                                 CONTRAST_PERCENT_ENTROPY% of questions
+    #                                 by entropy. Computed on DIRECT
+    #                                 activations. Always extracted.
     #
-    #   stated_confidence_contrast  — top vs bottom CONTRAST_QUANTILE of soft
-    #                                 stated confidence (from the confidence
-    #                                 meta prompt). Computed on META
+    #   stated_confidence_contrast  — soft stated confidence from the
+    #                                 confidence meta prompt. Top
+    #                                 CONTRAST_PERCENT_STATED_CONFIDENCE% vs
+    #                                 bottom of the same. Computed on META
     #                                 activations. Only extracted when
     #                                 META_TASK == "confidence" — there is no
     #                                 stated-confidence signal in delegate runs.
+    #
+    # The runner does ONE forward pass over the whole dataset first
+    # (collect_paired_data), so by the time these directions are computed
+    # the entropy and stated-confidence values for every question are
+    # already in hand and no extra inference happens.
     #
     # Saved as `{directions_prefix}_<name>_contrast_directions.npz`, with
     # one (hidden_dim,) unit-norm vector per layer plus metadata fields.
     EXTRACT_CONTRAST_DIRECTIONS = True
 
-    # Quantile threshold. With 0.25 we contrast the bottom 25% against the
-    # top 25% of the signal (i.e. extremes); intermediate questions are
+    # Tail size, in percent, for the entropy contrast. With 25 we contrast
+    # the bottom 25% (lowest entropy → most confident) against the top 25%
+    # (highest entropy → most uncertain) of the signal; the middle 50% is
     # dropped from the mean-diff pool.
-    CONTRAST_QUANTILE = 0.25
+    CONTRAST_PERCENT_ENTROPY = 25.0
+
+    # Same idea for the stated-confidence contrast (top 25% confident vs
+    # bottom 25% confident). Independent of the entropy threshold so the
+    # two contrasts can use different tail widths.
+    CONTRAST_PERCENT_STATED_CONFIDENCE = 25.0
+
+    # If set, randomly subsample to this many questions per tail before
+    # taking the layer-wise mean. None → use every question in the tail
+    # (most stable estimate; recommended default given mean-diff is cheap).
+    # Use this only if you want different runs / models to share an exact
+    # sample size for direct comparison. Subsampling is deterministic
+    # (uses SEED).
+    CONTRAST_SAMPLES_PER_BIN = None
+
+    # Sample-size guidance — empirical defaults that work well at hidden_dim≈4096:
+    #   ≥ 100 questions per tail (≈ 800 total at 25% threshold) gives
+    #   stable layer-wise mean-diff vectors. Below ~50 per tail the
+    #   per-question noise starts dominating between-tail signal. Logit-lens
+    #   trajectories are saved per question, so any sample size > 0 works
+    #   for the lens; 800 is plenty for both purposes.
 
     # Where the runner writes activations / directions / logit-lens / paired
-    # JSON / per-layer probe results / quick-look PNGs. The folder is created
-    # on first import (the runner calls .mkdir(parents=True, exist_ok=True)).
+    # JSON / per-layer probe results / quick-look PNGs.
+    #
+    # Each invocation writes into a per-run subfolder of this directory
+    # named   '8b_<model_tag>_<dataset_short>'   where
+    #   model_tag = 'base' | 'instruct' | '<numeric-prefix>_step_<N>' for finetuned
+    #   dataset_short = the .jsonl stem, e.g. 'mixed_11931_max_balanced'
+    # The runner creates the subfolder on demand. This top-level path is
+    # created at import time.
     OUTPUTS_DIR = OUTPUTS_DIR / "activations_directions_logitlens"

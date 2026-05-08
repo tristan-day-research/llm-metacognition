@@ -17,6 +17,7 @@ build/
 *.npy
 data/
 outputs/
+LEGACY_CODE_DELETE/
 
 # OS
 .DS_Store

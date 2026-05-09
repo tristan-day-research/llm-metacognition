@@ -79,7 +79,7 @@ class IntrospectionExperimentConfig:
     # top of BASE_MODEL_NAME for the "finetuned" run. BASE_MODEL_NAME must
     # be the instruct backbone when an adapter is set.
     MODEL_NAME = BASE_MODEL_NAME
-    # MODEL_NAME = "Tristan-Day/20260506-034609_delegate_at_mixed_17173_all_top_prob_tm0.7_tau0.05_2e_ckpt_step_300"
+    # MODEL_NAME = "<ANON_USER>/20260506-034609_delegate_at_mixed_17173_all_top_prob_tm0.7_tau0.05_2e_ckpt_step_300"
 
     # Memory knobs. Llama-3.1-8B fits on a single ~24 GB GPU in fp16, so
     # both default to False. Flip on if you're running on a smaller card.

@@ -1,6 +1,6 @@
 # Fine-Tuning Enhances Latent Metacognitive Capability in Language Models
 
-Code accompanying the workshop submission. Tests the **latent-readout
+Code accompanying the submission. Tests the **latent-readout
 hypothesis** in Llama-3.1-8B: that linear directions for output-token entropy
 and introspectively reported confidence already exist in the pre-trained base
 model, and that later training (instruction tuning, then task-specific

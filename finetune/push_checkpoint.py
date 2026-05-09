@@ -9,16 +9,16 @@ Workflow this script supports:
 
 Usage:
   # Push one checkpoint to <username>/<auto-derived-name>:
-  python finetune/push_checkpoint.py PATH_TO_CKPT_DIR --username Tristan-Day
+  python finetune/push_checkpoint.py PATH_TO_CKPT_DIR --username <ANON_USER>
 
   # Push to an explicit repo name (overrides auto-naming):
-  python finetune/push_checkpoint.py PATH_TO_CKPT_DIR --repo Tristan-Day/my-run
+  python finetune/push_checkpoint.py PATH_TO_CKPT_DIR --repo <ANON_USER>/my-run
 
   # Make it private:
-  python finetune/push_checkpoint.py PATH_TO_CKPT_DIR --username Tristan-Day --private
+  python finetune/push_checkpoint.py PATH_TO_CKPT_DIR --username <ANON_USER> --private
 
   # Delete the local copy after a successful push:
-  python finetune/push_checkpoint.py PATH_TO_CKPT_DIR --username Tristan-Day --delete-local
+  python finetune/push_checkpoint.py PATH_TO_CKPT_DIR --username <ANON_USER> --delete-local
 """
 
 import sys as _sys

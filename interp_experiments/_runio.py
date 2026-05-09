@@ -130,7 +130,7 @@ def _finetuned_short_tag(adapter: str) -> str:
     """Compact id for a finetuned adapter.
 
     Pulls out the run's date-time prefix and the checkpoint step. Example:
-        'Tristan-Day/20260506-034609_delegate_at_..._ckpt_step_300'
+        '<ANON_USER>/20260506-034609_delegate_at_..._ckpt_step_300'
         →  '20260506-034609_step_300'
     Falls back to the bare adapter basename if the pattern doesn't match.
     """

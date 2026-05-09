@@ -377,10 +377,10 @@ class ECTConfig:
 
     # LoRA adapter — only loaded when EVAL_MODEL_TYPE == "finetuned".
     # Harmless to leave set when evaluating "base" or "instruct"; ignored.
-    # EVAL_LORA_REPO = "Tristan-Day/ect_20251222_215412_v0uei7y1_2000"
-    EVAL_LORA_REPO = 'Tristan-Day/20260506-034609_delegate_at_mixed_17173_all_top_prob_tm0.7_tau0.05_2e_ckpt_step_300'
-    # EVAL_LORA_REPO = 'Tristan-Day/20260506-034609_delegate_at_mixed_17173_all_ckpt_step_500'
-    # EVAL_LORA_REPO = "Tristan-Day/20260506-034609_delegate_at_mixed_17173_all_top_prob_tm0.7_tau0.05_2e_ckpt_step_1600"
+    # EVAL_LORA_REPO = "<ANON_USER>/ect_20251222_215412_v0uei7y1_2000"
+    EVAL_LORA_REPO = '<ANON_USER>/20260506-034609_delegate_at_mixed_17173_all_top_prob_tm0.7_tau0.05_2e_ckpt_step_300'
+    # EVAL_LORA_REPO = '<ANON_USER>/20260506-034609_delegate_at_mixed_17173_all_ckpt_step_500'
+    # EVAL_LORA_REPO = "<ANON_USER>/20260506-034609_delegate_at_mixed_17173_all_top_prob_tm0.7_tau0.05_2e_ckpt_step_1600"
     EVAL_MERGE_LORA = False  # if True, merge LoRA into base before eval
 
     EVAL_DATASETS = (

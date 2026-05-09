@@ -15,7 +15,7 @@ build/
 *.npz
 *.pkl
 *.npy
-data/
+data_no_githun/
 outputs/
 LEGACY_CODE_DELETE/
 

@@ -12,8 +12,8 @@ The repo covers two tasks:
 - **Explicit Confidence Task (ECT).** The model answers a four-choice MCQ and
   reports confidence on a 1–10 scale.
 - **Delegate Game (DG).** The model decides whether to answer or defer to a
-  teammate of stated accuracy. Two prompt formats: `delegate_at` (binary
-  answer/delegate) and `delegate_abcdt` (single-shot A/B/C/D/T).
+  teammate of stated accuracy, using a binary answer/delegate prompt format
+  (`delegate_at`).
 
 Each task uses two independent forward passes per item: a **direct-answer
 pass** that produces the four-option logits used to estimate uncertainty, and
@@ -108,9 +108,6 @@ python finetune/run_finetuning.py
   sigmoid-soft delegation target derived from the model's own recorded
   uncertainty (`top_prob` by default), thresholded at the stated teammate
   accuracy. The prompt does not state the threshold.
-- `delegate_abcdt` — DG, single-shot A/B/C/D/T. Same delegation BCE plus a
-  downweighted CE on the recorded model answer; an annealing window keeps the
-  two losses from fighting through their shared softmax.
 
 All other knobs (LoRA rank, learning rate, target metric, teacher mode,
 val cadence, ...) live in `ECTConfig` and are documented inline. Two teacher
@@ -149,9 +146,9 @@ Eval is also config-driven. The relevant fields on `ECTConfig` are:
   adapter, used only when `EVAL_MODEL_TYPE == "finetuned"`.
 - `EVAL_DATASETS` — list of MCQ JSONLs to evaluate, one at a time.
 - `EVAL_RUN_MCQ`, `EVAL_COMPUTE_CONFIDENCE`, `EVAL_RUN_DELEGATE_*` — toggle
-  the four prompt families (MCQ, self-confidence, delegate ABCDT / AT /
-  TABCD / TA). All four share the same fenced prompt layout, so the model
-  sees comparable formats across tasks.
+  the prompt families (MCQ, self-confidence, delegate AT). All share the
+  same fenced prompt layout, so the model sees comparable formats across
+  tasks.
 - `EVAL_DELEGATE_TEAMMATE_ACCURACY` — accuracy shown to the model in the DG
   setup. Defaults to 0.7.
 

@@ -320,7 +320,7 @@ class ECTConfig:
     # Weights & Biases (training). Single project for both ECT and delegate
     # runs so they're directly comparable in one dashboard. The TASK_TYPE
     # prefix in WANDB_RUN_NAME makes the two cohorts trivially filterable.
-    WANDB_PROJECT = "llm-metacognition-ect"
+    WANDB_PROJECT = "anon-project"
     # Run-name dataset tag, derived from TRAIN_DATA_PATH so swapping datasets
     # above automatically updates the W&B run name.
     # Naming convention:
